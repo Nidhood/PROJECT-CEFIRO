@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<robot name="bmp581"
+    xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- Load physical & visual parameters -->
+    <xacro:arg name="physical_config_file" default="$(find cefiro_sensors)/config/magnetometer_mmc5983ma.yaml"/>
+    <xacro:property name="L" value="${xacro.load_yaml('$(arg physical_config_file)')['magnetometer_mmc5983ma']['base_link']}"/>
+    <xacro:property name="mesh_dir" value="package://cefiro_sensors/urdf/bmp581/meshes"/>
+
+    <!-- Unit conversions -->
+    <xacro:property name="g_to_kg" value="${0.001}"/>
+    <xacro:property name="mm_to_m" value="${0.001}"/>
+    <xacro:property name="g_mm2_to_kg_m2" value="${0.000000001}"/>
+
+    <!-- Base link configuration -->
+    <link name="base_link">
+
+        <visual name="magnetometer_mmc5983ma_visual">
+            <origin xyz="${L['visual_origin_xyz'][0]} ${L['visual_origin_xyz'][1]} ${L['visual_origin_xyz'][2]}" rpy="${L['visual_origin_rpy'][0]} ${L['visual_origin_rpy'][1]} ${L['visual_origin_rpy'][2]}" />
+            <geometry>
+                <mesh filename="${mesh_dir}/visuals/base_link.stl" scale="1.0 1.0 1.0"/>
+            </geometry>
+        </visual>
+
+        <inertial>
+            <mass value="${L['mass'] * g_to_kg}"/>
+            <origin xyz="${L['com_xyz'][0] * mm_to_m} ${L['com_xyz'][1] * mm_to_m} ${L['com_xyz'][2] * mm_to_m}" rpy="0.0 0.0 0.0"/>
+            <inertia ixx="${L['inertia']['ixx'] * g_mm2_to_kg_m2}" ixy="${L['inertia']['ixy'] * g_mm2_to_kg_m2}" ixz="${L['inertia']['ixz'] * g_mm2_to_kg_m2}" iyy="${L['inertia']['iyy'] * g_mm2_to_kg_m2}" iyz="${L['inertia']['iyz'] * g_mm2_to_kg_m2}" izz="${L['inertia']['izz'] * g_mm2_to_kg_m2}"/>
+        </inertial>
+
+        <collision name="magnetometer_mmc5983ma_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <box size="${L['collision_box_size'][0]} ${L['collision_box_size'][1]} ${L['collision_box_size'][2]}"/>
+            </geometry>
+        </collision>
+
+    </link>
+
+    <!-- Includes gz model configuration for sim -->
+    <xacro:include filename="$(find cefiro_sensors)/urdf/magnetometer_mmc5983ma/magnetometer_mmc5983ma_gz.xacro"/>
+</robot>

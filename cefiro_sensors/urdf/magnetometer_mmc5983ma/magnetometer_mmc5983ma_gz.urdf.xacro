@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <gazebo reference="base_link">
+        <sensor name="imu_icm42670p" type="imu">
+            <always_on>true</always_on>
+            <update_rate>1000.0</update_rate>
+            <topic>/magnetometer/data</topic>
+            <magnetometer>
+                <x>
+                    <noise type="gaussian">
+                        <mean>0.0</mean>
+                        <stddev>1.2e-7</stddev>
+                    </noise>
+                </x>
+
+                <y>
+                    <noise type="gaussian">
+                        <mean>0.0</mean>
+                        <stddev>1.2e-7</stddev>
+                    </noise>
+                </y>
+
+                <z>
+                    <noise type="gaussian">
+                        <mean>0.0</mean>
+                        <stddev>1.2e-7</stddev>
+                    </noise>
+                </z>
+            </magnetometer>
+        </sensor>
+    </gazebo>
+
+</robot>
