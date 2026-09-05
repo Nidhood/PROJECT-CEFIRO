@@ -1,0 +1,20 @@
+bmp581:
+  base_link:
+    mesh: "base"
+
+    mass: 0.0067
+
+    com_xyz: [0.0, 0.0, 0.0]
+
+    inertia: # g * mm²
+      ixx: 0.00380
+      ixy: 0.0
+      ixz: 0.0
+      iyy: 0.00380
+      iyz: 0.0
+      izz: 0.00667
+
+    visual_origin_xyz: [0.0, 0.0, 0.0]
+    visual_origin_rpy: [0.0, 0.0, 0.0]
+
+    collision_box_size: [0.00200, 0.00200, 0.00080]

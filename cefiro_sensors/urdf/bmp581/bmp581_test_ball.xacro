@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+
+<robot name="bmp581_test_ball"
+    xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:property name="ball_radius" value="0.11"/>
+    <xacro:property name="ball_mass" value="0.43"/>
+    <xacro:property name="ball_inertia" value="${(2.0 / 5.0) * ball_mass * ball_radius * ball_radius}"/>
+
+    <link name="test_ball_link">
+
+        <visual name="test_ball_visual">
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <sphere radius="${ball_radius}"/>
+            </geometry>
+            <material name="test_ball_material">
+                <color rgba="0.8 0.8 0.8 1.0"/>
+            </material>
+        </visual>
+
+        <collision name="test_ball_collision">
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <sphere radius="${ball_radius}"/>
+            </geometry>
+        </collision>
+
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="${ball_mass}"/>
+            <inertia ixx="${ball_inertia}" ixy="0.0" ixz="0.0" iyy="${ball_inertia}" iyz="0.0" izz="${ball_inertia}"/>
+        </inertial>
+
+    </link>
+
+    <joint name="test_ball_to_bmp581" type="fixed">
+        <parent link="test_ball_link"/>
+        <child link="base_link"/>
+        <origin xyz="0.0 0.0 0.1104" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+
+    <gazebo reference="test_ball_link">
+        <gravity>false</gravity>
+    </gazebo>
+
+    <xacro:include filename="$(find cefiro_sensors)/urdf/bmp581/bmp581.urdf.xacro"/>
+
+
+</robot>

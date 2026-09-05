@@ -1,0 +1,60 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <model name="desk" canonical_link="desk_link">
+    <static>true</static>
+    <link name="desk_link">
+
+      <!-- Collision -->
+      <collision name="desk_collision">
+        <pose>0.00000 0.00000 0.00000 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <mesh>
+            <uri>model://desk/meshes/stl/Part__Feature131.stl</uri>
+            <scale>1.00000 1.00000 1.00000</scale>
+          </mesh>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <inertial>
+        <inertia>
+          <ixx>3.39432</ixx>
+          <ixy>5.42715</ixy>
+          <ixz>1.13413</ixz>
+          <iyy>15.60457</iyy>
+          <iyz>-0.44984</iyz>
+          <izz>17.02471</izz>
+        </inertia>
+        <pose>-0.03989 0.01404 -0.03669 0.00000 0.00000 0.00000</pose>
+        <mass>20.00000</mass>
+      </inertial>
+
+      <!-- Visual -->
+      <visual name="desk">
+        <pose>0.00000 0.00000 0.00000 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <mesh>
+            <uri>model://desk/meshes/dae/Part__Feature131.dae</uri>
+            <scale>1.00000 1.00000 1.00000</scale>
+          </mesh>
+        </geometry>
+        <material>
+
+          <!-- Wood-like desk appearance -->
+          <ambient>0.6 0.4 0.2 1.0</ambient>
+          <diffuse>0.7 0.5 0.3 1.0</diffuse>
+          <specular>0.2 0.2 0.2 1.0</specular>
+          <emissive>0 0 0 1</emissive>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

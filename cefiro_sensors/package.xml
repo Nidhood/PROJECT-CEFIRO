@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://downloads.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+
+    <!--- Initial package configuration -->
+    <name>cefiro_sensors</name>
+    <version>1.0.0</version>
+    <description>Cefiro sensors package for description and configuration</description>
+    <maintainer email="ivan.oroz34@gmail.com">Nidhood</maintainer>
+    <license>BSD-3-Clause</license>
+
+    <!-- Build tool dependencies for ament package -->
+    <buildtool_depend>ament_cmake</buildtool_depend>
+
+    <!-- Test dependencies -->
+    <test_depend>ament_cmake_gtest</test_depend>
+    <test_depend>ament_lint_auto</test_depend>
+    <test_depend>ament_lint_common</test_depend>
+
+    <!-- Exported targets -->
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

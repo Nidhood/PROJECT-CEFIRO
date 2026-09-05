@@ -1,0 +1,58 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+    <model name="lamp" canonical_link="lamp_link">
+        <static>true</static>
+        <link name="lamp_link">
+
+            <!-- Collision using box approximation -->
+            <collision name="lamp_collision">
+                <pose>-0.00024 -0.01154 0.06682 0.00000 0.00000 0.00000</pose>
+                <geometry>
+                    <box>
+                        <size>0.04607 0.10820 0.14228</size>
+                    </box>
+                </geometry>
+                <surface>
+                    <contact/>
+                    <friction>
+                        <ode>
+                            <mu>0.8</mu>
+                            <mu2>0.8</mu2>
+                        </ode>
+                    </friction>
+                </surface>
+            </collision>
+            <inertial>
+                <inertia>
+                    <ixx>0.00266</ixx>
+                    <ixy>-0.00001</ixy>
+                    <ixz>0.00004</ixz>
+                    <iyy>0.00188</iyy>
+                    <iyz>0.00017</iyz>
+                    <izz>0.00086</izz>
+                </inertia>
+                <pose>-0.00592 -0.03030 0.25495 0.00000 0.00000 0.00000</pose>
+                <mass>0.03200</mass>
+            </inertial>
+
+            <!-- Visual using DAE with improved material-->
+            <visual name="lamp_visual">
+                <pose>0.00000 0.00000 0.00000 0.00000 0.00000 0.00000</pose>
+                <geometry>
+                    <mesh>
+                        <uri>model://lamp/meshes/dae/Malla.046.dae</uri>
+                        <scale>0.07175 0.07175 0.01351</scale>
+                    </mesh>
+                </geometry>
+                <material>
+
+                    <!-- Dark metallic lamp appearance -->
+                    <ambient>0.11373 0.11373 0.11373 1.0</ambient>
+                    <diffuse>0.11373 0.11373 0.11373 1.0</diffuse>
+                    <specular>0.3 0.3 0.3 1.0</specular>
+                    <emissive>0.0 0.0 0.0 1.0</emissive>
+                </material>
+            </visual>
+        </link>
+    </model>
+</sdf>
