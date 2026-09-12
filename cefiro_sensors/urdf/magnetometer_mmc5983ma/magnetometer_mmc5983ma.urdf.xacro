@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
-<robot name="bmp581"
+<robot name="magnetometer_mmc5983ma"
     xmlns:xacro="http://www.ros.org/wiki/xacro">
 
     <!-- Load physical & visual parameters -->
     <xacro:arg name="physical_config_file" default="$(find cefiro_sensors)/config/magnetometer_mmc5983ma.yaml"/>
     <xacro:property name="L" value="${xacro.load_yaml('$(arg physical_config_file)')['magnetometer_mmc5983ma']['base_link']}"/>
-    <xacro:property name="mesh_dir" value="package://cefiro_sensors/urdf/bmp581/meshes"/>
+    <xacro:property name="mesh_dir" value="package://cefiro_sensors/urdf/magnetometer_mmc5983ma/meshes"/>
 
     <!-- Unit conversions -->
     <xacro:property name="g_to_kg" value="${0.001}"/>
@@ -18,7 +18,7 @@
         <visual name="magnetometer_mmc5983ma_visual">
             <origin xyz="${L['visual_origin_xyz'][0]} ${L['visual_origin_xyz'][1]} ${L['visual_origin_xyz'][2]}" rpy="${L['visual_origin_rpy'][0]} ${L['visual_origin_rpy'][1]} ${L['visual_origin_rpy'][2]}" />
             <geometry>
-                <mesh filename="${mesh_dir}/visuals/base_link.stl" scale="1.0 1.0 1.0"/>
+                <mesh filename="${mesh_dir}/base_link.stl" scale="1.0 1.0 1.0"/>
             </geometry>
         </visual>
 
