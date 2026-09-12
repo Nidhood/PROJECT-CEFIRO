@@ -2,7 +2,7 @@ imu_icm42670p:
   base_link:
     mesh: "base"
 
-    mass: 0.0067
+    mass: 0.01083
 
     com_xyz: [0.0, 0.0, 0.0]
 

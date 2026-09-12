@@ -2,7 +2,7 @@ magnetometer_mmc5983ma:
   base_link:
     mesh: "base"
 
-    mass: 0.0067
+    mass: 0.0171
 
     com_xyz: [0.0, 0.0, 0.0]
 
