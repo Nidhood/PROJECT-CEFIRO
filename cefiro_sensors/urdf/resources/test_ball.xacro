@@ -1,11 +1,14 @@
 <?xml version="1.0"?>
 
-<robot name="bmp581_test_ball"
+<robot name="test_ball"
     xmlns:xacro="http://www.ros.org/wiki/xacro">
 
     <xacro:property name="ball_radius" value="0.11"/>
     <xacro:property name="ball_mass" value="0.43"/>
     <xacro:property name="ball_inertia" value="${(2.0 / 5.0) * ball_mass * ball_radius * ball_radius}"/>
+
+    <xacro:arg name="sensor" default="bmp581"/>
+
 
     <link name="test_ball_link">
 
@@ -45,7 +48,6 @@
         <gravity>false</gravity>
     </gazebo>
 
-    <xacro:include filename="$(find cefiro_sensors)/urdf/bmp581/bmp581.urdf.xacro"/>
-
+    <xacro:include filename="$(find cefiro_sensors)/urdf/$(arg sensor)/$(arg sensor).urdf.xacro"/>
 
 </robot>
