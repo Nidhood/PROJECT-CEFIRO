@@ -38,5 +38,5 @@
     </link>
 
     <!-- Includes gz model configuration for sim -->
-    <xacro:include filename="$(find cefiro_sensors)/urdf/magnetometer_mmc5983ma/magnetometer_mmc5983ma_gz.xacro"/>
+    <xacro:include filename="$(find cefiro_sensors)/urdf/magnetometer_mmc5983ma/magnetometer_mmc5983ma_gz.urdf.xacro"/>
 </robot>

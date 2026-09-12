@@ -3,7 +3,7 @@
   xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <!-- Load physical & visual parameters -->
-  <xacro:arg name="physical_config_file" default="$(find cefiro_sensors)/config/bmp581_config.yaml"/>
+  <xacro:arg name="physical_config_file" default="$(find cefiro_sensors)/config/bmp581_physical.yaml"/>
   <xacro:property name="L" value="${xacro.load_yaml('$(arg physical_config_file)')['bmp581']['base_link']}"/>
   <xacro:property name="mesh_dir" value="package://cefiro_sensors/urdf/bmp581/meshes"/>
 
