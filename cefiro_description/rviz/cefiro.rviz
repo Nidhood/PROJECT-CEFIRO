@@ -1,0 +1,428 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 70
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /TF1
+      Splitter Ratio: 0.5
+    Tree Height: 289
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Alpha: 0.800000011920929
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        arm-motor_coupling_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        arm-motor_coupling__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        arm-motor_coupling__2__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        arm-motor_coupling__3__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        arm_coupling_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        arm_coupling__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        arm_coupling_left__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        arm_coupling_left___1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        chassis_upper_plate_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        damper_plate__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        damper_rubber_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        damper_rubber__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        damper_rubber__2__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        damper_rubber__3__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        esc_dummy_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fmu_dummy_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_coupling_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_coupling__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_coupling__2__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_coupling__3__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536__2__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536__3__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536_mount_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536_mount__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536_mount__2__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        motor_d3536_mount__3__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller__2__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller__3__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller_arm_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller_arm__1__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller_arm__2__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        propeller_arm__3__1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Mass Properties:
+        Inertia: false
+        Mass: false
+      Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Filter (blacklist): ""
+      Filter (whitelist): ""
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+        arm-motor_coupling_1:
+          Value: true
+        arm-motor_coupling__1__1:
+          Value: true
+        arm-motor_coupling__2__1:
+          Value: true
+        arm-motor_coupling__3__1:
+          Value: true
+        arm_coupling_1:
+          Value: true
+        arm_coupling__1__1:
+          Value: true
+        arm_coupling_left__1:
+          Value: true
+        arm_coupling_left___1__1:
+          Value: true
+        base_link:
+          Value: true
+        chassis_upper_plate_1:
+          Value: true
+        damper_plate__1:
+          Value: true
+        damper_rubber_1:
+          Value: true
+        damper_rubber__1__1:
+          Value: true
+        damper_rubber__2__1:
+          Value: true
+        damper_rubber__3__1:
+          Value: true
+        esc_dummy_1:
+          Value: true
+        fmu_dummy_1:
+          Value: true
+        motor_coupling_1:
+          Value: true
+        motor_coupling__1__1:
+          Value: true
+        motor_coupling__2__1:
+          Value: true
+        motor_coupling__3__1:
+          Value: true
+        motor_d3536_1:
+          Value: true
+        motor_d3536__1__1:
+          Value: true
+        motor_d3536__2__1:
+          Value: true
+        motor_d3536__3__1:
+          Value: true
+        motor_d3536_mount_1:
+          Value: true
+        motor_d3536_mount__1__1:
+          Value: true
+        motor_d3536_mount__2__1:
+          Value: true
+        motor_d3536_mount__3__1:
+          Value: true
+        propeller_1:
+          Value: true
+        propeller__1__1:
+          Value: true
+        propeller__2__1:
+          Value: true
+        propeller__3__1:
+          Value: true
+        propeller_arm_1:
+          Value: true
+        propeller_arm__1__1:
+          Value: true
+        propeller_arm__2__1:
+          Value: true
+        propeller_arm__3__1:
+          Value: true
+      Marker Scale: 0.10000000149011612
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Tree:
+        base_link:
+          arm_coupling_1:
+            propeller_arm_1:
+              arm-motor_coupling_1:
+                motor_coupling_1:
+                  motor_d3536_mount_1:
+                    motor_d3536_1:
+                      propeller__2__1:
+                        {}
+          arm_coupling__1__1:
+            propeller_arm__2__1:
+              arm-motor_coupling__3__1:
+                motor_coupling__2__1:
+                  motor_d3536_mount__2__1:
+                    motor_d3536__2__1:
+                      propeller__1__1:
+                        {}
+          arm_coupling_left__1:
+            propeller_arm__1__1:
+              arm-motor_coupling__2__1:
+                motor_coupling__1__1:
+                  motor_d3536_mount__1__1:
+                    motor_d3536__1__1:
+                      propeller_1:
+                        {}
+          arm_coupling_left___1__1:
+            propeller_arm__3__1:
+              arm-motor_coupling__1__1:
+                motor_coupling__3__1:
+                  motor_d3536_mount__3__1:
+                    motor_d3536__3__1:
+                      propeller__3__1:
+                        {}
+          chassis_upper_plate_1:
+            damper_rubber_1:
+              {}
+            damper_rubber__1__1:
+              {}
+            damper_rubber__2__1:
+              {}
+            damper_rubber__3__1:
+              {}
+            esc_dummy_1:
+              damper_plate__1:
+                fmu_dummy_1:
+                  {}
+      Update Interval: 0
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: base_link
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 0.30890557169914246
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 0.24500000476837158
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+      Yaw: 5.189996719360352
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 800
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd0000000100000000000001c9000002c2fc0200000002fb000000100044006900730070006c006100790073010000003f000001a7000000cc00fffffffb0000000a0056006900650077007301000001ec00000115000000a900ffffff000002e1000002c200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Views:
+    collapsed: false
+  Width: 1200
+  X: 0
+  Y: 32

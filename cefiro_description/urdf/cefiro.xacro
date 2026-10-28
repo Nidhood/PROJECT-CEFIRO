@@ -2,9 +2,7 @@
 <robot name="cefiro"
   xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:include filename="$(find cefiro_description)/urdf/materials.xacro" />
-
-  <link name="base_link">
+  <link name="chassis_lower_plate">
     <inertial>
       <origin xyz="0.0490073468858582 0.03543104743409582 0.0015000000000000005" rpy="0 0 0"/>
       <mass value="0.03654087176135902"/>
@@ -13,56 +11,497 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/chassis_lower_plate.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="esc_dummy_1">
-    <inertial>
-      <origin xyz="4.871638824011093e-07 2.0816681711721685e-17 0.0029999999999999983" rpy="0 0 0"/>
-      <mass value="0.021245400000000005"/>
-      <inertia ixx="3e-06" iyy="3e-06" izz="7e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.049 -0.0355 -0.003" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/esc_dummy_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.049 -0.0355 -0.003" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/esc_dummy_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/chassis_lower_plate.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="chassis_upper_plate_1">
     <inertial>
-      <origin xyz="7.017397302376549e-06 -6.564061223595513e-05 0.0017139624799641442" rpy="0 0 0"/>
-      <mass value="0.03838457294189457"/>
-      <inertia ixx="5.7e-05" iyy="3.5e-05" izz="9.3e-05" ixy="-0.0" iyz="-0.0" ixz="0.0"/>
+      <origin xyz="7.358559962991618e-06 -6.906990589405915e-05 0.0017251406233937646" rpy="0 0 0"/>
+      <mass value="0.0364787939875615"/>
+      <inertia ixx="5.6e-05" iyy="3.3e-05" izz="8.9e-05" ixy="-0.0" iyz="-0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="-0.049 -0.0355 -0.009" rpy="0 0 0"/>
+      <origin xyz="-0.049 -0.0355 -0.003" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/chassis_upper_plate_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/chassis_upper_plate_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.049 -0.0355 -0.009" rpy="0 0 0"/>
+      <origin xyz="-0.049 -0.0355 -0.003" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/chassis_upper_plate_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/chassis_upper_plate_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="esc_dummy_1">
+    <inertial>
+      <origin xyz="4.871638824011093e-07 2.0816681711721685e-17 0.0029999999999999975" rpy="0 0 0"/>
+      <mass value="0.021245400000000005"/>
+      <inertia ixx="3e-06" iyy="3e-06" izz="7e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.049 -0.0355 -0.006" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/esc_dummy_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.049 -0.0355 -0.006" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/esc_dummy_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="arm_coupling_1">
+    <inertial>
+      <origin xyz="0.013028210396098056 0.006815018249825843 0.017011481507627036" rpy="0 0 0"/>
+      <mass value="0.0378932947271681"/>
+      <inertia ixx="8e-06" iyy="9e-06" izz="9e-06" ixy="1e-06" iyz="-0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.07068 0.026359 -0.003" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.07068 0.026359 -0.003" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="propeller_arm_1">
+    <inertial>
+      <origin xyz="0.024748892864255592 -0.02474877464385651 -3.8163916471489756e-17" rpy="0 0 0"/>
+      <mass value="0.01766678419295193"/>
+      <inertia ixx="5e-06" iyy="5e-06" izz="8e-06" ixy="3e-06" iyz="-0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.09365 0.030467 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.09365 0.030467 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="arm-motor_coupling_1">
+    <inertial>
+      <origin xyz="0.005140108724772996 -0.0051399000344490575 4.462910693781019e-09" rpy="0 0 0"/>
+      <mass value="0.17482105870117712"/>
+      <inertia ixx="3.3e-05" iyy="3.3e-05" izz="2.9e-05" ixy="-4e-06" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.143148 0.079965 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.143148 0.079965 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_coupling_1">
+    <inertial>
+      <origin xyz="0.024735903341897042 -0.024978176445044395 0.003012980980874616" rpy="0 0 0"/>
+      <mass value="0.08266534784043636"/>
+      <inertia ixx="3.7e-05" iyy="3.8e-05" izz="4.7e-05" ixy="1.1e-05" iyz="6e-06" ixz="-6e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.15729 0.094107 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.15729 0.094107 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_d3536_mount_1">
+    <inertial>
+      <origin xyz="0.02099976517264429 3.5301522124941975e-07 0.0014999999999999389" rpy="0 0 0"/>
+      <mass value="0.0049294478925385665"/>
+      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.172706 0.130523 -0.0408" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.172706 0.130523 -0.0408" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_d3536_1">
+    <inertial>
+      <origin xyz="0.00311979772526097 -0.00010820481819659444 0.016925643755391226" rpy="0 0 0"/>
+      <mass value="0.09245457976256843"/>
+      <inertia ixx="3e-06" iyy="-1e-06" izz="-9e-06" ixy="-0.000122" iyz="0.0" ixz="-1e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.193706 0.130523 -0.0438" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.193706 0.130523 -0.0438" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="arm_coupling_left__1">
+    <inertial>
+      <origin xyz="-0.01307637591201335 0.006722196062234193 0.01701148304046989" rpy="0 0 0"/>
+      <mass value="0.03789311357416233"/>
+      <inertia ixx="8e-06" iyy="8e-06" izz="9e-06" ixy="-1e-06" iyz="-0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.027321 0.026359 -0.003" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling_left__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.027321 0.026359 -0.003" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling_left__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="propeller_arm__1__1">
+    <inertial>
+      <origin xyz="-0.024571844600186958 -0.024924381030834903 -1.0408340855860843e-17" rpy="0 0 0"/>
+      <mass value="0.01766678419295193"/>
+      <inertia ixx="5e-06" iyy="5e-06" izz="8e-06" ixy="-3e-06" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.004348 0.030663 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.004348 0.030663 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="arm-motor_coupling__2__1">
+    <inertial>
+      <origin xyz="-0.005103591280053783 -0.00517646190285577 4.462910728475489e-09" rpy="0 0 0"/>
+      <mass value="0.17482105870117712"/>
+      <inertia ixx="3.3e-05" iyy="3.4e-05" izz="2.9e-05" ixy="4e-06" iyz="-0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.044796 0.080512 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.044796 0.080512 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_coupling__1__1">
+    <inertial>
+      <origin xyz="-0.024802008214397986 -0.024913127496109855 0.003012980980874668" rpy="0 0 0"/>
+      <mass value="0.08266534784043636"/>
+      <inertia ixx="3.8e-05" iyy="3.7e-05" izz="4.7e-05" ixy="-1.1e-05" iyz="6e-06" ixz="6e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.058837 0.094754 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.058837 0.094754 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_d3536_mount__1__1">
+    <inertial>
+      <origin xyz="0.000148897377897389 -0.020999056240172786 0.0015000000000000013" rpy="0 0 0"/>
+      <mass value="0.0049294478925385665"/>
+      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.095142 0.110429 -0.0408" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.095142 0.110429 -0.0408" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_d3536__1__1">
+    <inertial>
+      <origin xyz="0.003120623230976255 -8.641643070833593e-05 0.01692564375539126" rpy="0 0 0"/>
+      <mass value="0.09245457976256843"/>
+      <inertia ixx="5e-06" iyy="-3e-06" izz="-9e-06" ixy="-0.000122" iyz="0.0" ixz="-1e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.094993 0.131428 -0.0438" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.094993 0.131428 -0.0438" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="arm_coupling__1__1">
+    <inertial>
+      <origin xyz="-0.013028236068333273 -0.006815018249825833 0.017011481507627036" rpy="0 0 0"/>
+      <mass value="0.0378932947271681"/>
+      <inertia ixx="8e-06" iyy="9e-06" izz="9e-06" ixy="1e-06" iyz="0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.027321 -0.097359 -0.003" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.027321 -0.097359 -0.003" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="propeller_arm__2__1">
+    <inertial>
+      <origin xyz="-0.024748918536490867 0.024748774643856553 4.85722573273506e-17" rpy="0 0 0"/>
+      <mass value="0.01766678419295193"/>
+      <inertia ixx="5e-06" iyy="5e-06" izz="8e-06" ixy="3e-06" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.004351 -0.101467 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.004351 -0.101467 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="arm-motor_coupling__3__1">
+    <inertial>
+      <origin xyz="-0.005140134397008264 0.005139900034449002 4.462910790925534e-09" rpy="0 0 0"/>
+      <mass value="0.17482105870117712"/>
+      <inertia ixx="3.3e-05" iyy="3.3e-05" izz="2.9e-05" ixy="-4e-06" iyz="-0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.045147 -0.150965 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.045147 -0.150965 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_coupling__2__1">
+    <inertial>
+      <origin xyz="-0.024735929014131887 0.024978176445044825 0.0030129809808746993" rpy="0 0 0"/>
+      <mass value="0.08266534784043636"/>
+      <inertia ixx="3.7e-05" iyy="3.8e-05" izz="4.7e-05" ixy="1.1e-05" iyz="-6e-06" ixz="6e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.059289 -0.165107 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.059289 -0.165107 -0.0198" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_d3536_mount__2__1">
+    <inertial>
+      <origin xyz="-0.02099979084528371 -3.5301522011144115e-07 0.001500000000000036" rpy="0 0 0"/>
+      <mass value="0.0049294478925385665"/>
+      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.074705 -0.201523 -0.0408" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.074705 -0.201523 -0.0408" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="motor_d3536__2__1">
+    <inertial>
+      <origin xyz="0.003120241707333063 -0.00010891084863798306 0.016925643755391302" rpy="0 0 0"/>
+      <mass value="0.09245457976256843"/>
+      <inertia ixx="3e-06" iyy="-1e-06" izz="-9e-06" ixy="-0.000122" iyz="0.0" ixz="-1e-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.095705 -0.201523 -0.0438" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.095705 -0.201523 -0.0438" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="propeller_1">
+    <inertial>
+      <origin xyz="-6.553756944083222e-08 -2.8679162572542438e-08 0.007711655028522779" rpy="0 0 0"/>
+      <mass value="0.016828834151416932"/>
+      <inertia ixx="2.8e-05" iyy="2.8e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.094993 0.131428 -0.0953" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.094993 0.131428 -0.0953" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="propeller__1__1">
+    <inertial>
+      <origin xyz="2.4643437146476543e-07 -3.257187145000451e-07 0.00771165502852289" rpy="0 0 0"/>
+      <mass value="0.016828834151416932"/>
+      <inertia ixx="2.8e-05" iyy="2.8e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.095705 -0.201523 -0.0953" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.095705 -0.201523 -0.0953" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="propeller__2__1">
+    <inertial>
+      <origin xyz="-1.9754770075319783e-07 3.803117267497935e-07 0.007711655028522876" rpy="0 0 0"/>
+      <mass value="0.016828834151416932"/>
+      <inertia ixx="2.8e-05" iyy="2.8e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.193706 0.130523 -0.0953" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.193706 0.130523 -0.0953" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller__2__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -76,14 +515,14 @@
     <visual>
       <origin xyz="-0.049 -0.0355 -0.012" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_plate__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_plate__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.049 -0.0355 -0.012" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_plate__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_plate__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -97,908 +536,468 @@
     <visual>
       <origin xyz="-0.049 -0.0355 -0.0141" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/fmu_dummy_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/fmu_dummy_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.049 -0.0355 -0.0141" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/fmu_dummy_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="damper_rubber_1">
-    <inertial>
-      <origin xyz="3.0863844522298345e-07 2.0286793973867123e-07 0.004115951401552093" rpy="0 0 0"/>
-      <mass value="0.0002583606135704884"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="-0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.014483 0.021552 -0.016" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.014483 0.021552 -0.016" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="damper_rubber__1__1">
-    <inertial>
-      <origin xyz="-3.34308752875101e-07 2.0286793973867123e-07 0.004115951401552093" rpy="0 0 0"/>
-      <mass value="0.0002583606135704884"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.083518 0.021552 -0.016" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.083518 0.021552 -0.016" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="damper_rubber__2__1">
-    <inertial>
-      <origin xyz="3.0863844522298345e-07 -2.0286793972479344e-07 0.004115951401552093" rpy="0 0 0"/>
-      <mass value="0.0002583606135704884"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="-0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.014483 -0.092552 -0.016" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.014483 -0.092552 -0.016" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber__2__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/fmu_dummy_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="damper_rubber__3__1">
     <inertial>
-      <origin xyz="-3.34308752875101e-07 -2.0286793972479344e-07 0.004115951401552093" rpy="0 0 0"/>
+      <origin xyz="3.086384451969626e-07 2.0286793970050732e-07 0.004115951401552093" rpy="0 0 0"/>
       <mass value="0.0002583606135704884"/>
       <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="-0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="-0.083518 -0.092552 -0.016" rpy="0 0 0"/>
+      <origin xyz="-0.014483 0.021552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.083518 -0.092552 -0.016" rpy="0 0 0"/>
+      <origin xyz="-0.014483 0.021552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/damper_rubber__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <link name="arm_coupling_1">
+  <link name="damper_rubber__1__1">
     <inertial>
-      <origin xyz="0.014003493663268154 -0.00433178626806606 0.016952869795820905" rpy="0 0 0"/>
-      <mass value="0.03936433748667423"/>
-      <inertia ixx="9e-06" iyy="7e-06" izz="9e-06" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
+      <origin xyz="3.086384451969626e-07 -2.0286793968316008e-07 0.004115951401552095" rpy="0 0 0"/>
+      <mass value="0.0002583606135704884"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="-0.07068 0.026359 -0.003" rpy="0 0 0"/>
+      <origin xyz="-0.014483 -0.092552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.07068 0.026359 -0.003" rpy="0 0 0"/>
+      <origin xyz="-0.014483 -0.092552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <link name="propeller_arm_1">
+  <link name="damper_rubber_1">
     <inertial>
-      <origin xyz="2.0967664471349678e-07 -0.03500012527293352 -3.3585411112344726e-05" rpy="0 0 0"/>
-      <mass value="0.025724979814274657"/>
-      <inertia ixx="1.1e-05" iyy="2e-06" izz="1.1e-05" ixy="-0.0" iyz="0.0" ixz="-0.0"/>
+      <origin xyz="-3.34308752875101e-07 -2.0286793968316008e-07 0.004115951401552095" rpy="0 0 0"/>
+      <mass value="0.0002583606135704884"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="-0.084017 0.045505 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.083518 -0.092552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.084017 0.045505 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.083518 -0.092552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <link name="arm-motor_coupling_1">
+  <link name="damper_rubber__2__1">
     <inertial>
-      <origin xyz="2.0967644565050847e-07 -0.007372121489659378 -4.723493207555579e-05" rpy="0 0 0"/>
-      <mass value="0.18570607851813228"/>
-      <inertia ixx="3.1e-05" iyy="3.7e-05" izz="3e-05" ixy="-0.0" iyz="0.0" ixz="0.0"/>
+      <origin xyz="-3.34308752875101e-07 2.0286793970050732e-07 0.004115951401552095" rpy="0 0 0"/>
+      <mass value="0.0002583606135704884"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="-0.084017 0.115505 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.083518 0.021552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber__2__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.084017 0.115505 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.083518 0.021552 -0.01" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/damper_rubber__2__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <link name="motor_coupling_1">
+  <link name="arm_coupling_left___1__1">
     <inertial>
-      <origin xyz="-0.00017048139883521496 -0.03501518815014221 0.0030005798631245056" rpy="0 0 0"/>
-      <mass value="0.08300699604151424"/>
-      <inertia ixx="4.9e-05" iyy="2.7e-05" izz="4.8e-05" ixy="0.0" iyz="8e-06" ixz="-0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.084017 0.135505 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.084017 0.135505 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_d3536_mount_1">
-    <inertial>
-      <origin xyz="2.096763126596679e-07 -1.2527293319353205e-07 0.001500000000000029" rpy="0 0 0"/>
-      <mass value="0.0049294478925385665"/>
-      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.084017 0.190005 -0.0408" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.084017 0.190005 -0.0408" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_d3536_1">
-    <inertial>
-      <origin xyz="0.0031202422763960264 -0.00010868298858748848 0.01842564375539131" rpy="0 0 0"/>
-      <mass value="0.09245457976256843"/>
-      <inertia ixx="3e-06" iyy="-1e-06" izz="-9e-06" ixy="-0.000122" iyz="0.0" ixz="-1e-06"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.084017 0.190005 -0.0438" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.084017 0.190005 -0.0438" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="propeller_1">
-    <inertial>
-      <origin xyz="2.4515800259306e-07 -9.835012876324711e-08 0.0077116558037275545" rpy="0 0 0"/>
-      <mass value="0.016828834151416935"/>
-      <inertia ixx="2.8e-05" iyy="2.8e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.084017 0.190005 -0.0973" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.084017 0.190005 -0.0973" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="arm_coupling_left_1">
-    <inertial>
-      <origin xyz="-0.004431446264183535 0.013972915867929403 0.01695287041007623" rpy="0 0 0"/>
-      <mass value="0.0393643493558456"/>
-      <inertia ixx="7e-06" iyy="9e-06" izz="9e-06" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.027321 0.026359 -0.003" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling_left_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.027321 0.026359 -0.003" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling_left_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="propeller_arm__1__1">
-    <inertial>
-      <origin xyz="-0.03499929696818452 -0.0002489683952809855 -3.358541111233432e-05" rpy="0 0 0"/>
-      <mass value="0.025724979814274657"/>
-      <inertia ixx="2e-06" iyy="1.1e-05" izz="1.1e-05" ixy="-0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.008045 0.013158 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.008045 0.013158 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="arm-motor_coupling__1__1">
-    <inertial>
-      <origin xyz="-0.007372221067360719 -5.238898528800266e-05 -4.723493207554191e-05" rpy="0 0 0"/>
-      <mass value="0.18570607851813228"/>
-      <inertia ixx="3.7e-05" iyy="3.1e-05" izz="3e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.061953 0.013656 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.061953 0.013656 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_coupling__1__1">
-    <inertial>
-      <origin xyz="-0.03501529647977253 -7.861949867790305e-05 0.00300057986312453" rpy="0 0 0"/>
-      <mass value="0.08300699604151424"/>
-      <inertia ixx="2.7e-05" iyy="4.9e-05" izz="4.8e-05" ixy="-0.0" iyz="0.0" ixz="8e-06"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.081953 0.013798 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.081953 0.013798 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_d3536_mount__1__1">
-    <inertial>
-      <origin xyz="4.7365566396839753e-07 8.424398343157002e-08 0.0015000000000000221" rpy="0 0 0"/>
-      <mass value="0.0049294478925385665"/>
-      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.136452 0.014186 -0.0408" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.136452 0.014186 -0.0408" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_d3536__1__1">
-    <inertial>
-      <origin xyz="-0.0031202521970101205 8.644443452121911e-05 0.016925643755391302" rpy="0 0 0"/>
-      <mass value="0.09245457976256843"/>
-      <inertia ixx="5e-06" iyy="-3e-06" izz="-9e-06" ixy="-0.000122" iyz="-0.0" ixz="1e-06"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.136452 0.014186 -0.0438" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.136452 0.014186 -0.0438" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="propeller__1__1">
-    <inertial>
-      <origin xyz="5.089914885680891e-07 1.1154612666007535e-07 0.007711655803727527" rpy="0 0 0"/>
-      <mass value="0.016828834151416935"/>
-      <inertia ixx="2.8e-05" iyy="2.8e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.136452 0.014186 -0.0958" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.136452 0.014186 -0.0958" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="arm_coupling__1__1">
-    <inertial>
-      <origin xyz="0.014003936145788157 -0.004332503110669891 0.016952869795820898" rpy="0 0 0"/>
-      <mass value="0.03936433748667423"/>
-      <inertia ixx="9e-06" iyy="7e-06" izz="9e-06" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.027321 -0.097359 -0.003" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.027321 -0.097359 -0.003" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="propeller_arm__2__1">
-    <inertial>
-      <origin xyz="-3.478408353019269e-07 -0.034999842115537354 -3.3585411112355135e-05" rpy="0 0 0"/>
-      <mass value="0.025724979814274657"/>
-      <inertia ixx="1.1e-05" iyy="2e-06" izz="1.1e-05" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.040659 -0.078212 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.040659 -0.078212 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="arm-motor_coupling__2__1">
-    <inertial>
-      <origin xyz="-3.4784103432328184e-07 -0.007371838332263207 -4.723493207554191e-05" rpy="0 0 0"/>
-      <mass value="0.18570607851813228"/>
-      <inertia ixx="3.1e-05" iyy="3.7e-05" izz="3e-05" ixy="-0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.040659 -0.008212 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.040659 -0.008212 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_coupling__2__1">
-    <inertial>
-      <origin xyz="-0.00017103891631522344 -0.03501490499274606 0.0030005798631245126" rpy="0 0 0"/>
-      <mass value="0.08300699604151424"/>
-      <inertia ixx="4.9e-05" iyy="2.7e-05" izz="4.8e-05" ixy="0.0" iyz="8e-06" ixz="-0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.040659 0.011788 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.040659 0.011788 -0.0198" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_d3536_mount__2__1">
-    <inertial>
-      <origin xyz="-3.478411673280002e-07 1.578844629201992e-07 0.0015000000000000221" rpy="0 0 0"/>
-      <mass value="0.0049294478925385665"/>
-      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="-0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.040659 0.066288 -0.0408" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.040659 0.066288 -0.0408" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="motor_d3536__2__1">
-    <inertial>
-      <origin xyz="-0.003120380393379127 0.00010871571788022283 0.016925643755391302" rpy="0 0 0"/>
-      <mass value="0.09245457976256843"/>
-      <inertia ixx="3e-06" iyy="-1e-06" izz="-9e-06" ixy="-0.000122" iyz="-0.0" ixz="1e-06"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.040659 0.066288 -0.0438" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.040659 0.066288 -0.0438" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="propeller__2__1">
-    <inertial>
-      <origin xyz="-3.1231201812892406e-07 1.8493454789769714e-07 0.007711655803727527" rpy="0 0 0"/>
-      <mass value="0.016828834151416935"/>
-      <inertia ixx="2.8e-05" iyy="2.8e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.040659 0.066288 -0.0958" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.040659 0.066288 -0.0958" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller__2__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="arm_coupling_left__1__1">
-    <inertial>
-      <origin xyz="-0.004431888746703513 0.013972199025325566 0.01695287041007622" rpy="0 0 0"/>
-      <mass value="0.0393643493558456"/>
-      <inertia ixx="7e-06" iyy="9e-06" izz="9e-06" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
+      <origin xyz="0.013076350239778142 -0.006722196062234134 0.01701148304046989" rpy="0 0 0"/>
+      <mass value="0.03789311357416233"/>
+      <inertia ixx="8e-06" iyy="8e-06" izz="9e-06" ixy="-1e-06" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
       <origin xyz="-0.07068 -0.097359 -0.003" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling_left__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling_left___1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.07068 -0.097359 -0.003" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm_coupling_left__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/arm_coupling_left___1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="propeller_arm__3__1">
     <inertial>
-      <origin xyz="-0.03499873945070445 -0.0002486852378848353 -3.3585411112355135e-05" rpy="0 0 0"/>
-      <mass value="0.025724979814274657"/>
-      <inertia ixx="2e-06" iyy="1.1e-05" izz="1.1e-05" ixy="-0.0" iyz="0.0" ixz="-0.0"/>
+      <origin xyz="0.024571818673006368 0.02492438077223627 -2.7755575615628914e-17" rpy="0 0 0"/>
+      <mass value="0.01766678419295193"/>
+      <inertia ixx="5e-06" iyy="5e-06" izz="8e-06" ixy="-3e-06" iyz="-0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="-0.051403 -0.110559 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.093653 -0.101663 -0.0198" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.051403 -0.110559 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.093653 -0.101663 -0.0198" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller_arm__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller_arm__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <link name="arm-motor_coupling__3__1">
+  <link name="arm-motor_coupling__1__1">
     <inertial>
-      <origin xyz="-0.007371663549880655 -5.210582789184903e-05 -4.723493207554191e-05" rpy="0 0 0"/>
-      <mass value="0.18570607851813228"/>
-      <inertia ixx="3.7e-05" iyy="3.1e-05" izz="3e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
+      <origin xyz="0.005103656751588609 0.005176372046693106 -4.462910759700511e-09" rpy="0 0 0"/>
+      <mass value="0.17482105870117712"/>
+      <inertia ixx="3.3e-05" iyy="3.4e-05" izz="2.9e-05" ixy="4e-06" iyz="0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.018595 -0.110061 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.142797 -0.151512 -0.0198" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.018595 -0.110061 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.142797 -0.151512 -0.0198" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/arm-motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/arm-motor_coupling__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="motor_coupling__3__1">
     <inertial>
-      <origin xyz="-0.035015738962292445 -7.833634128169564e-05 0.0030005798631244952" rpy="0 0 0"/>
-      <mass value="0.08300699604151424"/>
-      <inertia ixx="2.7e-05" iyy="4.9e-05" izz="4.8e-05" ixy="-0.0" iyz="0.0" ixz="8e-06"/>
+      <origin xyz="0.02480198254216287 0.024913127496110188 0.0030129809808746542" rpy="0 0 0"/>
+      <mass value="0.08266534784043636"/>
+      <inertia ixx="3.8e-05" iyy="3.7e-05" izz="4.7e-05" ixy="-1.1e-05" iyz="-6e-06" ixz="-6e-06"/>
     </inertial>
     <visual>
-      <origin xyz="0.038594 -0.109919 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.156838 -0.165754 -0.0198" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.038594 -0.109919 -0.0198" rpy="0 0 0"/>
+      <origin xyz="-0.156838 -0.165754 -0.0198" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_coupling__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="motor_d3536_mount__3__1">
     <inertial>
-      <origin xyz="3.117314407996563e-08 3.6740137963897634e-07 0.0014999999999999805" rpy="0 0 0"/>
+      <origin xyz="-0.00014892305053726407 0.020999056240170677 0.0014999999999999805" rpy="0 0 0"/>
       <mass value="0.0049294478925385665"/>
-      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="0.0" ixz="0.0"/>
+      <inertia ixx="1e-06" iyy="1e-06" izz="1e-06" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.093093 -0.109531 -0.0408" rpy="0 0 0"/>
+      <origin xyz="-0.193143 -0.181429 -0.0408" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.093093 -0.109531 -0.0408" rpy="0 0 0"/>
+      <origin xyz="-0.193143 -0.181429 -0.0408" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536_mount__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536_mount__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="motor_d3536__3__1">
     <inertial>
-      <origin xyz="-0.0031206946795299256 8.672759191745427e-05 0.01692564375539126" rpy="0 0 0"/>
+      <origin xyz="0.003120802802541539 -8.630395036479666e-05 0.016925643755391274" rpy="0 0 0"/>
       <mass value="0.09245457976256843"/>
-      <inertia ixx="5e-06" iyy="-3e-06" izz="-9e-06" ixy="-0.000122" iyz="-0.0" ixz="1e-06"/>
+      <inertia ixx="5e-06" iyy="-3e-06" izz="-9e-06" ixy="-0.000122" iyz="0.0" ixz="-1e-06"/>
     </inertial>
     <visual>
-      <origin xyz="0.093093 -0.109531 -0.0438" rpy="0 0 0"/>
+      <origin xyz="-0.192994 -0.202428 -0.0438" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.093093 -0.109531 -0.0438" rpy="0 0 0"/>
+      <origin xyz="-0.192994 -0.202428 -0.0438" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/motor_d3536__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/motor_d3536__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="propeller__3__1">
     <inertial>
-      <origin xyz="6.650896902660186e-08 3.9470352287962474e-07 0.007711655803727499" rpy="0 0 0"/>
-      <mass value="0.016828834151416935"/>
+      <origin xyz="1.1403399610698806e-07 8.38011809112249e-08 0.007711655028522904" rpy="0 0 0"/>
+      <mass value="0.016828834151416932"/>
       <inertia ixx="2.8e-05" iyy="2.8e-05" izz="5.7e-05" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.093093 -0.109531 -0.0958" rpy="0 0 0"/>
+      <origin xyz="-0.192994 -0.202428 -0.0953" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.093093 -0.109531 -0.0958" rpy="0 0 0"/>
+      <origin xyz="-0.192994 -0.202428 -0.0953" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/propeller__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/frame/propeller__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <joint name="Rigid 3" type="fixed">
-    <origin xyz="0.049 0.0355 0.003" rpy="0 0 0"/>
-    <parent link="base_link"/>
+  <joint name="Rigid 1" type="fixed">
+    <origin xyz="0.049 0.0355 0.034" rpy="0 0 0"/>
+    <parent link="chassis_lower_plate"/>
+    <child link="chassis_upper_plate_1"/>
+  </joint>
+
+  <joint name="Rigid 2" type="fixed">
+    <origin xyz="0.0 0.0 0.003" rpy="0 0 0"/>
+    <parent link="chassis_upper_plate_1"/>
     <child link="esc_dummy_1"/>
   </joint>
 
   <joint name="Rigid 4" type="fixed">
-    <origin xyz="0.0 0.0 0.006" rpy="0 0 0"/>
-    <parent link="esc_dummy_1"/>
-    <child link="chassis_upper_plate_1"/>
+    <origin xyz="0.07068 -0.026359 0.003" rpy="0 0 0"/>
+    <parent link="chassis_lower_plate"/>
+    <child link="arm_coupling_1"/>
   </joint>
 
   <joint name="Rigid 5" type="fixed">
-    <origin xyz="0.0 0.0 0.003" rpy="0 0 0"/>
-    <parent link="chassis_upper_plate_1"/>
-    <child link="damper_plate__1"/>
+    <origin xyz="0.02297 -0.004108 0.0168" rpy="0 0 0"/>
+    <parent link="arm_coupling_1"/>
+    <child link="propeller_arm_1"/>
   </joint>
 
   <joint name="Rigid 6" type="fixed">
+    <origin xyz="0.049498 -0.049498 0.0" rpy="0 0 0"/>
+    <parent link="propeller_arm_1"/>
+    <child link="arm-motor_coupling_1"/>
+  </joint>
+
+  <joint name="Rigid 7" type="fixed">
+    <origin xyz="0.014142 -0.014142 0.0" rpy="0 0 0"/>
+    <parent link="arm-motor_coupling_1"/>
+    <child link="motor_coupling_1"/>
+  </joint>
+
+  <joint name="Rigid 8" type="fixed">
+    <origin xyz="0.015416 -0.036416 0.021" rpy="0 0 0"/>
+    <parent link="motor_coupling_1"/>
+    <child link="motor_d3536_mount_1"/>
+  </joint>
+
+  <joint name="Rigid 9" type="fixed">
+    <origin xyz="0.021 0.0 0.003" rpy="0 0 0"/>
+    <parent link="motor_d3536_mount_1"/>
+    <child link="motor_d3536_1"/>
+  </joint>
+
+  <joint name="Rigid 10" type="fixed">
+    <origin xyz="0.027321 -0.026359 0.003" rpy="0 0 0"/>
+    <parent link="chassis_lower_plate"/>
+    <child link="arm_coupling_left__1"/>
+  </joint>
+
+  <joint name="Rigid 11" type="fixed">
+    <origin xyz="-0.022973 -0.004304 0.0168" rpy="0 0 0"/>
+    <parent link="arm_coupling_left__1"/>
+    <child link="propeller_arm__1__1"/>
+  </joint>
+
+  <joint name="Rigid 12" type="fixed">
+    <origin xyz="-0.049144 -0.049849 0.0" rpy="0 0 0"/>
+    <parent link="propeller_arm__1__1"/>
+    <child link="arm-motor_coupling__2__1"/>
+  </joint>
+
+  <joint name="Rigid 13" type="fixed">
+    <origin xyz="-0.014041 -0.014242 0.0" rpy="0 0 0"/>
+    <parent link="arm-motor_coupling__2__1"/>
+    <child link="motor_coupling__1__1"/>
+  </joint>
+
+  <joint name="Rigid 14" type="fixed">
+    <origin xyz="-0.036305 -0.015675 0.021" rpy="0 0 0"/>
+    <parent link="motor_coupling__1__1"/>
+    <child link="motor_d3536_mount__1__1"/>
+  </joint>
+
+  <joint name="Rigid 15" type="fixed">
+    <origin xyz="0.000149 -0.020999 0.003" rpy="0 0 0"/>
+    <parent link="motor_d3536_mount__1__1"/>
+    <child link="motor_d3536__1__1"/>
+  </joint>
+
+  <joint name="Rigid 16" type="fixed">
+    <origin xyz="0.027321 0.097359 0.003" rpy="0 0 0"/>
+    <parent link="chassis_lower_plate"/>
+    <child link="arm_coupling__1__1"/>
+  </joint>
+
+  <joint name="Rigid 17" type="fixed">
+    <origin xyz="-0.02297 0.004108 0.0168" rpy="0 0 0"/>
+    <parent link="arm_coupling__1__1"/>
+    <child link="propeller_arm__2__1"/>
+  </joint>
+
+  <joint name="Rigid 18" type="fixed">
+    <origin xyz="-0.049498 0.049498 0.0" rpy="0 0 0"/>
+    <parent link="propeller_arm__2__1"/>
+    <child link="arm-motor_coupling__3__1"/>
+  </joint>
+
+  <joint name="Rigid 19" type="fixed">
+    <origin xyz="-0.014142 0.014142 0.0" rpy="0 0 0"/>
+    <parent link="arm-motor_coupling__3__1"/>
+    <child link="motor_coupling__2__1"/>
+  </joint>
+
+  <joint name="Rigid 20" type="fixed">
+    <origin xyz="-0.015416 0.036416 0.021" rpy="0 0 0"/>
+    <parent link="motor_coupling__2__1"/>
+    <child link="motor_d3536_mount__2__1"/>
+  </joint>
+
+  <joint name="Rigid 21" type="fixed">
+    <origin xyz="-0.021 0.0 0.003" rpy="0 0 0"/>
+    <parent link="motor_d3536_mount__2__1"/>
+    <child link="motor_d3536__2__1"/>
+  </joint>
+
+  <joint name="motor_1" type="continuous">
+    <origin xyz="0.0 0.0 0.0415" rpy="0 0 0"/>
+    <parent link="motor_d3536_1"/>
+    <child link="propeller__2__1"/>
+    <axis xyz="-0.0 -0.0 -1.0"/>
+  </joint>
+
+
+  <joint name="motor_2" type="continuous">
+    <origin xyz="0.0 0.0 0.0415" rpy="0 0 0"/>
+    <parent link="motor_d3536__1__1"/>
+    <child link="propeller_1"/>
+    <axis xyz="-0.0 -0.0 -1.0"/>
+  </joint>
+
+  <joint name="motor_3" type="continuous">
+    <origin xyz="0.0 0.0 0.0415" rpy="0 0 0"/>
+    <parent link="motor_d3536__2__1"/>
+    <child link="propeller__1__1"/>
+    <axis xyz="-0.0 -0.0 -1.0"/>
+  </joint>
+
+  <joint name="Rigid 26" type="fixed">
+    <origin xyz="0.0 0.0 0.0095" rpy="0 0 0"/>
+    <parent link="esc_dummy_1"/>
+    <child link="damper_plate__1"/>
+  </joint>
+
+  <joint name="Rigid 27" type="fixed">
     <origin xyz="0.0 0.0 0.0021" rpy="0 0 0"/>
     <parent link="damper_plate__1"/>
     <child link="fmu_dummy_1"/>
   </joint>
 
-  <joint name="Rigid 7" type="fixed">
+  <joint name="Rigid 28" type="fixed">
     <origin xyz="-0.034517 -0.057052 0.007" rpy="0 0 0"/>
-    <parent link="chassis_upper_plate_1"/>
-    <child link="damper_rubber_1"/>
-  </joint>
-
-  <joint name="Rigid 8" type="fixed">
-    <origin xyz="0.034518 -0.057052 0.007" rpy="0 0 0"/>
-    <parent link="chassis_upper_plate_1"/>
-    <child link="damper_rubber__1__1"/>
-  </joint>
-
-  <joint name="Rigid 9" type="fixed">
-    <origin xyz="-0.034517 0.057052 0.007" rpy="0 0 0"/>
-    <parent link="chassis_upper_plate_1"/>
-    <child link="damper_rubber__2__1"/>
-  </joint>
-
-  <joint name="Rigid 10" type="fixed">
-    <origin xyz="0.034518 0.057052 0.007" rpy="0 0 0"/>
     <parent link="chassis_upper_plate_1"/>
     <child link="damper_rubber__3__1"/>
   </joint>
 
-  <joint name="Rigid 11" type="fixed">
-    <origin xyz="0.07068 -0.026359 0.003" rpy="0 0 0"/>
-    <parent link="base_link"/>
-    <child link="arm_coupling_1"/>
-  </joint>
-
-  <joint name="Rigid 12" type="fixed">
-    <origin xyz="0.013337 -0.019146 0.0168" rpy="0 0 0"/>
-    <parent link="arm_coupling_1"/>
-    <child link="propeller_arm_1"/>
-  </joint>
-
-  <joint name="Rigid 13" type="fixed">
-    <origin xyz="0.0 -0.07 0.0" rpy="0 0 0"/>
-    <parent link="propeller_arm_1"/>
-    <child link="arm-motor_coupling_1"/>
-  </joint>
-
-  <joint name="Rigid 14" type="fixed">
-    <origin xyz="0.0 -0.02 0.0" rpy="0 0 0"/>
-    <parent link="arm-motor_coupling_1"/>
-    <child link="motor_coupling_1"/>
-  </joint>
-
-  <joint name="Rigid 15" type="fixed">
-    <origin xyz="0.0 -0.0545 0.021" rpy="0 0 0"/>
-    <parent link="motor_coupling_1"/>
-    <child link="motor_d3536_mount_1"/>
-  </joint>
-
-  <joint name="Rigid 16" type="fixed">
-    <origin xyz="0.0 0.0 0.003" rpy="0 0 0"/>
-    <parent link="motor_d3536_mount_1"/>
-    <child link="motor_d3536_1"/>
-  </joint>
-
-  <joint name="Revolute 17" type="continuous">
-    <origin xyz="0.0 0.0 0.0535" rpy="0 0 0"/>
-    <parent link="motor_d3536_1"/>
-    <child link="propeller_1"/>
-    <axis xyz="0.0 0.0 1.0"/>
-  </joint>
-
-  <joint name="Rigid 18" type="fixed">
-    <origin xyz="0.027321 -0.026359 0.003" rpy="0 0 0"/>
-    <parent link="base_link"/>
-    <child link="arm_coupling_left_1"/>
-  </joint>
-
-  <joint name="Rigid 19" type="fixed">
-    <origin xyz="-0.019276 0.013201 0.0168" rpy="0 0 0"/>
-    <parent link="arm_coupling_left_1"/>
-    <child link="propeller_arm__1__1"/>
-  </joint>
-
-  <joint name="Rigid 20" type="fixed">
-    <origin xyz="-0.069998 -0.000498 0.0" rpy="0 0 0"/>
-    <parent link="propeller_arm__1__1"/>
-    <child link="arm-motor_coupling__1__1"/>
-  </joint>
-
-  <joint name="Rigid 21" type="fixed">
-    <origin xyz="-0.02 -0.000142 0.0" rpy="0 0 0"/>
-    <parent link="arm-motor_coupling__1__1"/>
-    <child link="motor_coupling__1__1"/>
-  </joint>
-
-  <joint name="Rigid 22" type="fixed">
-    <origin xyz="-0.054499 -0.000388 0.021" rpy="0 0 0"/>
-    <parent link="motor_coupling__1__1"/>
-    <child link="motor_d3536_mount__1__1"/>
-  </joint>
-
-  <joint name="Rigid 23" type="fixed">
-    <origin xyz="0.0 0.0 0.003" rpy="0 0 0"/>
-    <parent link="motor_d3536_mount__1__1"/>
-    <child link="motor_d3536__1__1"/>
-  </joint>
-
-  <joint name="Revolute 24" type="continuous">
-    <origin xyz="0.0 0.0 0.052" rpy="0 0 0"/>
-    <parent link="motor_d3536__1__1"/>
-    <child link="propeller__1__1"/>
-    <axis xyz="-0.0 -0.0 1.0"/>
-  </joint>
-
-  <joint name="Rigid 25" type="fixed">
-    <origin xyz="0.027321 0.097359 0.003" rpy="0 0 0"/>
-    <parent link="base_link"/>
-    <child link="arm_coupling__1__1"/>
-  </joint>
-
-  <joint name="Rigid 26" type="fixed">
-    <origin xyz="0.013338 -0.019147 0.0168" rpy="0 0 0"/>
-    <parent link="arm_coupling__1__1"/>
-    <child link="propeller_arm__2__1"/>
-  </joint>
-
-  <joint name="Rigid 27" type="fixed">
-    <origin xyz="0.0 -0.07 0.0" rpy="0 0 0"/>
-    <parent link="propeller_arm__2__1"/>
-    <child link="arm-motor_coupling__2__1"/>
-  </joint>
-
-  <joint name="Rigid 28" type="fixed">
-    <origin xyz="0.0 -0.02 0.0" rpy="0 0 0"/>
-    <parent link="arm-motor_coupling__2__1"/>
-    <child link="motor_coupling__2__1"/>
-  </joint>
-
   <joint name="Rigid 29" type="fixed">
-    <origin xyz="0.0 -0.0545 0.021" rpy="0 0 0"/>
-    <parent link="motor_coupling__2__1"/>
-    <child link="motor_d3536_mount__2__1"/>
+    <origin xyz="-0.034517 0.057052 0.007" rpy="0 0 0"/>
+    <parent link="chassis_upper_plate_1"/>
+    <child link="damper_rubber__1__1"/>
   </joint>
 
   <joint name="Rigid 30" type="fixed">
-    <origin xyz="0.0 0.0 0.003" rpy="0 0 0"/>
-    <parent link="motor_d3536_mount__2__1"/>
-    <child link="motor_d3536__2__1"/>
+    <origin xyz="0.034518 0.057052 0.007" rpy="0 0 0"/>
+    <parent link="chassis_upper_plate_1"/>
+    <child link="damper_rubber_1"/>
   </joint>
 
-  <joint name="Revolute 31" type="continuous">
-    <origin xyz="0.0 0.0 0.052" rpy="0 0 0"/>
-    <parent link="motor_d3536__2__1"/>
-    <child link="propeller__2__1"/>
-    <axis xyz="-0.0 -0.0 1.0"/>
+  <joint name="Rigid 31" type="fixed">
+    <origin xyz="0.034518 -0.057052 0.007" rpy="0 0 0"/>
+    <parent link="chassis_upper_plate_1"/>
+    <child link="damper_rubber__2__1"/>
   </joint>
 
   <joint name="Rigid 32" type="fixed">
     <origin xyz="0.07068 0.097359 0.003" rpy="0 0 0"/>
-    <parent link="base_link"/>
-    <child link="arm_coupling_left__1__1"/>
+    <parent link="chassis_lower_plate"/>
+    <child link="arm_coupling_left___1__1"/>
   </joint>
 
   <joint name="Rigid 33" type="fixed">
-    <origin xyz="-0.019277 0.0132 0.0168" rpy="0 0 0"/>
-    <parent link="arm_coupling_left__1__1"/>
+    <origin xyz="0.022973 0.004304 0.0168" rpy="0 0 0"/>
+    <parent link="arm_coupling_left___1__1"/>
     <child link="propeller_arm__3__1"/>
   </joint>
 
   <joint name="Rigid 34" type="fixed">
-    <origin xyz="-0.069998 -0.000498 0.0" rpy="0 0 0"/>
+    <origin xyz="0.049144 0.049849 0.0" rpy="0 0 0"/>
     <parent link="propeller_arm__3__1"/>
-    <child link="arm-motor_coupling__3__1"/>
+    <child link="arm-motor_coupling__1__1"/>
   </joint>
 
   <joint name="Rigid 35" type="fixed">
-    <origin xyz="-0.019999 -0.000142 0.0" rpy="0 0 0"/>
-    <parent link="arm-motor_coupling__3__1"/>
+    <origin xyz="0.014041 0.014242 0.0" rpy="0 0 0"/>
+    <parent link="arm-motor_coupling__1__1"/>
     <child link="motor_coupling__3__1"/>
   </joint>
 
   <joint name="Rigid 36" type="fixed">
-    <origin xyz="-0.054499 -0.000388 0.021" rpy="0 0 0"/>
+    <origin xyz="0.036305 0.015675 0.021" rpy="0 0 0"/>
     <parent link="motor_coupling__3__1"/>
     <child link="motor_d3536_mount__3__1"/>
   </joint>
 
   <joint name="Rigid 37" type="fixed">
-    <origin xyz="0.0 0.0 0.003" rpy="0 0 0"/>
+    <origin xyz="-0.000149 0.020999 0.003" rpy="0 0 0"/>
     <parent link="motor_d3536_mount__3__1"/>
     <child link="motor_d3536__3__1"/>
   </joint>
 
-  <joint name="Revolute 38" type="continuous">
-    <origin xyz="0.0 0.0 0.052" rpy="0 0 0"/>
+  <joint name="motor_4" type="continuous">
+    <origin xyz="0.0 0.0 0.0415" rpy="0 0 0"/>
     <parent link="motor_d3536__3__1"/>
     <child link="propeller__3__1"/>
-    <axis xyz="-0.0 -0.0 1.0"/>
+    <axis xyz="-0.0 -0.0 -1.0"/>
   </joint>
 
 </robot>

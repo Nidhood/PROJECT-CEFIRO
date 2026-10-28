@@ -17,8 +17,18 @@ ARGUMENTS = [
         default_value=PathJoinSubstitution([
             get_package_share_directory('cefiro_description'),
             'urdf',
-            'cefiro.xacro'
+            'cefiro-gyro.xacro'
         ]),
+    ),
+
+    DeclareLaunchArgument(
+        name='rviz_config',
+        default_value=PathJoinSubstitution([
+            get_package_share_directory('cefiro_description'),
+            'rviz', 
+            'cefiro.rviz'  # Asegúrate de que el nombre coincida con tu archivo
+        ]),
+        description='Absolute path to rviz config file'
     ),
 ]
 

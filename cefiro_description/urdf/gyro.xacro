@@ -2,25 +2,23 @@
 <robot name="gyro"
   xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:include filename="$(find cefiro_description)/urdf/materials.xacro" />
-
   <link name="base_link">
     <inertial>
-      <origin xyz="0.001157173130374694 -0.014949350635758602 0.021649313649829683" rpy="0 0 0"/>
-      <mass value="0.2961227403148617"/>
+      <origin xyz="0.0011571731303746855 -0.014949350635758592 0.02164931364982968" rpy="0 0 0"/>
+      <mass value="0.2961227403148616"/>
       <inertia ixx="0.000767" iyy="0.00055" izz="0.001242" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/base_link.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/base_link.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -34,14 +32,14 @@
     <visual>
       <origin xyz="0.062963 0.098467 -0.017273" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="0.062963 0.098467 -0.017273" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -55,14 +53,14 @@
     <visual>
       <origin xyz="0.074257 -0.057271 -0.017273" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="0.074257 -0.057271 -0.017273" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -76,14 +74,14 @@
     <visual>
       <origin xyz="-0.065269 -0.068569 -0.017273" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg__2__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg__2__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.065269 -0.068569 -0.017273" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg__2__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg__2__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -97,14 +95,14 @@
     <visual>
       <origin xyz="-0.074544 0.089198 -0.016523" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.074544 0.089198 -0.016523" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_snap-in-leg__3__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_snap-in-leg__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -118,14 +116,14 @@
     <visual>
       <origin xyz="-0.001156 0.014951 -0.031773" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_base_CPv12_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_base_CPv12_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.001156 0.014951 -0.031773" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_base_CPv12_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_base_CPv12_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -139,14 +137,14 @@
     <visual>
       <origin xyz="-0.001156 0.014951 -0.041673" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_ccv12_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_ccv12_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.001156 0.014951 -0.041673" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_ccv12_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_ccv12_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -160,682 +158,683 @@
     <visual>
       <origin xyz="-0.001156 0.014951 -0.059173" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_B1P_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_B1P_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.001156 0.014951 -0.059173" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_B1P_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_B1P_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_Y-DBA_1">
     <inertial>
-      <origin xyz="2.69618244483176e-07 8.605612878756497e-06 0.0022329783234845274" rpy="0 0 0"/>
+      <origin xyz="2.9059467922362865e-07 8.60399398841874e-06 0.0022329783234873724" rpy="0 0 0"/>
       <mass value="0.015293274790880064"/>
       <inertia ixx="6e-06" iyy="6e-06" izz="1.2e-05" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
     </inertial>
     <visual>
       <origin xyz="-0.001156 0.014951 -0.078173" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_Y-DBA_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_Y-DBA_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.001156 0.014951 -0.078173" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_Y-DBA_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_Y-DBA_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_Y-LOCK_1">
     <inertial>
-      <origin xyz="-4.1981279759462087e-07 -4.7087740018096624e-07 -0.005295109629472827" rpy="0 0 0"/>
+      <origin xyz="-4.1981919979804105e-07 -4.708780733560236e-07 -0.005295109629470551" rpy="0 0 0"/>
       <mass value="0.0041583623164599464"/>
       <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="-0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
       <origin xyz="-0.001156 0.014951 -0.082473" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_Y-LOCK_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_Y-LOCK_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <origin xyz="-0.001156 0.014951 -0.082473" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_Y-LOCK_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_Y-LOCK_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_CON-Y_368mm_1">
     <inertial>
-      <origin xyz="0.00015725718637999244 0.13082811230823058 0.13105552856831715" rpy="0 0 0"/>
+      <origin xyz="0.00046014841241998647 0.1308280219229364 0.13105552856890101" rpy="0 0 0"/>
       <mass value="0.07094391733872507"/>
-      <inertia ixx="0.000807" iyy="0.000404" izz="0.000405" ixy="-0.0" iyz="-0.000403" ixz="0.0"/>
+      <inertia ixx="0.000807" iyy="0.000404" izz="0.000405" ixy="-1e-06" iyz="-0.000403" ixz="-1e-06"/>
     </inertial>
     <visual>
-      <origin xyz="-0.001156 -0.125802 -0.086526" rpy="0 0 0"/>
+      <origin xyz="-0.001481 -0.125801 -0.086526" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-Y_368mm_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-Y_368mm_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.001156 -0.125802 -0.086526" rpy="0 0 0"/>
+      <origin xyz="-0.001481 -0.125801 -0.086526" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-Y_368mm_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-Y_368mm_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_CON-Y_368mm__1__1">
     <inertial>
-      <origin xyz="0.00015725718260796982 -0.13105536657572212 0.13082819543817187" rpy="0 0 0"/>
+      <origin xyz="-0.0001451604414352285 -0.13105600467752276 0.1308281954375885" rpy="0 0 0"/>
       <mass value="0.07094391733872507"/>
-      <inertia ixx="0.000807" iyy="0.000405" izz="0.000404" ixy="-0.0" iyz="0.000403" ixz="-0.0"/>
+      <inertia ixx="0.000807" iyy="0.000405" izz="0.000404" ixy="-1e-06" iyz="0.000403" ixz="1e-06"/>
     </inertial>
     <visual>
-      <origin xyz="-0.001156 0.155705 -0.086526" rpy="0 0 0"/>
+      <origin xyz="-0.00083 0.155704 -0.086526" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-Y_368mm__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-Y_368mm__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.001156 0.155705 -0.086526" rpy="0 0 0"/>
+      <origin xyz="-0.00083 0.155704 -0.086526" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-Y_368mm__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="gyro_B2S_1">
-    <inertial>
-      <origin xyz="-0.001156 -0.387495 -0.348219" rpy="0 0 0"/>
-      <mass value="0.0"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="-0.001156 -0.387495 -0.348219" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_B2S_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.001156 -0.387495 -0.348219" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_B2S_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-Y_368mm__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_B2S-R_1">
     <inertial>
-      <origin xyz="-0.001156 0.417398 -0.348219" rpy="0 0 0"/>
+      <origin xyz="-0.000225 0.417397 -0.348219" rpy="0 0 0"/>
       <mass value="0.0"/>
       <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="-0.001156 0.417398 -0.348219" rpy="0 0 0"/>
+      <origin xyz="-0.000225 0.417397 -0.348219" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_B2S-R_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_B2S-R_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="-0.001156 0.417398 -0.348219" rpy="0 0 0"/>
+      <origin xyz="-0.000225 0.417397 -0.348219" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_B2S-R_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_B2S-R_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="gyro_B2S_1">
+    <inertial>
+      <origin xyz="-0.002086 -0.387494 -0.348219" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.002086 -0.387494 -0.348219" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_B2S_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.002086 -0.387494 -0.348219" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_B2S_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_A2-LW_1">
     <inertial>
-      <origin xyz="0.098057 -0.458094 -0.418818" rpy="0 0 0"/>
+      <origin xyz="-0.002089 -0.388847 -0.488972" rpy="0 0 0"/>
       <mass value="0.0"/>
       <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.098057 -0.458094 -0.418818" rpy="0 0 0"/>
+      <origin xyz="-0.002089 -0.388847 -0.488972" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A2-LW_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A2-LW_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.098057 -0.458094 -0.418818" rpy="0 0 0"/>
+      <origin xyz="-0.002089 -0.388847 -0.488972" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A2-LW_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A2-LW_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_CON-P_360mm_1">
     <inertial>
-      <origin xyz="-0.1802061546651206 -0.0001503950917337571 0.0001782116110824461" rpy="0 0 0"/>
+      <origin xyz="0.12691013516768695 -0.1275268308090541 -0.00012374419014998805" rpy="0 0 0"/>
       <mass value="0.0670222866413884"/>
-      <inertia ixx="2e-06" iyy="0.000722" izz="0.000722" ixy="-0.0" iyz="0.0" ixz="-0.0"/>
+      <inertia ixx="0.000364" iyy="0.00036" izz="0.000722" ixy="0.00036" iyz="0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.217878 -0.502904 -0.463796" rpy="0 0 0"/>
+      <origin xyz="-0.118665 -0.362637 -0.489072" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.217878 -0.502904 -0.463796" rpy="0 0 0"/>
+      <origin xyz="-0.118665 -0.362637 -0.489072" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_A1-LW_1">
     <inertial>
-      <origin xyz="0.577998 -0.502904 -0.463796" rpy="0 0 0"/>
+      <origin xyz="-0.372719 -0.107405 -0.48929" rpy="0 0 0"/>
       <mass value="0.0"/>
       <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.577998 -0.502904 -0.463796" rpy="0 0 0"/>
+      <origin xyz="-0.372719 -0.107405 -0.48929" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A1-LW_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A1-LW_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.577998 -0.502904 -0.463796" rpy="0 0 0"/>
+      <origin xyz="-0.372719 -0.107405 -0.48929" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A1-LW_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="gyro_CON-P_360mm__1__1">
-    <inertial>
-      <origin xyz="-1.9937681810966446e-05 -0.1275896701142537 -0.12726010015815717" rpy="0 0 0"/>
-      <mass value="0.0670222866413884"/>
-      <inertia ixx="0.000722" iyy="0.000362" izz="0.000362" ixy="0.0" iyz="-0.00036" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.74813 -0.382603 -0.343494" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.74813 -0.382603 -0.343494" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="gyro_A2-LW__1__1">
-    <inertial>
-      <origin xyz="0.74813 -0.127959 -0.088851" rpy="0 0 0"/>
-      <mass value="0.0"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.74813 -0.127959 -0.088851" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A2-LW__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.74813 -0.127959 -0.088851" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A2-LW__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="gyro_CON-P_360mm__3__1">
-    <inertial>
-      <origin xyz="0.180205974104859 0.00017843302815863035 -0.00015042701469359515" rpy="0 0 0"/>
-      <mass value="0.0670222866413884"/>
-      <inertia ixx="2e-06" iyy="0.000722" izz="0.000722" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.583181 -0.011323 0.027785" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm__3__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.583181 -0.011323 0.027785" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm__3__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="gyro_A1-LW__1__1">
-    <inertial>
-      <origin xyz="0.223061 -0.011323 0.027785" rpy="0 0 0"/>
-      <mass value="0.0"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.223061 -0.011323 0.027785" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A1-LW__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.223061 -0.011323 0.027785" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_A1-LW__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A1-LW_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_CON-P_360mm__2__1">
     <inertial>
-      <origin xyz="1.9778877727874566e-05 -0.12726082081484452 -0.12758872922119793" rpy="0 0 0"/>
+      <origin xyz="-0.1274984673027718 -0.12693779318759435 0.00012328076207634986" rpy="0 0 0"/>
       <mass value="0.0670222866413884"/>
-      <inertia ixx="0.000722" iyy="0.000362" izz="0.000362" ixy="-0.0" iyz="-0.00036" ixz="-0.0"/>
+      <inertia ixx="0.00036" iyy="0.000363" izz="0.000722" ixy="-0.00036" iyz="-0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.052929 0.108978 0.148087" rpy="0 0 0"/>
+      <origin xyz="-0.372163 0.133197 -0.48929" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm__2__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm__2__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.052929 0.108978 0.148087" rpy="0 0 0"/>
+      <origin xyz="-0.372163 0.133197 -0.48929" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-P_360mm__2__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm__2__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="gyro_CON-P_360mm__3__1">
+    <inertial>
+      <origin xyz="0.12770510657685546 0.12714431449154887 -0.00012332200891979062" rpy="0 0 0"/>
+      <mass value="0.0670222866413884"/>
+      <inertia ixx="0.00036" iyy="0.000364" izz="0.000722" ixy="-0.00036" iyz="-0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.369838 -0.109122 -0.488655" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm__3__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.369838 -0.109122 -0.488655" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm__3__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_X1_1">
     <inertial>
-      <origin xyz="-0.001712605418205726 0.0028078332919840854 -0.00036395335249922445" rpy="0 0 0"/>
+      <origin xyz="-0.0024691111071020178 1.6711779799699622e-05 0.002241013718970064" rpy="0 0 0"/>
       <mass value="0.005899083895605196"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="-0.0" iyz="0.0" ixz="0.0"/>
+      <inertia ixx="0.0" iyy="1e-06" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.647229 -0.431556 -0.392448" rpy="0 0 0"/>
+      <origin xyz="-0.350047 0.012844 -0.48927" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.647229 -0.431556 -0.392448" rpy="0 0 0"/>
+      <origin xyz="-0.350047 0.012844 -0.48927" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_X1-SV_1">
     <inertial>
-      <origin xyz="0.644402 -0.431013 -0.388989" rpy="0 0 0"/>
+      <origin xyz="-0.341145 0.012825 -0.491324" rpy="0 0 0"/>
       <mass value="0.0"/>
       <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.644402 -0.431013 -0.388989" rpy="0 0 0"/>
+      <origin xyz="-0.341145 0.012825 -0.491324" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1-SV_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1-SV_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.644402 -0.431013 -0.388989" rpy="0 0 0"/>
+      <origin xyz="-0.341145 0.012825 -0.491324" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1-SV_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1-SV_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_CF_Rod_1">
     <inertial>
-      <origin xyz="0.2305167038254632 -0.16300028578864023 -0.16300037701144426" rpy="0 0 0"/>
+      <origin xyz="-0.3259988090669113 0.0007535309577930676 -0.0002781729336499006" rpy="0 0 0"/>
       <mass value="0.0213844442018673"/>
-      <inertia ixx="0.000379" iyy="0.000568" izz="0.000568" ixy="0.000268" iyz="-0.000189" ixz="0.000268"/>
+      <inertia ixx="0.0" iyy="0.000758" izz="0.000758" ixy="2e-06" iyz="0.0" ixz="-1e-06"/>
     </inertial>
     <visual>
-      <origin xyz="0.633804 -0.415022 -0.389968" rpy="0 0 0"/>
+      <origin xyz="-0.326155 0.012803 -0.479312" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CF_Rod_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CF_Rod_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.633804 -0.415022 -0.389968" rpy="0 0 0"/>
+      <origin xyz="-0.326155 0.012803 -0.479312" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CF_Rod_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="gyro_R-BED__1__1">
-    <inertial>
-      <origin xyz="-0.0714305684569344 0.0513308663804672 0.049698494121161466" rpy="0 0 0"/>
-      <mass value="0.019226377494430135"/>
-      <inertia ixx="3.8e-05" iyy="5.7e-05" izz="5.7e-05" ixy="2.6e-05" iyz="-1.9e-05" ixz="2.6e-05"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.17277 -0.089022 -0.063968" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_R-BED__1__1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.17277 -0.089022 -0.063968" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_R-BED__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CF_Rod_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_R-BED_1">
     <inertial>
-      <origin xyz="0.07319797608077805 -0.05112617874257108 -0.05240450707884897" rpy="0 0 0"/>
+      <origin xyz="-0.10352420055043005 0.0002330410959185663 0.0008161723715476854" rpy="0 0 0"/>
       <mass value="0.019226377494430135"/>
-      <inertia ixx="3.8e-05" iyy="5.7e-05" izz="5.7e-05" ixy="2.6e-05" iyz="-1.9e-05" ixz="2.6e-05"/>
+      <inertia ixx="1e-06" iyy="7.5e-05" izz="7.6e-05" ixy="0.0" iyz="0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.635572 -0.416449 -0.391041" rpy="0 0 0"/>
+      <origin xyz="-0.328655 0.012809 -0.479564" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_R-BED_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_R-BED_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.635572 -0.416449 -0.391041" rpy="0 0 0"/>
+      <origin xyz="-0.328655 0.012809 -0.479564" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_R-BED_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_R-BED_1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <link name="gyro_CON-BED-ADAPTER_6mm_1">
+  <link name="gyro_R-BED__1__1">
     <inertial>
-      <origin xyz="0.013401263555625709 -0.01018408355638456 -0.00876529289221159" rpy="0 0 0"/>
-      <mass value="0.02290627435505764"/>
-      <inertia ixx="6e-06" iyy="8e-06" izz="8e-06" ixy="3e-06" iyz="-2e-06" ixz="3e-06"/>
+      <origin xyz="0.10102261074029514 -0.00022696844238441483 0.0012408438402203292" rpy="0 0 0"/>
+      <mass value="0.019226377494430135"/>
+      <inertia ixx="1e-06" iyy="7.5e-05" izz="7.6e-05" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.403287 -0.254143 -0.224846" rpy="0 0 0"/>
+      <origin xyz="0.325843 0.011296 -0.478755" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-BED-ADAPTER_6mm_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_R-BED__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.403287 -0.254143 -0.224846" rpy="0 0 0"/>
+      <origin xyz="0.325843 0.011296 -0.478755" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_CON-BED-ADAPTER_6mm_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <link name="gyro_drone_baseB_1">
-    <inertial>
-      <origin xyz="-0.0002982277424453672 0.0012941185387498333 -0.0005630456009356744" rpy="0 0 0"/>
-      <mass value="0.7026029896442744"/>
-      <inertia ixx="16.681524" iyy="24.861867" izz="24.865763" ixy="-2.773625" iyz="-8.259824" ixz="-2.773733"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.389911 -0.248892 -0.211181" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_drone_baseB_1.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="silver"/>
-    </visual>
-    <collision>
-      <origin xyz="0.389911 -0.248892 -0.211181" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_drone_baseB_1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_R-BED__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_X1__1__1">
     <inertial>
-      <origin xyz="-0.0001588300813206156 -0.002362390733492231 -0.002347145092172334" rpy="0 0 0"/>
+      <origin xyz="0.002464952734687831 -1.709858660562877e-05 0.002245225309986887" rpy="0 0 0"/>
       <mass value="0.005899083895605196"/>
-      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
+      <inertia ixx="0.0" iyy="1e-06" izz="0.0" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.15383 0.060025 0.099133" rpy="0 0 0"/>
+      <origin xyz="0.347722 0.01123 -0.488674" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.15383 0.060025 0.099133" rpy="0 0 0"/>
+      <origin xyz="0.347722 0.01123 -0.488674" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
   <link name="gyro_X1-SV__1__1">
     <inertial>
-      <origin xyz="0.158666 0.065504 0.104615" rpy="0 0 0"/>
+      <origin xyz="0.338824 0.011249 -0.490743" rpy="0 0 0"/>
       <mass value="0.0"/>
       <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
     </inertial>
     <visual>
-      <origin xyz="0.158666 0.065504 0.104615" rpy="0 0 0"/>
+      <origin xyz="0.338824 0.011249 -0.490743" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1-SV__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1-SV__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
-      <origin xyz="0.158666 0.065504 0.104615" rpy="0 0 0"/>
+      <origin xyz="0.338824 0.011249 -0.490743" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://cefiro_description/meshes/gyro_X1-SV__1__1.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_X1-SV__1__1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <joint name="Rigid 1" type="fixed">
+  <link name="gyro_drone_baseB_1">
+    <inertial>
+      <origin xyz="-0.0001544208838804989 0.0005767916477225649 0.001312845423951825" rpy="0 0 0"/>
+      <mass value="0.7026029896442744"/>
+      <inertia ixx="12.720417" iyy="20.565111" izz="33.123626" ixy="0.056906" iyz="-0.001329" ixz="-0.016107"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.019065 0.012093 -0.488" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_drone_baseB_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.019065 0.012093 -0.488" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_drone_baseB_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="gyro_A2-LW__1__1">
+    <inertial>
+      <origin xyz="-0.116931 0.38725 -0.489072" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.116931 0.38725 -0.489072" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A2-LW__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.116931 0.38725 -0.489072" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A2-LW__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="gyro_CON-P_360mm__1__1">
+    <inertial>
+      <origin xyz="-0.12714358122604158 0.12770493355062845 -0.00034151346905458846" rpy="0 0 0"/>
+      <mass value="0.0670222866413884"/>
+      <inertia ixx="0.000364" iyy="0.00036" izz="0.000722" ixy="0.00036" iyz="0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.116341 0.386711 -0.488873" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.116341 0.386711 -0.488873" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-P_360mm__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="gyro_A1-LW__1__1">
+    <inertial>
+      <origin xyz="0.370394 0.13148 -0.488655" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.370394 0.13148 -0.488655" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A1-LW__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="0.370394 0.13148 -0.488655" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_A1-LW__1__1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="gyro_CON-BED-ADAPTER_6mm_1">
+    <inertial>
+      <origin xyz="0.018951614987808292 -4.575464303644208e-05 -0.000987034675029197" rpy="0 0 0"/>
+      <mass value="0.02290627435505764"/>
+      <inertia ixx="1e-06" iyy="1e-05" izz="1e-05" ixy="0.0" iyz="0.0" ixz="-0.0"/>
+    </inertial>
+    <visual>
+      <origin xyz="-0.000154 0.012049 -0.482034" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-BED-ADAPTER_6mm_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="silver"/>
+    </visual>
+    <collision>
+      <origin xyz="-0.000154 0.012049 -0.482034" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://cefiro_description/meshes/gyro/gyro_CON-BED-ADAPTER_6mm_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="gyro_rIgid_1" type="fixed">
     <origin xyz="-0.062963 -0.098467 0.017273" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="gyro_snap-in-leg_1"/>
   </joint>
 
-  <joint name="Rigid 2" type="fixed">
+  <joint name="gyro_rIgid_2" type="fixed">
     <origin xyz="-0.074257 0.057271 0.017273" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="gyro_snap-in-leg__1__1"/>
   </joint>
 
-  <joint name="Rigid 3" type="fixed">
+  <joint name="gyro_rIgid_3" type="fixed">
     <origin xyz="0.065269 0.068569 0.017273" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="gyro_snap-in-leg__2__1"/>
   </joint>
 
-  <joint name="Rigid 4" type="fixed">
+  <joint name="gyro_rIgid_4" type="fixed">
     <origin xyz="0.074544 -0.089198 0.016523" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="gyro_snap-in-leg__3__1"/>
   </joint>
 
-  <joint name="Rigid 5" type="fixed">
+  <joint name="gyro_rIgid_5" type="fixed">
     <origin xyz="0.001156 -0.014951 0.031773" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child link="gyro_base_CPv12_1"/>
   </joint>
 
-  <joint name="Rigid 6" type="fixed">
+  <joint name="gyro_rIgid_6" type="fixed">
     <origin xyz="0.0 0.0 0.0099" rpy="0 0 0"/>
     <parent link="gyro_base_CPv12_1"/>
     <child link="gyro_ccv12_1"/>
   </joint>
 
-  <joint name="Revolute 7" type="continuous">
+  <joint name="yaw" type="continuous">
     <origin xyz="0.0 0.0 0.0274" rpy="0 0 0"/>
     <parent link="gyro_base_CPv12_1"/>
     <child link="gyro_B1P_1"/>
     <axis xyz="0.0 -0.0 -1.0"/>
   </joint>
 
-  <joint name="Rigid 8" type="fixed">
+  <joint name="gyro_rIgid_8" type="fixed">
     <origin xyz="0.0 0.0 0.019" rpy="0 0 0"/>
     <parent link="gyro_B1P_1"/>
     <child link="gyro_Y-DBA_1"/>
   </joint>
 
-  <joint name="Rigid 9" type="fixed">
+  <joint name="gyro_rIgid_9" type="fixed">
     <origin xyz="0.0 0.0 0.0043" rpy="0 0 0"/>
     <parent link="gyro_Y-DBA_1"/>
     <child link="gyro_Y-LOCK_1"/>
   </joint>
 
-  <joint name="Rigid 10" type="fixed">
-    <origin xyz="0.0 0.140753 0.027353" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_10" type="fixed">
+    <origin xyz="0.000325 0.140752 0.027353" rpy="0 0 0"/>
     <parent link="gyro_B1P_1"/>
     <child link="gyro_CON-Y_368mm_1"/>
   </joint>
 
-  <joint name="Rigid 11" type="fixed">
-    <origin xyz="0.0 -0.140754 0.027353" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_11" type="fixed">
+    <origin xyz="-0.000326 -0.140753 0.027353" rpy="0 0 0"/>
     <parent link="gyro_B1P_1"/>
     <child link="gyro_CON-Y_368mm__1__1"/>
   </joint>
 
-  <joint name="Rigid 12" type="fixed">
-    <origin xyz="0.0 0.261693 0.261693" rpy="0 0 0"/>
-    <parent link="gyro_CON-Y_368mm_1"/>
-    <child link="gyro_B2S_1"/>
-  </joint>
-
-  <joint name="Rigid 13" type="fixed">
-    <origin xyz="0.0 -0.261693 0.261693" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_48" type="fixed">
+    <origin xyz="-0.000605 -0.261693 0.261693" rpy="0 0 0"/>
     <parent link="gyro_CON-Y_368mm__1__1"/>
     <child link="gyro_B2S-R_1"/>
   </joint>
 
-  <joint name="Revolute 23" type="continuous">
-    <origin xyz="-0.099213 0.070599 0.070599" rpy="0 0 0"/>
-    <parent link="gyro_B2S_1"/>
-    <child link="gyro_A2-LW_1"/>
-    <axis xyz="0.707107 0.5 0.5"/>
+  <joint name="gyro_rIgid_49" type="fixed">
+    <origin xyz="0.000605 0.261693 0.261693" rpy="0 0 0"/>
+    <parent link="gyro_CON-Y_368mm_1"/>
+    <child link="gyro_B2S_1"/>
   </joint>
 
-  <joint name="Rigid 24" type="fixed">
-    <origin xyz="-0.119821 0.04481 0.044978" rpy="0 0 0"/>
+  <joint name="pitch" type="continuous">
+    <origin xyz="3e-06 0.001353 0.140753" rpy="0 0 0"/>
+    <parent link="gyro_B2S_1"/>
+    <child link="gyro_A2-LW_1"/>
+    <axis xyz="-0.002312 -0.999997 -0.0"/>
+  </joint>
+
+  <joint name="gyro_rIgid_52" type="fixed">
+    <origin xyz="0.116576 -0.02621 0.0001" rpy="0 0 0"/>
     <parent link="gyro_A2-LW_1"/>
     <child link="gyro_CON-P_360mm_1"/>
   </joint>
 
-  <joint name="Rigid 25" type="fixed">
-    <origin xyz="-0.36012 0.0 0.0" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_53" type="fixed">
+    <origin xyz="0.254054 -0.255232 0.000218" rpy="0 0 0"/>
     <parent link="gyro_CON-P_360mm_1"/>
     <child link="gyro_A1-LW_1"/>
   </joint>
 
-  <joint name="Rigid 26" type="fixed">
-    <origin xyz="-0.170132 -0.120301 -0.120302" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_54" type="fixed">
+    <origin xyz="-0.000556 -0.240602 0.0" rpy="0 0 0"/>
     <parent link="gyro_A1-LW_1"/>
-    <child link="gyro_CON-P_360mm__1__1"/>
-  </joint>
-
-  <joint name="Rigid 27" type="fixed">
-    <origin xyz="0.0 -0.254644 -0.254643" rpy="0 0 0"/>
-    <parent link="gyro_CON-P_360mm__1__1"/>
-    <child link="gyro_A2-LW__1__1"/>
-  </joint>
-
-  <joint name="Rigid 31" type="fixed">
-    <origin xyz="0.164949 -0.116636 -0.116636" rpy="0 0 0"/>
-    <parent link="gyro_A2-LW__1__1"/>
-    <child link="gyro_CON-P_360mm__3__1"/>
-  </joint>
-
-  <joint name="Rigid 32" type="fixed">
-    <origin xyz="0.36012 0.0 0.0" rpy="0 0 0"/>
-    <parent link="gyro_CON-P_360mm__3__1"/>
-    <child link="gyro_A1-LW__1__1"/>
-  </joint>
-
-  <joint name="Rigid 33" type="fixed">
-    <origin xyz="0.170132 -0.120301 -0.120302" rpy="0 0 0"/>
-    <parent link="gyro_A1-LW__1__1"/>
     <child link="gyro_CON-P_360mm__2__1"/>
   </joint>
 
-  <joint name="Revolute 34" type="continuous">
-    <origin xyz="-0.069231 -0.071348 -0.071348" rpy="0 0 0"/>
-    <parent link="gyro_A1-LW_1"/>
-    <child link="gyro_X1_1"/>
-    <axis xyz="0.707107 -0.5 -0.5"/>
+  <joint name="gyro_rIgid_57" type="fixed">
+    <origin xyz="0.000556 0.240602 0.0" rpy="0 0 0"/>
+    <parent link="gyro_A1-LW__1__1"/>
+    <child link="gyro_CON-P_360mm__3__1"/>
   </joint>
 
-  <joint name="Rigid 35" type="fixed">
-    <origin xyz="0.002827 -0.000543 -0.003459" rpy="0 0 0"/>
+  <joint name="roll" type="continuous">
+    <origin xyz="-0.022672 -0.120249 -2e-05" rpy="0 0 0"/>
+    <parent link="gyro_A1-LW_1"/>
+    <child link="gyro_X1_1"/>
+    <axis xyz="-0.999997 0.002312 -0.000854"/>
+  </joint>
+
+  <joint name="gyro_rIgid_62" type="fixed">
+    <origin xyz="-0.008902 1.9e-05 0.002054" rpy="0 0 0"/>
     <parent link="gyro_X1_1"/>
     <child link="gyro_X1-SV_1"/>
   </joint>
 
-  <joint name="Rigid 36" type="fixed">
-    <origin xyz="0.001768 -0.001427 -0.001073" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_63" type="fixed">
+    <origin xyz="-0.0025 6e-06 -0.000252" rpy="0 0 0"/>
     <parent link="gyro_R-BED_1"/>
     <child link="gyro_CF_Rod_1"/>
   </joint>
 
-  <joint name="Rigid 40" type="fixed">
-    <origin xyz="0.461034 -0.326 -0.326" rpy="0 0 0"/>
-    <parent link="gyro_CF_Rod_1"/>
-    <child link="gyro_R-BED__1__1"/>
-  </joint>
-
-  <joint name="Rigid 42" type="fixed">
-    <origin xyz="0.00883 -0.014564 0.002052" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_64" type="fixed">
+    <origin xyz="-0.01249 1.6e-05 -0.01176" rpy="0 0 0"/>
     <parent link="gyro_X1-SV_1"/>
     <child link="gyro_R-BED_1"/>
   </joint>
 
-  <joint name="Rigid 44" type="fixed">
-    <origin xyz="0.230517 -0.160879 -0.165122" rpy="0 0 0"/>
+  <joint name="gyro_rIgid_65" type="fixed">
+    <origin xyz="-0.651998 0.001507 -0.000557" rpy="0 0 0"/>
     <parent link="gyro_CF_Rod_1"/>
-    <child link="gyro_CON-BED-ADAPTER_6mm_1"/>
+    <child link="gyro_R-BED__1__1"/>
   </joint>
 
-  <joint name="Rigid 45" type="fixed">
-    <origin xyz="0.013376 -0.005251 -0.013665" rpy="0 0 0"/>
+  <joint name="fixed_roll" type="fixed">
+    <origin xyz="0.022672 0.12025 1.9e-05" rpy="0 0 0"/>
+    <parent link="gyro_A1-LW__1__1"/>
+    <child link="gyro_X1__1__1"/>
+    <axis xyz="0.999997 -0.002312 0.000854"/>
+  </joint>
+
+  <joint name="gyro_rIgid_67" type="fixed">
+    <origin xyz="0.008898 -1.9e-05 0.002069" rpy="0 0 0"/>
+    <parent link="gyro_X1__1__1"/>
+    <child link="gyro_X1-SV__1__1"/>
+  </joint>
+
+  <joint name="gyro_rIgid_69" type="fixed">
+    <origin xyz="0.018911 -4.4e-05 0.005966" rpy="0 0 0"/>
     <parent link="gyro_CON-BED-ADAPTER_6mm_1"/>
     <child link="gyro_drone_baseB_1"/>
   </joint>
 
-  <joint name="Rigid 46" type="fixed">
-    <origin xyz="0.069231 -0.071348 -0.071348" rpy="0 0 0"/>
-    <parent link="gyro_A1-LW__1__1"/>
-    <child link="gyro_X1__1__1"/>
+  <joint name="gyro_rIgid_70" type="fixed">
+    <origin xyz="-0.255232 -0.254053 -0.000218" rpy="0 0 0"/>
+    <parent link="gyro_CON-P_360mm__2__1"/>
+    <child link="gyro_A2-LW__1__1"/>
   </joint>
 
-  <joint name="Rigid 47" type="fixed">
-    <origin xyz="-0.004836 -0.005479 -0.005482" rpy="0 0 0"/>
-    <parent link="gyro_X1__1__1"/>
-    <child link="gyro_X1-SV__1__1"/>
+  <joint name="gyro_rIgid_71" type="fixed">
+    <origin xyz="-0.233272 0.000539 -0.000199" rpy="0 0 0"/>
+    <parent link="gyro_A2-LW__1__1"/>
+    <child link="gyro_CON-P_360mm__1__1"/>
+  </joint>
+
+  <joint name="gyro_rIgid_72" type="fixed">
+    <origin xyz="-0.254053 0.255231 -0.000218" rpy="0 0 0"/>
+    <parent link="gyro_CON-P_360mm__1__1"/>
+    <child link="gyro_A1-LW__1__1"/>
+  </joint>
+
+  <joint name="gyro_rIgid_73" type="fixed">
+    <origin xyz="-0.326001 0.000754 0.002722" rpy="0 0 0"/>
+    <parent link="gyro_CF_Rod_1"/>
+    <child link="gyro_CON-BED-ADAPTER_6mm_1"/>
   </joint>
 
 </robot>

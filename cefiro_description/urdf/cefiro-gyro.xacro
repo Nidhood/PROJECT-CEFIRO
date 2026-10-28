@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<robot name="cefiro-gyro"
+    xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:include filename="$(find cefiro_description)/urdf/materials.xacro" />
+    <xacro:include filename="$(find cefiro_description)/urdf/cefiro.xacro" />
+    <xacro:include filename="$(find cefiro_description)/urdf/gyro.xacro" />
+
+    <joint name="gyro_to_frame" type="fixed">
+        <origin xyz="-0.005 -0.050 0" rpy="0 0 1.571"/>
+        <parent link="gyro_drone_baseB_1"/>
+        <child link="chassis_lower_plate"/>
+    </joint>
+
+</robot>
