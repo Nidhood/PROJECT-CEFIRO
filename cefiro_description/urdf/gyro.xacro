@@ -794,17 +794,23 @@
     <child link="gyro_R-BED__1__1"/>
   </joint>
 
-  <joint name="fixed_roll" type="fixed">
+  <!-- <joint name="fixed_roll" type="fixed">
     <origin xyz="0.022672 0.12025 1.9e-05" rpy="0 0 0"/>
     <parent link="gyro_A1-LW__1__1"/>
     <child link="gyro_X1__1__1"/>
     <axis xyz="0.999997 -0.002312 0.000854"/>
+  </joint> -->
+
+  <joint name="gyro_rIgid_75" type="fixed">
+    <origin xyz="-0.01249 1.6e-05 0.01376" rpy="0 0 0"/>
+    <parent link="gyro_R-BED__1__1"/>
+    <child link="gyro_X1-SV__1__1"/>
   </joint>
 
   <joint name="gyro_rIgid_67" type="fixed">
     <origin xyz="0.008898 -1.9e-05 0.002069" rpy="0 0 0"/>
-    <parent link="gyro_X1__1__1"/>
-    <child link="gyro_X1-SV__1__1"/>
+    <parent link="gyro_X1-SV__1__1"/>
+    <child link="gyro_X1__1__1"/>
   </joint>
 
   <joint name="gyro_rIgid_69" type="fixed">
