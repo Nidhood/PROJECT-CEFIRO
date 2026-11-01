@@ -2,8 +2,8 @@
 <robot name="cefiro-gyro"
     xmlns:xacro="http://www.ros.org/wiki/xacro">
     <xacro:include filename="$(find cefiro_description)/urdf/materials.xacro" />
-    <xacro:include filename="$(find cefiro_description)/urdf/cefiro.xacro" />
-    <xacro:include filename="$(find cefiro_description)/urdf/gyro.xacro" />
+    <xacro:include filename="$(find cefiro_description)/urdf/cefiro.urdf.xacro" />
+    <xacro:include filename="$(find cefiro_description)/urdf/gyro.urdf.xacro" />
 
     <joint name="gyro_to_frame" type="fixed">
         <origin xyz="-0.005 -0.050 0" rpy="0 0 1.571"/>

@@ -17,7 +17,7 @@ ARGUMENTS = [
         default_value=PathJoinSubstitution([
             get_package_share_directory('cefiro_description'),
             'urdf',
-            'cefiro-gyro.xacro'
+            'cefiro-gyro.urdf.xacro'
         ]),
     ),
 
