@@ -70,7 +70,7 @@ QWidget* MainWindow::titledPanel(const QString& title,QVBoxLayout*& inner,QWidge
  auto* panel=new QFrame(parent);panel->setObjectName("panel");inner=new QVBoxLayout(panel);inner->setContentsMargins(11,9,11,10);inner->setSpacing(7);inner->addWidget(label(title,"panelTitle"));return panel;
 }
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
- setWindowTitle("CEFIRO GUI v1.4.1 | ATTITUDE CONTROL HMI");setMinimumSize(1180,700);resize(1600,930);
+ setWindowTitle("CEFIRO GUI v1.4.0 | ATTITUDE CONTROL HMI");setMinimumSize(1180,700);resize(1600,930);
  clock_.start();publish_clock_.start();
  stack_=new QStackedWidget(this);setCentralWidget(stack_);
  buildToolbar();buildDashboard();buildControl();buildSystem();
@@ -170,7 +170,7 @@ void MainWindow::buildControl() {
     title->setSpacing(0);
     title->addWidget(label("CEFIRO / ATTITUDE OPERATIONS", "eyebrow"));
     title->addWidget(label("ATTITUDE CONTROL & EXPERIMENTS", "pageTitle"));
-    title->addWidget(label("CEFIRO GUI v1.4.1  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
+    title->addWidget(label("CEFIRO GUI v1.4.0  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
     header->addLayout(title);
     header->addStretch();
     record_btn_ = new QPushButton("DATA RECORDER", page);
@@ -242,16 +242,24 @@ void MainWindow::buildControl() {
     reference_layout->addWidget(command_source_stack_, 1);
 
     // The command page changes with the selected operating mode.
-    // AUTOMATIC: attitude reference definition for the external controller.
+    // AUTOMATIC: either an interactive 3-axis gimbal OR a trajectory generator.
     // MANUAL: direct motor-by-motor excitation for actuator testing.
     auto* auto_page = new QWidget(command_source_stack_);
     auto* auto_layout = new QVBoxLayout(auto_page);
     auto_layout->setContentsMargins(2, 0, 2, 0);
     auto_layout->setSpacing(4);
-    auto_layout->addWidget(label("3-AXIS REFERENCE GIMBAL  /  DRAG THE COLORED RINGS", "eyebrow"));
-    command_pad_ = new AttitudeCommandPad(auto_page);
-    auto_layout->addWidget(command_pad_, 1);
+    auto_command_tabs_ = new QTabWidget(auto_page);
+    auto_command_tabs_->setUsesScrollButtons(true);
+    auto_layout->addWidget(auto_command_tabs_, 1);
+
+    auto* gimbal_tab = new QWidget(auto_command_tabs_);
+    auto* gimbal_layout = new QVBoxLayout(gimbal_tab);
+    gimbal_layout->setContentsMargins(4, 4, 4, 4);
+    gimbal_layout->setSpacing(4);
+    gimbal_layout->addWidget(label("3-AXIS REFERENCE GIMBAL  /  DRAG THE COLORED RINGS", "eyebrow"));
+    command_pad_ = new AttitudeCommandPad(gimbal_tab);
     command_pad_->setMinimumHeight(210);
+    gimbal_layout->addWidget(command_pad_, 1);
     auto* auto_fields = new QGridLayout;
     auto_fields->setHorizontalSpacing(4);
     auto_fields->setVerticalSpacing(2);
@@ -263,20 +271,25 @@ void MainWindow::buildControl() {
         manual_labels_[std::size_t(i)] = label("0.00°", "hint");
         auto_fields->addWidget(manual_labels_[std::size_t(i)], 2, i);
     }
-    auto_layout->addLayout(auto_fields);
-    auto_layout->addWidget(label("Wheel: 1° increments · Double-click: zero selected axis", "hint"));
-    auto_layout->addWidget(hline(auto_page));
-    auto_layout->addWidget(label("AUTOMATIC TRAJECTORY GENERATOR", "eyebrow"));
+    gimbal_layout->addLayout(auto_fields);
+    gimbal_layout->addWidget(label("Wheel: 1° increments · Double-click: zero selected axis", "hint"));
+    auto_command_tabs_->addTab(gimbal_tab, "Reference gimbal");
+
+    auto* trajectory_tab = new QWidget(auto_command_tabs_);
+    auto* trajectory_layout = new QVBoxLayout(trajectory_tab);
+    trajectory_layout->setContentsMargins(4, 4, 4, 4);
+    trajectory_layout->setSpacing(4);
+    trajectory_layout->addWidget(label("AUTOMATIC TRAJECTORY GENERATOR", "eyebrow"));
     auto* signal_select = new QHBoxLayout;
     signal_select->addWidget(label("AXIS", "eyebrow"));
-    axis_ = new QComboBox(auto_page);
+    axis_ = new QComboBox(trajectory_tab);
     axis_->addItems(kAxisNames);
     signal_select->addWidget(axis_, 1);
     signal_select->addWidget(label("WAVEFORM", "eyebrow"));
-    waveform_ = new QComboBox(auto_page);
+    waveform_ = new QComboBox(trajectory_tab);
     waveform_->addItems(kTypes);
     signal_select->addWidget(waveform_, 2);
-    auto_layout->addLayout(signal_select);
+    trajectory_layout->addLayout(signal_select);
     auto* wavefields = new QGridLayout;
     wavefields->setHorizontalSpacing(8);
     wavefields->setVerticalSpacing(3);
@@ -303,19 +316,57 @@ void MainWindow::buildControl() {
     }
     wavefields->setColumnStretch(1, 1);
     wavefields->setColumnStretch(3, 1);
-    auto_layout->addLayout(wavefields);
-    repeat_ = new QCheckBox("Repeat signal", auto_page);
-    auto_layout->addWidget(repeat_);
+    trajectory_layout->addLayout(wavefields);
+    repeat_ = new QCheckBox("Repeat signal", trajectory_tab);
+    trajectory_layout->addWidget(repeat_);
+    auto_command_tabs_->addTab(trajectory_tab, "Trajectory generator");
     command_source_stack_->addWidget(auto_page);
 
     auto* manual_page = new QWidget(command_source_stack_);
     auto* manual_layout = new QVBoxLayout(manual_page);
     manual_layout->setContentsMargins(2, 0, 2, 0);
-    manual_layout->setSpacing(3);
+    manual_layout->setSpacing(4);
     manual_layout->addWidget(label("DIRECT MOTOR COMMAND  /  TEST EACH ROTOR INDEPENDENTLY", "eyebrow"));
-    auto* motor_hint = label("Set RPM independently. Direction is a request: the present actuator node does not yet interpret reversal.", "hint");
+    auto* motor_hint = label("Use MASTER when you want the same request on all motors. Disable the link and the four channels remain where they were for independent trimming.", "hint");
     motor_hint->setWordWrap(true);
     manual_layout->addWidget(motor_hint);
+
+    auto* master_panel = new QFrame(manual_page);
+    master_panel->setObjectName("panel");
+    auto* master_layout = new QGridLayout(master_panel);
+    master_layout->setContentsMargins(8, 8, 8, 8);
+    master_layout->setHorizontalSpacing(8);
+    master_layout->setVerticalSpacing(4);
+    master_layout->addWidget(label("MASTER COMMAND  /  APPLY SAME REQUEST TO ALL MOTORS", "eyebrow"), 0, 0, 1, 5);
+    link_all_motors_ = new QCheckBox("Link all motors to master", master_panel);
+    master_layout->addWidget(link_all_motors_, 1, 0, 1, 2);
+    master_layout->addWidget(label("MASTER RPM", "eyebrow"), 1, 2);
+    master_motor_speed_ = spin(0.0, 12000.0, 0.0, 50.0, 0);
+    master_layout->addWidget(master_motor_speed_, 1, 3);
+    master_motor_direction_ = new QComboBox(master_panel);
+    master_motor_direction_->addItems({"Normal (request)", "Reverse (request)"});
+    master_layout->addWidget(master_motor_direction_, 1, 4);
+    master_motor_slider_ = new QSlider(Qt::Horizontal, master_panel);
+    master_motor_slider_->setRange(0, 12000);
+    master_motor_slider_->setTickPosition(QSlider::TicksBelow);
+    master_motor_slider_->setTickInterval(1000);
+    master_motor_slider_->setValue(0);
+    master_motor_slider_->setStyleSheet(
+        "QSlider::groove:horizontal { background:#162431; border:1px solid #213549; height:16px; border-radius:8px; }"
+        "QSlider::sub-page:horizontal { background:#69b5f0; border-radius:8px; }"
+        "QSlider::add-page:horizontal { background:#0d1620; border-radius:8px; }"
+        "QSlider::handle:horizontal { background:#ff5468; border:1px solid #070a0f; width:22px; margin:-4px 0; border-radius:11px; }");
+    master_layout->addWidget(master_motor_slider_, 2, 0, 1, 5);
+    master_motor_label_ = label("0 rpm · dir +1", "hint");
+    master_motor_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    master_layout->addWidget(master_motor_label_, 3, 0, 1, 5);
+    master_layout->setColumnStretch(0, 1);
+    master_layout->setColumnStretch(1, 1);
+    master_layout->setColumnStretch(2, 0);
+    master_layout->setColumnStretch(3, 0);
+    master_layout->setColumnStretch(4, 0);
+    manual_layout->addWidget(master_panel);
+
     auto* motors = new QHBoxLayout;
     motors->setSpacing(8);
     for (int i=0; i<4; ++i) {
@@ -329,9 +380,16 @@ void MainWindow::buildControl() {
         mv->addWidget(name);
         motor_sliders_[std::size_t(i)] = new QSlider(Qt::Vertical, motor_panel);
         motor_sliders_[std::size_t(i)]->setRange(0, 12000);
-        motor_sliders_[std::size_t(i)]->setTickPosition(QSlider::TicksRight);
+        motor_sliders_[std::size_t(i)]->setTickPosition(QSlider::TicksLeft);
         motor_sliders_[std::size_t(i)]->setTickInterval(1000);
         motor_sliders_[std::size_t(i)]->setValue(0);
+        motor_sliders_[std::size_t(i)]->setFixedHeight(250);
+        motor_sliders_[std::size_t(i)]->setFixedWidth(46);
+        motor_sliders_[std::size_t(i)]->setStyleSheet(
+            "QSlider::groove:vertical { background:#162431; border:1px solid #213549; width:20px; border-radius:10px; }"
+            "QSlider::sub-page:vertical { background:#69b5f0; border-radius:10px; }"
+            "QSlider::add-page:vertical { background:#0d1620; border-radius:10px; }"
+            "QSlider::handle:vertical { background:#ff5468; border:1px solid #070a0f; height:24px; margin:0 -6px; border-radius:12px; }");
         mv->addWidget(motor_sliders_[std::size_t(i)], 1, Qt::AlignHCenter);
         motor_speed_[std::size_t(i)] = spin(0.0, 12000.0, 0.0, 50.0, 0);
         mv->addWidget(motor_speed_[std::size_t(i)]);
@@ -344,7 +402,7 @@ void MainWindow::buildControl() {
         motors->addWidget(motor_panel, 1);
     }
     manual_layout->addLayout(motors, 1);
-    manual_layout->addWidget(label("Suggested use: keep low RPM during bench tests and verify rotor direction before enabling the full plant.", "hint"));
+    manual_layout->addWidget(label("Suggested use: keep low RPM during bench tests and verify rotor direction before enabling the full plant. Enable OUTPUT below before pressing START TEST.", "hint"));
     command_source_stack_->addWidget(manual_page);
     ref_tabs_->addTab(reference_tab, "Command");
 
@@ -522,27 +580,92 @@ void MainWindow::connectUi(){
        if (command_active_ && publish_clock_.elapsed() > 45) publishCommand();
    }
  });}
+ auto updateMotorLabel = [this](int idx) {
+   if (idx < 0 || idx >= 4) return;
+   motor_labels_[size_t(idx)]->setText(
+       QString("%1 rpm · dir %2")
+           .arg(f(motor_command_rpm_[size_t(idx)],0))
+           .arg(motor_command_direction_[size_t(idx)] >= 0 ? "+1" : "-1"));
+ };
+ auto updateMasterLabel = [this]() {
+   if (!master_motor_label_) return;
+   const int dir = master_motor_direction_ && master_motor_direction_->currentIndex() == 0 ? 1 : -1;
+   master_motor_label_->setText(QString("%1 rpm · dir %2")
+       .arg(f(master_motor_speed_ ? master_motor_speed_->value() : 0.0,0))
+       .arg(dir >= 0 ? "+1" : "-1"));
+ };
+ auto syncAllMotors = [this, updateMotorLabel](double rpm, int direction_index, bool sync_direction) {
+   for (int i = 0; i < 4; ++i) {
+     {
+       QSignalBlocker block1(motor_sliders_[size_t(i)]);
+       QSignalBlocker block2(motor_speed_[size_t(i)]);
+       motor_sliders_[size_t(i)]->setValue(int(std::round(rpm)));
+       motor_speed_[size_t(i)]->setValue(rpm);
+     }
+     motor_command_rpm_[size_t(i)] = rpm;
+     if (sync_direction) {
+       QSignalBlocker block3(motor_direction_[size_t(i)]);
+       motor_direction_[size_t(i)]->setCurrentIndex(direction_index);
+       motor_command_direction_[size_t(i)] = direction_index == 0 ? 1 : -1;
+     }
+     updateMotorLabel(i);
+   }
+   if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
+ };
  for(int i=0;i<4;++i){
-   connect(motor_sliders_[size_t(i)], &QSlider::valueChanged, this, [this,i](int value){
+   connect(motor_sliders_[size_t(i)], &QSlider::valueChanged, this, [this,i,updateMotorLabel](int value){
        QSignalBlocker block(motor_speed_[size_t(i)]);
        motor_speed_[size_t(i)]->setValue(value);
        motor_command_rpm_[size_t(i)] = value;
-       motor_labels_[size_t(i)]->setText(QString("%1 rpm · dir %2").arg(f(value,0)).arg(motor_command_direction_[size_t(i)] >= 0 ? "+1" : "-1"));
+       updateMotorLabel(i);
        if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
    });
-   connect(motor_speed_[size_t(i)], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,i](double value){
+   connect(motor_speed_[size_t(i)], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,i,updateMotorLabel](double value){
        QSignalBlocker block(motor_sliders_[size_t(i)]);
        motor_sliders_[size_t(i)]->setValue(int(std::round(value)));
        motor_command_rpm_[size_t(i)] = value;
-       motor_labels_[size_t(i)]->setText(QString("%1 rpm · dir %2").arg(f(value,0)).arg(motor_command_direction_[size_t(i)] >= 0 ? "+1" : "-1"));
+       updateMotorLabel(i);
        if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
    });
-   connect(motor_direction_[size_t(i)], QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,i](int idx){
+   connect(motor_direction_[size_t(i)], QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,i,updateMotorLabel](int idx){
        motor_command_direction_[size_t(i)] = idx == 0 ? 1 : -1;
-       motor_labels_[size_t(i)]->setText(QString("%1 rpm · dir %2").arg(f(motor_command_rpm_[size_t(i)],0)).arg(motor_command_direction_[size_t(i)] >= 0 ? "+1" : "-1"));
+       updateMotorLabel(i);
        if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
    });
  }
+ connect(master_motor_slider_, &QSlider::valueChanged, this, [this,syncAllMotors,updateMasterLabel](int value){
+     QSignalBlocker block(master_motor_speed_);
+     master_motor_speed_->setValue(value);
+     updateMasterLabel();
+     if (link_all_motors_ && link_all_motors_->isChecked()) {
+         syncAllMotors(value, master_motor_direction_->currentIndex(), false);
+     }
+ });
+ connect(master_motor_speed_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,syncAllMotors,updateMasterLabel](double value){
+     QSignalBlocker block(master_motor_slider_);
+     master_motor_slider_->setValue(int(std::round(value)));
+     updateMasterLabel();
+     if (link_all_motors_ && link_all_motors_->isChecked()) {
+         syncAllMotors(value, master_motor_direction_->currentIndex(), false);
+     }
+ });
+ connect(master_motor_direction_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,syncAllMotors,updateMasterLabel](int idx){
+     updateMasterLabel();
+     if (link_all_motors_ && link_all_motors_->isChecked()) {
+         syncAllMotors(master_motor_speed_->value(), idx, true);
+     }
+ });
+ connect(link_all_motors_, &QCheckBox::toggled, this, [this,syncAllMotors](bool on){
+     for (int i = 0; i < 4; ++i) {
+         if (motor_sliders_[size_t(i)]) motor_sliders_[size_t(i)]->setEnabled(manual_mode_ && !on);
+         if (motor_speed_[size_t(i)]) motor_speed_[size_t(i)]->setEnabled(manual_mode_ && !on);
+         if (motor_direction_[size_t(i)]) motor_direction_[size_t(i)]->setEnabled(manual_mode_ && !on);
+     }
+     if (on) {
+         syncAllMotors(master_motor_speed_->value(), master_motor_direction_->currentIndex(), true);
+     }
+ });
+ updateMasterLabel();
  connect(activate_btn_,&QPushButton::clicked,this,[this]{startOutput();});
  connect(deactivate_btn_,&QPushButton::clicked,this,[this]{stopOutput(false);});
  connect(start_btn_,&QPushButton::clicked,this,[this]{startOutput();});
@@ -582,15 +705,23 @@ void MainWindow::setManual(bool yes){
  manual_btn_->setChecked(yes);
  automatic_btn_->setChecked(!yes);
  if (ref_tabs_) ref_tabs_->setCurrentIndex(0);
- waveform_->setEnabled(!yes);axis_->setEnabled(!yes);
- for(auto* d:{amplitude_,offset_,frequency_,end_frequency_,phase_,delay_,duration_,initial_,final_,rise_,pulse_,duty_,tau_})d->setEnabled(!yes);
- for(auto* m:manual_)m->setEnabled(!yes);
- for(auto* s:motor_sliders_) if(s) s->setEnabled(yes);
- for(auto* s:motor_speed_) if(s) s->setEnabled(yes);
- for(auto* d:motor_direction_) if(d) d->setEnabled(yes);
+ if (waveform_) waveform_->setEnabled(!yes);
+ if (axis_) axis_->setEnabled(!yes);
+ for(auto* d:{amplitude_,offset_,frequency_,end_frequency_,phase_,delay_,duration_,initial_,final_,rise_,pulse_,duty_,tau_}) if(d) d->setEnabled(!yes);
+ for(auto* m:manual_) if(m) m->setEnabled(!yes);
+ const bool linked = link_all_motors_ && link_all_motors_->isChecked();
+ for(auto* s:motor_sliders_) if(s) s->setEnabled(yes && !linked);
+ for(auto* s:motor_speed_) if(s) s->setEnabled(yes && !linked);
+ for(auto* d:motor_direction_) if(d) d->setEnabled(yes && !linked);
+ if (master_motor_slider_) master_motor_slider_->setEnabled(yes);
+ if (master_motor_speed_) master_motor_speed_->setEnabled(yes);
+ if (master_motor_direction_) master_motor_direction_->setEnabled(yes);
+ if (link_all_motors_) link_all_motors_->setEnabled(yes);
  command_source_stack_->setCurrentIndex(yes ? 1 : 0);
- command_pad_->setEnabledForEditing(!yes);
- command_pad_->setAngles({manual_[0]->value(),manual_[1]->value(),manual_[2]->value()});
+ if (command_pad_) {
+   command_pad_->setEnabledForEditing(!yes);
+   command_pad_->setAngles({manual_[0]->value(),manual_[1]->value(),manual_[2]->value()});
+ }
  if(wave_running_){waveform_timer_->stop();wave_running_=false;}
  if(!yes) for(int i=0;i<3;++i) command_deg_[size_t(i)] = manual_[size_t(i)]->value();
  if(command_active_){ if(manual_mode_) publishMotorCommand(); else publishCommand(); }

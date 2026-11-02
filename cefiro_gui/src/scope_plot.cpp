@@ -143,10 +143,19 @@ void ScopePlot::reTheme(const QColor& fg,const QColor& bg,const QColor& grid,con
 }
 void ScopePlot::hideCursor() {
     hovering_ = false;
-    if (cursor_line_) cursor_line_->hide();
+    if (cursor_line_) {
+        cursor_line_->setLine(QLineF());
+        cursor_line_->hide();
+    }
     for (auto* marker : cursor_points_) marker->hide();
     if (hover_label_) hover_label_->hide();
-    if (view_ && view_->viewport()) view_->viewport()->update();
+    if (auto* scene = chart_ ? chart_->scene() : nullptr) {
+        scene->update();
+    }
+    if (view_ && view_->viewport()) {
+        view_->viewport()->update();
+        view_->viewport()->repaint();
+    }
 }
 
 void ScopePlot::updateCursor(const QPoint& pos) {

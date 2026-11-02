@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>cefiro_gui</name>
-  <version>1.4.1</version>
+  <version>1.4.0</version>
   <description>Qt6 ROS 2 attitude control HMI, telemetry, signal generator and experiment logger for CEFIRO.</description>
   <maintainer email="maintainers@example.invalid">CEFIRO Development Team</maintainer>
   <license>MIT</license>

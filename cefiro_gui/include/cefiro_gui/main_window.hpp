@@ -83,9 +83,14 @@ private:
     std::array<QDoubleSpinBox*,4> motor_speed_{};
     std::array<QComboBox*,4> motor_direction_{};
     std::array<QLabel*,4> motor_labels_{};
+    QSlider* master_motor_slider_{nullptr};
+    QDoubleSpinBox* master_motor_speed_{nullptr};
+    QComboBox* master_motor_direction_{nullptr};
+    QLabel* master_motor_label_{nullptr};
     AttitudeView* view_{nullptr};
     AttitudeCommandPad* command_pad_{nullptr};
     QStackedWidget* command_source_stack_{nullptr};
+    QTabWidget* auto_command_tabs_{nullptr};
     ScopePlot* preview_{nullptr};
     ScopePlot* live_{nullptr};
     QComboBox* controller_{nullptr};
@@ -107,6 +112,7 @@ private:
     QCheckBox* repeat_{nullptr};
     QCheckBox* auto_record_{nullptr};
     QCheckBox* output_enabled_{nullptr};
+    QCheckBox* link_all_motors_{nullptr};
     std::array<QDoubleSpinBox*,3> manual_{};
     QDoubleSpinBox *amplitude_{nullptr},*offset_{nullptr},*frequency_{nullptr},*end_frequency_{nullptr},*phase_{nullptr},*delay_{nullptr},*duration_{nullptr},*initial_{nullptr},*final_{nullptr},*rise_{nullptr},*pulse_{nullptr},*duty_{nullptr},*tau_{nullptr};
     QTableWidget* pid_gains_{nullptr};
