@@ -22,6 +22,19 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(gz-sim8 REQUIRED)
+find_package(gz-plugin2 REQUIRED COMPONENTS register)
+find_package(gz-transport13 REQUIRED)
+find_package(gz-msgs10 REQUIRED)
+
+add_library(cefiro_rotor_system SHARED src/rotor_system.cpp)
+target_link_libraries(cefiro_rotor_system PRIVATE
+    gz-sim8::gz-sim8
+    gz-plugin2::gz-plugin2
+    gz-transport13::gz-transport13
+    gz-msgs10::gz-msgs10
+)
+install(TARGETS cefiro_rotor_system LIBRARY DESTINATION lib)
 
 install(DIRECTORY config launch models worlds scripts
     DESTINATION share/${PROJECT_NAME}

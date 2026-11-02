@@ -1,0 +1,17 @@
+cefiro_experiment:
+  created_at: "2026-11-02T14:20:15"
+  data_file: "/home/nidhood/cefiro_ws/src/cefiro/data/LQR/cefiro_run_20261102_142015_594.csv"
+  notes: ""
+  strategy: "OPEN LOOP"
+  source: "MANUAL"
+  capture_mode: "Continuous"
+  start_delay_s: 0
+  save_interval_ms: 200
+  duration_s: 10
+  requested_periods: 10
+  waveform_frequency_hz: 0.25
+  peak_axis: "ROLL"
+  peak_threshold_deg: 10
+  peak_target: 5
+  peak_min_separation_s: 0.2
+  controller_acknowledgement: not_confirmed

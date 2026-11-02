@@ -39,3 +39,6 @@ QToolTip {background:#fafafa; border:1px solid #d95319; color:#111827; padding:6
 QCheckBox {color:#111827; spacing:8px;}
 QCheckBox::indicator {width:14px;height:14px;}
 QCheckBox::indicator:checked {background:#0072bd;border:1px solid #0072bd;}
+
+/* Recorder dialog validation feedback */
+QLabel#errorText { color:#ff5468; font-weight:700; }

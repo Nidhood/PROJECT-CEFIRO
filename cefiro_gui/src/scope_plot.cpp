@@ -4,6 +4,10 @@
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
 #include <QEvent>
+#include <QGraphicsEllipseItem>
+#include <QGraphicsLineItem>
+#include <QGraphicsScene>
+#include <QGraphicsItem>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLegend>
@@ -35,7 +39,38 @@ ScopePlot::ScopePlot(const QString& title,const QString& units,const QStringList
     chart_->addAxis(x_,Qt::AlignBottom);chart_->addAxis(y_,Qt::AlignLeft);
     for(const auto& text:series){auto* line=new QLineSeries(chart_);line->setName(text);chart_->addSeries(line);line->attachAxis(x_);line->attachAxis(y_);data_.push_back({{},line,false});}
     view_=new QChartView(chart_,this);view_->setObjectName("scopeChartView");view_->setRenderHint(QPainter::Antialiasing,false);
-    view_->viewport()->setMouseTracking(true);view_->viewport()->installEventFilter(this);root->addWidget(view_,1);
+    view_->setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    view_->setCacheMode(QGraphicsView::CacheNone);
+    view_->setMouseTracking(true);
+    view_->viewport()->setMouseTracking(true);
+    view_->viewport()->installEventFilter(this);
+    root->addWidget(view_,1);
+    // A viewport child follows every mouse movement. QToolTip::showText is
+    // intentionally not used: native tooltips may stay in place on X11 / Wayland.
+    hover_label_ = new QLabel(view_->viewport());
+    hover_label_->setObjectName("scopeHoverLabel");
+    hover_label_->setTextFormat(Qt::RichText);
+    hover_label_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    hover_label_->setAttribute(Qt::WA_ShowWithoutActivating);
+    hover_label_->setMargin(8);
+    hover_label_->setWordWrap(true);
+    hover_label_->setMaximumWidth(310);
+    hover_label_->setMinimumWidth(118);
+    hover_label_->setStyleSheet("QLabel#scopeHoverLabel { background-color: #101b2a; "
+                               "color: #e8eef4; border: 1px solid #496077; "
+                               "border-radius: 5px; padding: 2px; }");
+    hover_label_->hide();
+    cursor_line_ = chart_->scene()->addLine(QLineF(), QPen(QColor("#7990a5"), 1, Qt::DashLine));
+    cursor_line_->setZValue(100);
+    cursor_line_->hide();
+    for (std::size_t i = 0; i < data_.size(); ++i) {
+        auto* marker = chart_->scene()->addEllipse(-4, -4, 8, 8,
+                                                   QPen(Qt::NoPen), QBrush(Qt::white));
+        marker->setZValue(101);
+        marker->hide();
+        cursor_points_.push_back(marker);
+    }
+    hover_timer_.start();
     connect(t_minus,&QToolButton::clicked,this,[this]{zoomTime(0.75);});
     connect(t_plus,&QToolButton::clicked,this,[this]{zoomTime(4.0/3.0);});
     connect(y_minus,&QToolButton::clicked,this,[this]{zoomY(.8);});
@@ -46,26 +81,44 @@ ScopePlot::ScopePlot(const QString& title,const QString& units,const QStringList
     setYRange(-30,30);x_->setRange(0,window_s_);
     reTheme(QColor("#e8eef4"),QColor("#070a0f"),QColor("#213549"),{QColor("#FF5468"),QColor("#69B5F0"),QColor("#00D8C6"),QColor("#F8B869")});
 }
-ScopePlot::~ScopePlot(){refresh_timer_->stop();view_->viewport()->removeEventFilter(this);}
+ScopePlot::~ScopePlot(){
+    refresh_timer_->stop();
+    view_->viewport()->removeEventFilter(this);
+    hideCursor();
+    if (auto* scene = chart_->scene()) {
+        if (cursor_line_) { scene->removeItem(cursor_line_); delete cursor_line_; cursor_line_ = nullptr; }
+        for (auto* item : cursor_points_) {
+            scene->removeItem(item);
+            delete item;
+        }
+    }
+}
 void ScopePlot::append(int i,double t,double v){
     if(i<0||i>=int(data_.size())||!std::isfinite(t)||!std::isfinite(v))return;
     auto& pts=data_[size_t(i)].points;pts.emplace_back(t,v);
-    while(!pts.empty()&&(pts.front().x()<t-retention_s_||pts.size()>5000))pts.pop_front();dirty_=true;
+    while (!pts.empty() && (pts.front().x() < t - retention_s_ || pts.size() > 5000)) {
+        pts.pop_front();
+    }
+    dirty_ = true;
 }
 void ScopePlot::setSeriesData(int i,const QList<QPointF>& pts){
     if(i<0||i>=int(data_.size()))return;
     auto& p=data_[size_t(i)].points;p.clear();for(const auto& v:pts)if(std::isfinite(v.x())&&std::isfinite(v.y()))p.push_back(v);dirty_=true;
 }
-void ScopePlot::clear(){for(auto& s:data_){s.points.clear();s.line->clear();}x_->setRange(0,window_s_);dirty_=false;}
+void ScopePlot::clear(){hideCursor();for(auto& s:data_){s.points.clear();s.line->clear();}x_->setRange(0,window_s_);dirty_=false;}
 void ScopePlot::setWindowSeconds(double s){window_s_=std::clamp(s,1.0,60.0);labelTime();dirty_=true;}
 void ScopePlot::labelTime(){time_label_->setText(QString::number(window_s_,'f',window_s_<10?1:0)+" s");}
 void ScopePlot::setYRange(double lo,double hi){if(hi<=lo)return;y_lo_=lo;y_hi_=hi;auto_y_=false;y_->setRange(lo,hi);}
 void ScopePlot::fitY(){double lo=std::numeric_limits<double>::infinity(),hi=-lo;const double left=x_->min(),right=x_->max();
  for(const auto& s:data_)for(const auto& p:s.points)if(p.x()>=left&&p.x()<=right){lo=std::min(lo,p.y());hi=std::max(hi,p.y());}
- if(!std::isfinite(lo))return;const double pad=std::max(1.0,(hi-lo)*.12);setYRange(lo-pad,hi+pad);
+    if (!std::isfinite(lo)) {
+        return;
+    }
+    const double pad = std::max(1.0, (hi - lo) * .12);
+    setYRange(lo - pad, hi + pad);
 }
 void ScopePlot::setDashed(int i,bool b){if(i>=0&&i<int(data_.size())){data_[size_t(i)].dashed=b;reTheme(fg_,bg_,grid_,colors_);}}
-void ScopePlot::setActive(bool b){active_=b;if(b)refresh_timer_->start();else refresh_timer_->stop();}
+void ScopePlot::setActive(bool b){active_=b;if(b){dirty_=true;refresh_timer_->start();}else{refresh_timer_->stop();hideCursor();}}
 void ScopePlot::zoomTime(double f){setWindowSeconds(window_s_*f);}
 void ScopePlot::zoomY(double f){const double m=(y_lo_+y_hi_)*.5,d=(y_hi_-y_lo_)*f*.5;setYRange(m-d,m+d);}
 void ScopePlot::refresh(){if(!dirty_||!active_)return;dirty_=false;
@@ -73,28 +126,143 @@ void ScopePlot::refresh(){if(!dirty_||!active_)return;dirty_=false;
  x_->setRange(std::max(0.0,max_t-window_s_),std::max(window_s_,max_t));
  for(auto& s:data_){QList<QPointF> pts;pts.reserve(int(s.points.size()));for(const auto& p:s.points)if(p.x()>=x_->min()-1.0)pts.push_back(p);s.line->replace(pts);}
  if(auto_y_)fitY();
+ if(hovering_)updateCursor(hover_position_);
 }
 void ScopePlot::reTheme(const QColor& fg,const QColor& bg,const QColor& grid,const QList<QColor>& colors){
  fg_=fg;bg_=bg;grid_=grid;colors_=colors;chart_->setBackgroundBrush(bg);chart_->setPlotAreaBackgroundBrush(bg);chart_->setPlotAreaBackgroundVisible(true);
  chart_->legend()->setLabelColor(fg);chart_->setBackgroundPen(QPen(Qt::NoPen));
  for(auto* axis:{x_,y_}){axis->setLabelsColor(fg);axis->setTitleBrush(fg);axis->setGridLineColor(grid);axis->setLinePenColor(grid);}
  for(size_t i=0;i<data_.size();++i){QPen p(colors[int(i)%colors.size()],1.8);if(data_[i].dashed)p.setStyle(Qt::DashLine);p.setCosmetic(true);data_[i].line->setPen(p);}
-}
-bool ScopePlot::eventFilter(QObject* obj,QEvent* evt){
- if(obj!=view_->viewport())return QFrame::eventFilter(obj,evt);
- if(evt->type()==QEvent::Wheel){auto* e=static_cast<QWheelEvent*>(evt);zoomTime(e->angleDelta().y()>0?.75:4.0/3.0);return true;}
- if(evt->type()==QEvent::MouseMove){const auto* e=static_cast<QMouseEvent*>(evt);auto* s=data_.empty()?nullptr:data_.front().line;if(!s)return false;
-    const QPointF chart_pos=chart_->mapFromScene(view_->mapToScene(e->pos()));
-    const QPointF coord=chart_->mapToValue(chart_pos,s);
-    if(!std::isfinite(coord.x()))return false;
-    QString tooltip=QString("t = %1 s").arg(coord.x(),0,'f',2);
-    for(const auto& series:data_){const auto& pts=series.points;if(pts.empty())continue;
-        auto iter=std::lower_bound(pts.begin(),pts.end(),coord.x(),[](const QPointF& a,double t){return a.x()<t;});
-        if(iter==pts.end())iter=std::prev(pts.end());
-        tooltip+=QString("\n%1: %2").arg(series.line->name()).arg(iter->y(),0,'f',3);
-    }
-    QToolTip::showText(e->globalPosition().toPoint(),tooltip,view_);return false;
+ if(cursor_line_)cursor_line_->setPen(QPen(fg_.darker(145),1,Qt::DashLine));
+ if (hover_label_) {
+     hover_label_->setStyleSheet(QString(
+         "QLabel#scopeHoverLabel { background-color: %1; color: %2; "
+         "border: 1px solid %3; border-radius: 5px; padding: 2px; }")
+         .arg(bg_.lighter(145).name(),fg_.name(),grid_.lighter(170).name()));
  }
- if(evt->type()==QEvent::Leave)QToolTip::hideText();return QFrame::eventFilter(obj,evt);
 }
+void ScopePlot::hideCursor() {
+    hovering_ = false;
+    if (cursor_line_) cursor_line_->hide();
+    for (auto* marker : cursor_points_) marker->hide();
+    if (hover_label_) hover_label_->hide();
+    if (view_ && view_->viewport()) view_->viewport()->update();
 }
+
+void ScopePlot::updateCursor(const QPoint& pos) {
+    if (!active_ || data_.empty()) { hideCursor(); return; }
+    const QPointF scene_pos = view_->mapToScene(pos);
+    const QPointF chart_pos = chart_->mapFromScene(scene_pos);
+    const QRectF plot_area = chart_->plotArea();
+    if (!plot_area.contains(chart_pos)) { hideCursor(); return; }
+    const QPointF value_pos = chart_->mapToValue(chart_pos, data_.front().line);
+    const double t = value_pos.x();
+    if (!std::isfinite(t)) { hideCursor(); return; }
+
+    QString tooltip = QString("<b>t = %1 s</b>").arg(t, 0, 'f', 3);
+    bool has_values = false;
+    for (std::size_t i = 0; i < data_.size(); ++i) {
+        auto* marker = cursor_points_[i];
+        const auto& points = data_[i].points;
+        if (points.empty() || t < points.front().x() || t > points.back().x()) {
+            marker->hide();
+            continue;
+        }
+        const auto upper = std::lower_bound(points.begin(), points.end(), t,
+            [](const QPointF& item, double x) { return item.x() < x; });
+        double y = 0.0;
+        if (upper == points.end()) {
+            y = points.back().y();
+        } else if (upper == points.begin()) {
+            y = upper->y();
+        } else {
+            const auto lower = std::prev(upper);
+            const double dt = upper->x() - lower->x();
+            const double alpha = dt > 1e-12 ? (t - lower->x()) / dt : 0.0;
+            y = lower->y() + std::clamp(alpha, 0.0, 1.0) * (upper->y() - lower->y());
+        }
+        if (!std::isfinite(y)) { marker->hide(); continue; }
+        const QPointF marker_scene = chart_->mapToScene(
+            chart_->mapToPosition(QPointF(t, y), data_[i].line));
+        marker->setRect(marker_scene.x() - 4, marker_scene.y() - 4, 8, 8);
+        const QColor color = colors_.isEmpty() ? QColor("#69b5f0")
+            : colors_[int(i) % colors_.size()];
+        marker->setBrush(QBrush(color));
+        marker->setPen(QPen(bg_, 1.2));
+        marker->setVisible(plot_area.contains(chart_->mapFromScene(marker_scene)));
+        tooltip += QString("<br><span style=\"color:%1\">●</span> %2: <b>%3</b>")
+            .arg(color.name(), data_[i].line->name())
+            .arg(y, 0, 'f', 3);
+        has_values = true;
+    }
+    if (!has_values) {
+        tooltip += "<br><i>No sample at this timestamp</i>";
+        for (auto* marker : cursor_points_) marker->hide();
+    }
+    const QPointF top = chart_->mapToScene(QPointF(chart_pos.x(), plot_area.top()));
+    const QPointF bottom = chart_->mapToScene(QPointF(chart_pos.x(), plot_area.bottom()));
+    cursor_line_->setLine(QLineF(top, bottom));
+    cursor_line_->show();
+    hovering_ = true;
+    hover_position_ = pos;
+    if (hover_label_) {
+        hover_label_->setText(tooltip);
+        hover_label_->adjustSize();
+        positionHoverLabel(pos);
+        hover_label_->show();
+        hover_label_->raise();
+    }
+    if (view_ && view_->viewport()) view_->viewport()->update();
+}
+
+void ScopePlot::positionHoverLabel(const QPoint& position) {
+    if (!hover_label_) return;
+    // Coordinates refer to QChartView's viewport, never the window or chart
+    // scene. Keep the popup adjacent to the cursor and flip at panel edges.
+    const QSize box = hover_label_->size();
+    const int view_width = view_->viewport()->width();
+    const int view_height = view_->viewport()->height();
+    constexpr int offset = 14;
+    constexpr int margin = 3;
+    int left = position.x() + offset;
+    int top = position.y() + offset;
+    if (left + box.width() + margin > view_width) {
+        left = position.x() - box.width() - offset;
+    }
+    if (top + box.height() + margin > view_height) {
+        top = position.y() - box.height() - offset;
+    }
+    left = std::clamp(left, margin, std::max(margin, view_width - box.width() - margin));
+    top = std::clamp(top, margin, std::max(margin, view_height - box.height() - margin));
+    hover_label_->move(left, top);
+}
+
+bool ScopePlot::eventFilter(QObject* object, QEvent* event) {
+    if (object != view_->viewport()) return QFrame::eventFilter(object, event);
+    if (event->type() == QEvent::Wheel) {
+        const auto* wheel = static_cast<QWheelEvent*>(event);
+        if (wheel->angleDelta().y() != 0) {
+            zoomTime(wheel->angleDelta().y() > 0 ? 0.75 : 4.0 / 3.0);
+        }
+        return true;
+    }
+    if (event->type() == QEvent::MouseMove) {
+        const auto* move = static_cast<QMouseEvent*>(event);
+        hover_position_ = move->pos();
+        // Reposition the overlay on EVERY mouse event, not on the chart's
+        // 50 ms refresh timer. Numerical interpolation is limited to ~30 Hz.
+        if (hover_label_ && hover_label_->isVisible()) {
+            positionHoverLabel(hover_position_);
+        }
+        if (!hovering_ || !hover_timer_.isValid() || hover_timer_.elapsed() >= 16) {
+            hover_timer_.restart();
+            updateCursor(hover_position_);
+        }
+    } else if (event->type() == QEvent::Leave) {
+        hideCursor();
+    } else if (event->type() == QEvent::Resize && hovering_) {
+        updateCursor(hover_position_);
+    }
+    return QFrame::eventFilter(object, event);
+}
+}  // namespace cefiro::gui

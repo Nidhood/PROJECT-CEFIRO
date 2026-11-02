@@ -8,12 +8,14 @@ from launch.actions import (
     IncludeLaunchDescription,
     LogInfo,
     RegisterEventHandler,
+    SetEnvironmentVariable,
 )
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.substitutions import FindPackageShare
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, EnvironmentVariable
+from launch_ros.substitutions import FindPackageShare, FindPackagePrefix
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -88,6 +90,23 @@ def generate_launch_description():
             scenery_then_robot,
         ]
 
+    # Gazebo system plugin from the compiled local cefiro_gz install/lib.
+    rotor_plugin_path = SetEnvironmentVariable(
+        'GZ_SIM_SYSTEM_PLUGIN_PATH', [
+            PathJoinSubstitution([FindPackagePrefix('cefiro_gz'), 'lib']),
+            ':', EnvironmentVariable('GZ_SIM_SYSTEM_PLUGIN_PATH', default_value=''),
+        ],
+    )
+    actuator_node = Node(
+        package='cefiro_actuators',
+        executable='cefiro_actuators_node',
+        name='cefiro_actuators',
+        parameters=[PathJoinSubstitution([
+            FindPackageShare('cefiro_actuators'), 'config', 'actuators.yaml'
+        ]), {'use_sim_time': use_sim_time}],
+        output='screen',
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
@@ -102,7 +121,9 @@ def generate_launch_description():
             target_action=wait_for_server,
             on_exit=on_gazebo_ready,
         )),
+        rotor_plugin_path,
         world,
+        actuator_node,
         description,
         bridge,
         wait_for_server,

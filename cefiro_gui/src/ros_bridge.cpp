@@ -1,4 +1,5 @@
 #include "cefiro_gui/ros_bridge.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <utility>
@@ -32,8 +33,14 @@ RosBridge::RosBridge() {
     pub_strategy_=node_->create_publisher<std_msgs::msg::String>(strategy_topic,10);
     auto pid_topic=node_->declare_parameter<std::string>("pid_gains_topic","/cefiro/control/pid_gains");
     auto lqr_topic=node_->declare_parameter<std::string>("lqr_gain_topic","/cefiro/control/lqr_gain");
+    motor_rpm_topic_=node_->declare_parameter<std::string>("motor_rpm_topic","/cefiro_actuators/target_rpm");
+    motor_direction_topic_=node_->declare_parameter<std::string>("motor_direction_topic","/cefiro_actuators/motor_direction");
     pub_pid_=node_->create_publisher<std_msgs::msg::Float64MultiArray>(pid_topic,10);
     pub_lqr_=node_->create_publisher<std_msgs::msg::Float64MultiArray>(lqr_topic,10);
+    pub_motor_rpm_=node_->create_publisher<cefiro_msgs::msg::MotorRpm>(motor_rpm_topic_,10);
+    pub_motor_direction_=node_->create_publisher<std_msgs::msg::Int8MultiArray>(motor_direction_topic_,10);
+    auto motor_armed_topic=node_->declare_parameter<std::string>("motor_armed_topic","/cefiro_actuators/armed");
+    pub_motor_armed_=node_->create_publisher<std_msgs::msg::Bool>(motor_armed_topic,10);
     executor_.add_node(node_);
 }
 RosBridge::~RosBridge(){stop();}
@@ -101,6 +108,25 @@ void RosBridge::publishReference(const Vec3& degrees,const std::string& mode,con
     std_msgs::msg::String m; m.data=mode;pub_mode_->publish(m);
     m.data=strategy;pub_strategy_->publish(m);
 }
+
+void RosBridge::publishMotorCommand(const std::array<double,4>& rpm,const std::array<int,4>& direction){
+    cefiro_msgs::msg::MotorRpm rpm_msg;
+    std_msgs::msg::Int8MultiArray dir_msg;
+    dir_msg.data.resize(4);
+    for(std::size_t i=0;i<4;++i){
+        rpm_msg.data[i]=std::max(0.0, std::isfinite(rpm[i]) ? rpm[i] : 0.0);
+        dir_msg.data[i]=direction[i] >= 0 ? 1 : -1;
+    }
+    pub_motor_rpm_->publish(rpm_msg);
+    pub_motor_direction_->publish(dir_msg);
+}
+
+void RosBridge::setMotorArmed(bool armed){
+    std_msgs::msg::Bool msg;
+    msg.data=armed;
+    pub_motor_armed_->publish(msg);
+}
+
 void RosBridge::publishGains(const std::vector<double>& pid,const std::vector<double>& lqr){
     std_msgs::msg::Float64MultiArray msg;msg.data=pid;pub_pid_->publish(msg);
     msg.data=lqr;pub_lqr_->publish(msg);

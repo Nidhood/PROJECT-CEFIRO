@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cefiro_gui VERSION 1.0.0 LANGUAGES CXX)
+project(cefiro_gui VERSION 1.4.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(cefiro_msgs REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Charts)
 set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTORCC OFF)
@@ -22,10 +23,12 @@ add_executable(cefiro_gui_node
   src/ros_bridge.cpp
   src/scope_plot.cpp
   src/attitude_view.cpp
+  src/attitude_command_pad.cpp
+  src/recording_dialog.cpp
   ${GUI_RESOURCES}
 )
 target_include_directories(cefiro_gui_node PRIVATE include)
-ament_target_dependencies(cefiro_gui_node rclcpp sensor_msgs geometry_msgs std_msgs)
+ament_target_dependencies(cefiro_gui_node rclcpp sensor_msgs geometry_msgs std_msgs cefiro_msgs)
 target_link_libraries(cefiro_gui_node Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Charts)
 install(TARGETS cefiro_gui_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch config resources DESTINATION share/${PROJECT_NAME})

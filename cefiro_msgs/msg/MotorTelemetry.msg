@@ -1,0 +1,22 @@
+uint8 SOURCE_NONE=0
+uint8 SOURCE_RPM=1
+uint8 SOURCE_DSHOT=2
+
+std_msgs/Header header
+float64[4] requested_rpm
+float64[4] measured_rpm
+uint16[4] dshot_value
+uint16[4] dshot_packet
+float64[4] throttle_fraction
+float64[4] thrust_n
+float64[4] aerodynamic_torque_nm
+float64[4] reaction_torque_nm
+float64[4] electromagnetic_torque_nm
+float64[4] current_a
+float64[4] applied_voltage_v
+float64 bus_voltage_v
+float64 total_thrust_n
+float64 total_reaction_yaw_nm
+bool armed
+bool watchdog_ok
+uint8 command_source
