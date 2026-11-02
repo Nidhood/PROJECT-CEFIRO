@@ -1,0 +1,41 @@
+
+/* CEFIRO Qt6 HMI · original QUBE-Servo 2 structural conventions */
+* { font-family: "Inter", "Segoe UI", "DejaVu Sans", sans-serif; font-size:11px; }
+QMainWindow, QWidget, QDialog { background: #f8fafc; color: #0f172a; }
+QToolBar#topbar { background: #ffffff; border:0; border-bottom:1px solid #dbe4ed; spacing:8px; padding:7px; }
+QTabBar#topTabs::tab { background:transparent; color:#64748b; border:0; padding:11px 20px; font-weight:700; }
+QTabBar#topTabs::tab:selected { color:#3b82f6; border-bottom:2px solid #3b82f6; }
+QLabel#pageTitle { font-size:22px; font-weight:900; color:#3b82f6; }
+QLabel#pageSubtitle, QLabel#hint { color:#64748b; font-size:10px; }
+QLabel#eyebrow { color:#64748b; font-size:9px; font-weight:700; }
+QLabel#panelTitle, QLabel#chartTitle { color:#10b981; font-size:11px; font-weight:800; }
+QLabel#metricValue { color:#0f172a; font-size:13px; font-weight:700; }
+QLabel#topologyLine { background:#ffffff; border:1px solid #dbe4ed; padding:12px; color:#0f172a;font-size:11px;font-weight:700; }
+QFrame#panel { background:#ffffff; border:1px solid #dbe4ed; border-radius:6px; }
+QFrame#chartFrame { background:transparent; border:none; }
+QFrame#hudSeparator { color:#dbe4ed; background:#dbe4ed; max-height:1px; }
+QScrollArea { border:0; background:transparent; }
+QScrollBar:vertical { background:#f8fafc; width:8px; }
+QScrollBar::handle:vertical {background:#dbe4ed; border-radius:3px; min-height:20px;}
+QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {height:0;}
+QPushButton, QToolButton, QComboBox, QDoubleSpinBox { background:#ffffff; color:#0f172a; border:1px solid #dbe4ed; border-radius:4px; padding:6px 9px; min-height:18px; }
+QPushButton:hover,QToolButton:hover,QComboBox:hover {border:1px solid #10b981;}
+QPushButton:pressed {background:#dbe4ed;}
+QPushButton:disabled {color:#64748b;}
+QPushButton#primaryAction {background:#3b82f6; border:1px solid #3b82f6; color:#f8fafc; font-weight:900;}
+QPushButton#emergencyButton {background:#ef4444; border:1px solid #ef4444; color:#ffffff; font-weight:900;}
+QPushButton#recordButton {background:#ffffff; border:1px solid #3b82f6; color:#3b82f6; font-weight:850;}
+QPushButton#sourceModeButton:checked {color:#3b82f6; border:1px solid #3b82f6; font-weight:800;}
+QToolButton#chartToolButton {padding:0px 5px; border:0px; min-height:17px; font-size:10px; color:#10b981; }
+QLabel#chartWindowLabel {color:#64748b; min-width:35px; font-size:10px;}
+QGroupBox { border:1px solid #dbe4ed; border-radius:4px; margin-top:12px; padding:10px 7px 6px 7px; font-weight:750; color:#10b981; }
+QGroupBox::title { subcontrol-origin:margin; left:8px; padding:0px 4px; }
+QTabWidget::pane {border:1px solid #dbe4ed; border-radius:3px;}
+QTabBar::tab { background:#ffffff; border:1px solid #dbe4ed; color:#64748b; padding:7px 13px; }
+QTabBar::tab:selected {color:#3b82f6; border-bottom:2px solid #3b82f6;}
+QTableWidget,QHeaderView::section {background:#ffffff; color:#0f172a; border:1px solid #dbe4ed; gridline-color:#dbe4ed;padding:3px;}
+QStatusBar {background:#ffffff; color:#64748b; border-top:1px solid #dbe4ed;}
+QToolTip {background:#ffffff; border:1px solid #10b981; color:#0f172a; padding:6px; }
+QCheckBox {color:#0f172a; spacing:8px;}
+QCheckBox::indicator {width:14px;height:14px;}
+QCheckBox::indicator:checked {background:#3b82f6;border:1px solid #3b82f6;}

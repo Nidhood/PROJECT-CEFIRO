@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- Unit conversions: g -> kg, mm -> m, g.mm^2 -> kg.m^2 -->
+  <xacro:property name="g_to_kg" value="${0.001}"/>
+  <xacro:property name="mm_to_m" value="${0.001}"/>
+  <xacro:property name="g_mm2_to_kg_m2" value="${1.0e-9}"/>
+
+  <!-- Collision primitives are independent from visual STL meshes.
+       A recursive macro emits one URDF <collision> per YAML entry. -->
+  <xacro:macro name="cefiro_collision_parts" params="link_name parts index:=0">
+    <xacro:if value="${index &lt; len(parts)}">
+      <xacro:property name="part" value="${parts[index]}"/>
+      <collision name="${link_name}_${part['name']}_collision">
+        <origin xyz="${part['origin_mm'][0] * mm_to_m} ${part['origin_mm'][1] * mm_to_m} ${part['origin_mm'][2] * mm_to_m}"
+                rpy="${part['origin_rpy'][0]} ${part['origin_rpy'][1]} ${part['origin_rpy'][2]}"/>
+        <geometry>
+          <xacro:if value="${part['shape'] == 'box'}">
+            <box size="${part['dimensions_mm'][0] * mm_to_m} ${part['dimensions_mm'][1] * mm_to_m} ${part['dimensions_mm'][2] * mm_to_m}"/>
+          </xacro:if>
+          <xacro:if value="${part['shape'] == 'cylinder'}">
+            <cylinder radius="${part['radius_mm'] * mm_to_m}" length="${part['length_mm'] * mm_to_m}"/>
+          </xacro:if>
+        </geometry>
+      </collision>
+      <xacro:cefiro_collision_parts link_name="${link_name}" parts="${parts}" index="${index + 1}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!-- Geometry is kept in its original CAD reference frame.
+       mesh_origin_mm translates each STL from CAD coordinates to its link frame.
+       Collision geometry is a separate set of editable primitives. -->
+  <xacro:macro name="cefiro_link" params="link_name config">
+    <link name="${link_name}">
+      <xacro:property name="mass_kg" value="${config['mass_g'] * g_to_kg}"/>
+      <inertial>
+        <origin xyz="${config['com_mm'][0] * mm_to_m} ${config['com_mm'][1] * mm_to_m} ${config['com_mm'][2] * mm_to_m}" rpy="0 0 0"/>
+        <mass value="${mass_kg}"/>
+        <xacro:if value="${config['inertia_model'] == 'box'}">
+          <xacro:property name="dx" value="${config['dimensions_mm'][0] * mm_to_m}"/>
+          <xacro:property name="dy" value="${config['dimensions_mm'][1] * mm_to_m}"/>
+          <xacro:property name="dz" value="${config['dimensions_mm'][2] * mm_to_m}"/>
+          <inertia ixx="${mass_kg * (dy*dy + dz*dz)/12.0}" ixy="0" ixz="0"
+                   iyy="${mass_kg * (dx*dx + dz*dz)/12.0}" iyz="0"
+                   izz="${mass_kg * (dx*dx + dy*dy)/12.0}"/>
+        </xacro:if>
+        <xacro:if value="${config['inertia_model'] == 'disk'}">
+          <xacro:property name="radius" value="${config['radius_mm'] * mm_to_m}"/>
+          <xacro:property name="height" value="${config['thickness_mm'] * mm_to_m}"/>
+          <inertia ixx="${mass_kg * (3*radius*radius+height*height)/12.0}" ixy="0" ixz="0"
+                   iyy="${mass_kg * (3*radius*radius+height*height)/12.0}" iyz="0"
+                   izz="${mass_kg * radius*radius/2.0}"/>
+        </xacro:if>
+        <xacro:if value="${config['inertia_model'] == 'tensor'}">
+          <inertia ixx="${config['tensor_g_mm2']['ixx'] * g_mm2_to_kg_m2}"
+                   ixy="${config['tensor_g_mm2']['ixy'] * g_mm2_to_kg_m2}"
+                   ixz="${config['tensor_g_mm2']['ixz'] * g_mm2_to_kg_m2}"
+                   iyy="${config['tensor_g_mm2']['iyy'] * g_mm2_to_kg_m2}"
+                   iyz="${config['tensor_g_mm2']['iyz'] * g_mm2_to_kg_m2}"
+                   izz="${config['tensor_g_mm2']['izz'] * g_mm2_to_kg_m2}"/>
+        </xacro:if>
+      </inertial>
+      <visual name="${link_name}_visual">
+        <origin xyz="${config['mesh_origin_mm'][0] * mm_to_m} ${config['mesh_origin_mm'][1] * mm_to_m} ${config['mesh_origin_mm'][2] * mm_to_m}" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://cefiro_description/meshes/${config['mesh']}"
+                scale="${mm_to_m} ${mm_to_m} ${mm_to_m}"/>
+        </geometry>
+        <material name="${config['material']}"/>
+      </visual>
+      <xacro:if value="$(arg enable_collision)">
+        <xacro:cefiro_collision_parts link_name="${link_name}" parts="${config['collision_parts']}"/>
+      </xacro:if>
+    </link>
+  </xacro:macro>
+
+  <!-- Parent-child transforms: CAD pivots expressed in each parent link frame. -->
+  <xacro:macro name="cefiro_joint" params="joint_name config">
+    <joint name="${joint_name}" type="${config['type']}">
+      <parent link="${config['parent']}"/>
+      <child link="${config['child']}"/>
+      <origin xyz="${config['origin_mm'][0] * mm_to_m} ${config['origin_mm'][1] * mm_to_m} ${config['origin_mm'][2] * mm_to_m}"
+              rpy="${config['origin_rpy'][0]} ${config['origin_rpy'][1]} ${config['origin_rpy'][2]}"/>
+      <xacro:if value="${config['type'] != 'fixed'}">
+        <axis xyz="${config['axis'][0]} ${config['axis'][1]} ${config['axis'][2]}"/>
+        <limit effort="${config['effort']}" velocity="${config['velocity']}"/>
+        <dynamics damping="${config['damping']}" friction="${config['friction']}"/>
+      </xacro:if>
+    </joint>
+  </xacro:macro>
+</robot>

@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- The board is part of the measured drone mass and the frame STL.
+       These fixed child links provide sensor coordinates and Gazebo measurements,
+       without counting the small chips twice or adding self-collisions. -->
+  <xacro:property name="sensor_mm_to_m" value="${0.001}"/>
+
+  <xacro:macro name="cefiro_fmu_chip" params="name parent mount mesh rgba">
+    <link name="${name}_link">
+      <visual name="${name}_visual">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <!-- Sensor STL vertices are already expressed in metres. -->
+        <geometry><mesh filename="${mesh}" scale="1 1 1"/></geometry>
+        <material name="${name}_material"><color rgba="${rgba}"/></material>
+      </visual>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${name}_link"/>
+      <origin xyz="${mount['offset_mm'][0] * sensor_mm_to_m} ${mount['offset_mm'][1] * sensor_mm_to_m} ${mount['offset_mm'][2] * sensor_mm_to_m}"
+              rpy="${mount['rpy'][0]} ${mount['rpy'][1]} ${mount['rpy'][2]}"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="cefiro_fmu_sensors" params="config">
+    <xacro:property name="mount" value="${config['fmu_mount']}"/>
+    <xacro:property name="imu" value="${config['imu_icm42670p']}"/>
+    <xacro:property name="mag" value="${config['magnetometer_mmc5983ma']}"/>
+    <xacro:property name="baro" value="${config['bmp581']}"/>
+
+    <!-- The top face of the FMU mesh occupies X=[29,69], Y=[-14.5,85.5]
+         and is at Z=54.1014 mm in the drone_body_link CAD frame. -->
+    <link name="fmu_mount_link"/>
+    <joint name="drone_to_fmu_mount" type="fixed">
+      <parent link="${mount['parent']}"/>
+      <child link="fmu_mount_link"/>
+      <origin xyz="${mount['origin_mm'][0] * sensor_mm_to_m} ${mount['origin_mm'][1] * sensor_mm_to_m} ${mount['origin_mm'][2] * sensor_mm_to_m}"
+              rpy="${mount['origin_rpy'][0]} ${mount['origin_rpy'][1]} ${mount['origin_rpy'][2]}"/>
+    </joint>
+
+    <xacro:cefiro_fmu_chip name="imu_icm42670p" parent="fmu_mount_link"
+      mount="${imu}" mesh="package://cefiro_sensors/urdf/imu_icm42670p/meshes/base_link.stl"
+      rgba="0.14 0.66 0.34 1"/>
+    <xacro:cefiro_fmu_chip name="magnetometer_mmc5983ma" parent="fmu_mount_link"
+      mount="${mag}" mesh="package://cefiro_sensors/urdf/magnetometer_mmc5983ma/meshes/base_link.stl"
+      rgba="0.94 0.63 0.18 1"/>
+    <xacro:cefiro_fmu_chip name="bmp581" parent="fmu_mount_link"
+      mount="${baro}" mesh="package://cefiro_sensors/urdf/bmp581/meshes/visuals/base_link.stl"
+      rgba="0.34 0.72 0.88 1"/>
+
+    <!-- Gazebo Harmonic sensor systems are already enabled in main_world.sdf. -->
+    <gazebo reference="imu_icm42670p_link">
+      <sensor name="imu_icm42670p" type="imu">
+        <always_on>true</always_on>
+        <update_rate>${imu['update_rate_hz']}</update_rate>
+        <topic>/imu/data</topic>
+        <gz_frame_id>imu_icm42670p_link</gz_frame_id>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00122173</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00122173</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00122173</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00980665</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00980665</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00980665</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </gazebo>
+
+    <gazebo reference="magnetometer_mmc5983ma_link">
+      <sensor name="magnetometer_mmc5983ma" type="magnetometer">
+        <always_on>true</always_on>
+        <update_rate>${mag['update_rate_hz']}</update_rate>
+        <topic>/magnetometer/data</topic>
+        <gz_frame_id>magnetometer_mmc5983ma_link</gz_frame_id>
+        <magnetometer>
+          <x><noise type="gaussian"><mean>0</mean><stddev>1.2e-7</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>1.2e-7</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>1.2e-7</stddev></noise></z>
+        </magnetometer>
+      </sensor>
+    </gazebo>
+
+    <gazebo reference="bmp581_link">
+      <sensor name="bmp581_barometer" type="air_pressure">
+        <always_on>true</always_on>
+        <update_rate>${baro['update_rate_hz']}</update_rate>
+        <topic>/bmp581/air_pressure</topic>
+        <gz_frame_id>bmp581_link</gz_frame_id>
+        <visualize>false</visualize>
+        <air_pressure>
+          <reference_altitude>0</reference_altitude>
+          <pressure>
+            <noise type="gaussian_quantized">
+              <mean>0</mean><stddev>0.21</stddev>
+              <bias_mean>0</bias_mean><bias_stddev>10</bias_stddev>
+              <precision>0.015625</precision>
+            </noise>
+          </pressure>
+        </air_pressure>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+</robot>

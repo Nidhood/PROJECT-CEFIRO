@@ -3,25 +3,119 @@
     <model name="lamp" canonical_link="lamp_link">
         <static>true</static>
         <link name="lamp_link">
+      <!-- Primitive collision geometry (metres): keep the visual DAE unchanged. -->
+      <!-- All collision parts belong to the same static link. -->
+      <collision name="lamp_base_collision">
+        <pose>0.000000 0.000000 -0.007500 0.000000 0.000000 0.000000</pose>
+        <geometry>
+          <cylinder><radius>0.067000</radius><length>0.012000</length></cylinder>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
 
-            <!-- Collision using box approximation -->
-            <collision name="lamp_collision">
-                <pose>-0.00024 -0.01154 0.06682 0.00000 0.00000 0.00000</pose>
-                <geometry>
-                    <box>
-                        <size>0.04607 0.10820 0.14228</size>
-                    </box>
-                </geometry>
-                <surface>
-                    <contact/>
-                    <friction>
-                        <ode>
-                            <mu>0.8</mu>
-                            <mu2>0.8</mu2>
-                        </ode>
-                    </friction>
-                </surface>
-            </collision>
+      <collision name="lamp_neck_collision">
+        <pose>-0.003000 0.045000 0.102000 0.000000 0.000000 0.000000</pose>
+        <geometry>
+          <cylinder><radius>0.009000</radius><length>0.190000</length></cylinder>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <collision name="lamp_lower_arm_left_collision">
+        <pose>-0.010000 0.072000 0.252000 -0.370492 0.000000 0.000000</pose>
+        <geometry>
+          <cylinder><radius>0.005500</radius><length>0.130000</length></cylinder>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <collision name="lamp_lower_arm_right_collision">
+        <pose>0.010000 0.072000 0.252000 -0.370492 0.000000 0.000000</pose>
+        <geometry>
+          <cylinder><radius>0.005500</radius><length>0.130000</length></cylinder>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <collision name="lamp_upper_arm_left_collision">
+        <pose>-0.009000 0.007500 0.345500 1.199087 0.000000 0.000000</pose>
+        <geometry>
+          <cylinder><radius>0.005500</radius><length>0.190000</length></cylinder>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <collision name="lamp_upper_arm_right_collision">
+        <pose>0.009000 0.007500 0.345500 1.199087 0.000000 0.000000</pose>
+        <geometry>
+          <cylinder><radius>0.005500</radius><length>0.190000</length></cylinder>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <collision name="lamp_head_collision">
+        <pose>0.000000 -0.133000 0.373000 0.000000 0.000000 0.000000</pose>
+        <geometry>
+          <box><size>0.074000 0.105000 0.042000</size></box>
+        </geometry>
+        <surface>
+          <contact/>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
             <inertial>
                 <inertia>
                     <ixx>0.00266</ixx>

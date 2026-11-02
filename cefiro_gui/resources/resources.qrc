@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/theme">
+    <file alias="tron_ares.qss">theme/tron_ares.qss</file>
+    <file alias="matlab.qss">theme/matlab.qss</file>
+    <file alias="light.qss">theme/light.qss</file>
+    <file alias="dark.qss">theme/dark.qss</file>
+    <file alias="tron_evolution.qss">theme/tron_evolution.qss</file>
+    <file alias="cyberpunk.qss">theme/cyberpunk.qss</file>
+  </qresource>
+</RCC>

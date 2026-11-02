@@ -1,0 +1,9 @@
+CEFIRO ATTITUDE EXPERIMENT SUMMARY
+CSV: /home/nidhood/cefiro_ws/src/cefiro/data/LQR/cefiro_attitude_test_1.csv
+Controller selection: OPEN LOOP
+Source: AUTOMATIC
+Note: controller acknowledgement and actual actuation must be verified separately.
+Recorded orientation samples: 508
+ROLL RMSE=178.81deg MAE=178.81deg Peak=178.81deg
+PITCH RMSE=1.56deg MAE=1.56deg Peak=1.56deg
+YAW RMSE=87.42deg MAE=87.42deg Peak=87.42deg

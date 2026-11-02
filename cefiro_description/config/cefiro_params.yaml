@@ -1,0 +1,467 @@
+cefiro:
+  metadata:
+    drone_mass_measured_g: 1627.0
+    gimbal_mass_assumed_g: 1931.0
+    mesh_unit: mm
+    mesh_frame: assembly_global_at_zero_joint_angles
+    gimbal_order:
+      [base_link, narya_ring, vilya_ring, nenya_ring, drone_body_link]
+    rotor_order_by_cad: [motor_1, motor_2, motor_3, motor_4]
+    rotor_spin: [CW, CCW, CW, CCW]
+    spin_reference: viewed_from_positive_drone_z
+
+  sensors:
+    # FMU top surface measured from frame.stl; coordinates in drone_body_link.
+    fmu_mount:
+      parent: drone_body_link
+      origin_mm: [49.0, 35.5, 54.101]
+      origin_rpy: [0.0, 0.0, 0.0]
+
+    # Relative chip XY placement is provisional until PCB component positions are known.
+    imu_icm42670p:
+      offset_mm: [0.0, 0.0, 0.3]
+      rpy: [0.0, 0.0, 0.0]
+      update_rate_hz: 100.0
+
+    magnetometer_mmc5983ma:
+      offset_mm: [13.0, 18.0, 0.25]
+      rpy: [0.0, 0.0, 0.0]
+      update_rate_hz: 100.0
+
+    bmp581:
+      offset_mm: [-13.0, 18.0, 0.55]
+      rpy: [0.0, 0.0, 0.0]
+      update_rate_hz: 30.0
+
+  links:
+    base_link:
+      mesh: gyro/base.stl
+      material: gyro_base_dark
+      mass_g: 350.0
+      com_mm: [0.0, -15.0, 25.0]
+      inertia_model: box
+      dimensions_mm: [240.0, 250.0, 70.0]
+      mesh_origin_mm: [0.0, 0.0, 0.0]
+      collision_dimensions_mm: [200.0, 180.0, 50.0]
+      collision_parts:
+        - name: central_pedestal
+          shape: cylinder
+          origin_mm: [1.0, -15.0, 28.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 38.0
+          length_mm: 48.0
+        - name: leg_front_left
+          shape: box
+          origin_mm: [-115.0, 103.0, 17.0]
+          origin_rpy: [0.0, 0.0, 2.347648]
+          dimensions_mm: [330.938, 17.0, 18.0]
+        - name: foot_front_left
+          shape: cylinder
+          origin_mm: [-231.0, 221.0, 14.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 15.0
+          length_mm: 19.0
+        - name: leg_front_right
+          shape: box
+          origin_mm: [119.0, 102.5, 17.0]
+          origin_rpy: [0.0, 0.0, 0.783275]
+          dimensions_mm: [333.048, 17.0, 18.0]
+        - name: foot_front_right
+          shape: cylinder
+          origin_mm: [237.0, 220.0, 14.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 15.0
+          length_mm: 19.0
+        - name: leg_rear_left
+          shape: box
+          origin_mm: [-112.5, -126.5, 17.0]
+          origin_rpy: [0.0, 0.0, -2.365083]
+          dimensions_mm: [318.211, 17.0, 18.0]
+        - name: foot_rear_left
+          shape: cylinder
+          origin_mm: [-226.0, -238.0, 14.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 15.0
+          length_mm: 19.0
+        - name: leg_rear_right
+          shape: box
+          origin_mm: [120.5, -127.0, 17.0]
+          origin_rpy: [0.0, 0.0, -0.753012]
+          dimensions_mm: [327.562, 17.0, 18.0]
+        - name: foot_rear_right
+          shape: cylinder
+          origin_mm: [240.0, -239.0, 14.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 15.0
+          length_mm: 19.0
+
+    narya_ring:
+      mesh: gyro/narya_ring.stl
+      material: narya_dark
+      mass_g: 315.0
+      com_mm: [0.0, 0.0, 200.0]
+      inertia_model: box
+      dimensions_mm: [500.0, 560.0, 430.0]
+      mesh_origin_mm: [-1.156, 14.951, -59.173]
+      collision_dimensions_mm: [500.0, 560.0, 430.0]
+      collision_parts:
+        - name: lower_crossbar
+          shape: box
+          origin_mm: [-0.156, -0.049, 15.827]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [32.0, 275.0, 18.0]
+        - name: yaw_lower_hub
+          shape: box
+          origin_mm: [-0.156, -0.049, 34.827]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [35.0, 92.0, 28.0]
+        - name: continuous_diagonal_negative
+          shape: box
+          origin_mm: [-0.156, -268.049, 162.827]
+          origin_rpy: [2.386036, 0.0, 0.0]
+          dimensions_mm: [16.0, 379.178, 16.0]
+        - name: top_upright_negative
+          shape: box
+          origin_mm: [-0.156, -406.049, 350.827]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [18.0, 12.0, 116.0]
+        - name: continuous_diagonal_positive
+          shape: box
+          origin_mm: [-0.156, 271.451, 162.827]
+          origin_rpy: [0.743066, 0.0, 0.0]
+          dimensions_mm: [16.0, 384.303, 16.0]
+        - name: top_upright_positive
+          shape: box
+          origin_mm: [-0.156, 412.951, 350.827]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [18.0, 12.0, 116.0]
+
+    vilya_ring:
+      mesh: gyro/vilya_ring.stl
+      material: vilya_blue
+      mass_g: 420.0
+      com_mm: [0.0, -388.847, 0.0]
+      inertia_model: box
+      dimensions_mm: [720.0, 680.0, 70.0]
+      mesh_origin_mm: [-2.089, -388.847, -488.972]
+      collision_dimensions_mm: [720.0, 680.0, 70.0]
+      collision_parts:
+        - name: top_flat
+          shape: box
+          origin_mm: [-1.089, -9.847, 0.028]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [240.0, 16.0, 20.0]
+        - name: bottom_flat
+          shape: box
+          origin_mm: [-1.089, -787.847, 0.028]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [240.0, 16.0, 20.0]
+        - name: left_flat
+          shape: box
+          origin_mm: [-382.089, -398.847, 0.028]
+          origin_rpy: [0.0, 0.0, 1.570796]
+          dimensions_mm: [238.0, 16.0, 20.0]
+        - name: right_flat
+          shape: box
+          origin_mm: [377.911, -398.847, 0.028]
+          origin_rpy: [0.0, 0.0, 1.570796]
+          dimensions_mm: [238.0, 16.0, 20.0]
+        - name: front_left
+          shape: box
+          origin_mm: [-251.589, -144.847, 0.028]
+          origin_rpy: [0.0, 0.0, -2.339247]
+          dimensions_mm: [375.528, 16.0, 20.0]
+        - name: front_right
+          shape: box
+          origin_mm: [248.411, -144.847, 0.028]
+          origin_rpy: [0.0, 0.0, -0.806189]
+          dimensions_mm: [374.14, 16.0, 20.0]
+        - name: back_left
+          shape: box
+          origin_mm: [-251.589, -652.847, 0.028]
+          origin_rpy: [0.0, 0.0, -0.802346]
+          dimensions_mm: [375.528, 16.0, 20.0]
+        - name: back_right
+          shape: box
+          origin_mm: [248.411, -652.847, 0.028]
+          origin_rpy: [0.0, 0.0, -2.335404]
+          dimensions_mm: [374.14, 16.0, 20.0]
+
+    nenya_ring:
+      mesh: gyro/nenya_ring.stl
+      material: nenya_dark
+      mass_g: 846.0
+      com_mm: [-350.047, 0.0, 0.0]
+      inertia_model: box
+      dimensions_mm: [700.0, 600.0, 80.0]
+      mesh_origin_mm: [-350.047, 12.844, -489.270]
+      collision_dimensions_mm: [700.0, 600.0, 80.0]
+      collision_parts:
+        - name: left_tie
+          shape: box
+          origin_mm: [-553.047, 0.844, -0.27]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [248.0, 16.0, 16.0]
+        - name: right_tie
+          shape: box
+          origin_mm: [-117.547, 0.844, -0.27]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [187.0, 16.0, 16.0]
+        - name: left_pivot
+          shape: box
+          origin_mm: [-685.047, 0.844, -0.27]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [31.0, 35.0, 24.0]
+        - name: right_pivot
+          shape: box
+          origin_mm: [-15.047, 0.844, -0.27]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [31.0, 35.0, 24.0]
+        - name: center_front
+          shape: box
+          origin_mm: [-323.047, 77.844, -0.27]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [180.0, 13.0, 17.0]
+        - name: center_rear
+          shape: box
+          origin_mm: [-323.047, -62.156, -0.27]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [180.0, 13.0, 17.0]
+        - name: center_left
+          shape: box
+          origin_mm: [-413.047, 7.844, -0.27]
+          origin_rpy: [0.0, 0.0, 1.570796]
+          dimensions_mm: [140.0, 13.0, 17.0]
+        - name: center_right
+          shape: box
+          origin_mm: [-239.047, 7.844, -0.27]
+          origin_rpy: [0.0, 0.0, 1.570796]
+          dimensions_mm: [140.0, 13.0, 17.0]
+
+    drone_body_link:
+      mesh: frame/frame.stl
+      material: frame_cyan
+      mass_g: 1559.6848
+      com_mm: [49.0, 35.5, 31.2]
+      inertia_model: box
+      dimensions_mm: [480.0, 480.0, 85.0]
+      mesh_origin_mm: [0.0, 0.0, 0.0]
+      collision_dimensions_mm: [480.0, 480.0, 85.0]
+      collision_parts:
+        - name: central_chassis
+          shape: box
+          origin_mm: [49.0, 35.5, 26.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          dimensions_mm: [112.0, 125.0, 44.0]
+        - name: arm_1
+          shape: box
+          origin_mm: [121.353, -47.511, 34.0]
+          origin_rpy: [0.0, 0.0, -0.853894]
+          dimensions_mm: [220.235, 18.0, 19.0]
+        - name: motor_mount_1
+          shape: cylinder
+          origin_mm: [193.706, -130.523, 60.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 22.0
+          length_mm: 34.0
+        - name: arm_2
+          shape: box
+          origin_mm: [-22.996, -47.964, 34.0]
+          origin_rpy: [0.0, 0.0, -2.282563]
+          dimensions_mm: [220.452, 18.0, 19.0]
+        - name: motor_mount_2
+          shape: cylinder
+          origin_mm: [-94.993, -131.428, 60.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 22.0
+          length_mm: 34.0
+        - name: arm_3
+          shape: box
+          origin_mm: [-23.352, 118.511, 34.0]
+          origin_rpy: [0.0, 0.0, 2.287695]
+          dimensions_mm: [220.234, 18.0, 19.0]
+        - name: motor_mount_3
+          shape: cylinder
+          origin_mm: [-95.705, 201.523, 60.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 22.0
+          length_mm: 34.0
+        - name: arm_4
+          shape: box
+          origin_mm: [120.997, 118.964, 34.0]
+          origin_rpy: [0.0, 0.0, 0.859026]
+          dimensions_mm: [220.452, 18.0, 19.0]
+        - name: motor_mount_4
+          shape: cylinder
+          origin_mm: [192.994, 202.428, 60.0]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 22.0
+          length_mm: 34.0
+
+    prop_1_link:
+      mesh: frame/prop_cw.stl
+      material: propeller_black
+      spin: CW
+      mass_g: 16.8288
+      com_mm: [0.0, 0.0, 0.0]
+      inertia_model: disk
+      radius_mm: 82.0
+      thickness_mm: 3.0
+      mesh_origin_mm: [95.705, -201.523, -85.3]
+      collision_dimensions_mm: [200.0, 18.0, 3.0]
+      collision_parts:
+        - name: swept_disc
+          shape: cylinder
+          origin_mm: [0.0, 0.0, 3.7]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 127.0
+          length_mm: 6.0
+
+    prop_2_link:
+      mesh: frame/prop_ccw.stl
+      material: propeller_black
+      spin: CCW
+      mass_g: 16.8288
+      com_mm: [0.0, 0.0, 0.0]
+      inertia_model: disk
+      radius_mm: 82.0
+      thickness_mm: 3.0
+      mesh_origin_mm: [95.705, -201.523, -85.3]
+      collision_dimensions_mm: [200.0, 18.0, 3.0]
+      collision_parts:
+        - name: swept_disc
+          shape: cylinder
+          origin_mm: [0.0, 0.0, 3.7]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 127.0
+          length_mm: 6.0
+
+    prop_3_link:
+      mesh: frame/prop_cw.stl
+      material: propeller_black
+      spin: CW
+      mass_g: 16.8288
+      com_mm: [0.0, 0.0, 0.0]
+      inertia_model: disk
+      radius_mm: 82.0
+      thickness_mm: 3.0
+      mesh_origin_mm: [95.705, -201.523, -85.3]
+      collision_dimensions_mm: [200.0, 18.0, 3.0]
+      collision_parts:
+        - name: swept_disc
+          shape: cylinder
+          origin_mm: [0.0, 0.0, 3.7]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 127.0
+          length_mm: 6.0
+
+    prop_4_link:
+      mesh: frame/prop_ccw.stl
+      material: propeller_black
+      spin: CCW
+      mass_g: 16.8288
+      com_mm: [0.0, 0.0, 0.0]
+      inertia_model: disk
+      radius_mm: 82.0
+      thickness_mm: 3.0
+      mesh_origin_mm: [95.705, -201.523, -85.3]
+      collision_dimensions_mm: [200.0, 18.0, 3.0]
+      collision_parts:
+        - name: swept_disc
+          shape: cylinder
+          origin_mm: [0.0, 0.0, 3.7]
+          origin_rpy: [0.0, 0.0, 0.0]
+          radius_mm: 127.0
+          length_mm: 6.0
+
+  joints:
+    yaw:
+      type: continuous
+      parent: base_link
+      child: narya_ring
+      origin_mm: [1.156, -14.951, 59.173]
+      origin_rpy: [0.0, 0.0, 0.0]
+      axis: [0.0, 0.0, -1.0]
+      effort: 10.0
+      velocity: 3.0
+      damping: 0.05
+      friction: 0.02
+
+    pitch:
+      type: continuous
+      parent: narya_ring
+      child: vilya_ring
+      origin_mm: [0.933, 403.798, 429.799]
+      origin_rpy: [0.0, 0.0, 0.0]
+      axis: [-0.002312, -0.999997, 0.0]
+      effort: 10.0
+      velocity: 3.0
+      damping: 0.05
+      friction: 0.02
+
+    roll:
+      type: continuous
+      parent: vilya_ring
+      child: nenya_ring
+      origin_mm: [347.958, -401.691, 0.298]
+      origin_rpy: [0.0, 0.0, 0.0]
+      axis: [-0.999997, 0.002312, -0.000854]
+      effort: 10.0
+      velocity: 3.0
+      damping: 0.05
+      friction: 0.02
+
+    gyro_to_frame:
+      type: fixed
+      parent: nenya_ring
+      child: drone_body_link
+      origin_mm: [-313.378, -49.643, -1.27]
+      origin_rpy: [0.0, 0.0, 1.571]
+
+    motor_1:
+      type: continuous
+      parent: drone_body_link
+      child: prop_1_link
+      origin_mm: [193.706, -130.523, 85.3]
+      origin_rpy: [0.0, 0.0, 0.0]
+      axis: [0.0, 0.0, -1.0]
+      effort: 1.0
+      velocity: 1500.0
+      damping: 0.0
+      friction: 0.0
+
+    motor_2:
+      type: continuous
+      parent: drone_body_link
+      child: prop_2_link
+      origin_mm: [-94.993, -131.428, 85.3]
+      origin_rpy: [0.0, 0.0, 0.0]
+      axis: [0.0, 0.0, 1.0]
+      effort: 1.0
+      velocity: 1500.0
+      damping: 0.0
+      friction: 0.0
+
+    motor_3:
+      type: continuous
+      parent: drone_body_link
+      child: prop_3_link
+      origin_mm: [-95.705, 201.523, 85.3]
+      origin_rpy: [0.0, 0.0, 0.0]
+      axis: [0.0, 0.0, -1.0]
+      effort: 1.0
+      velocity: 1500.0
+      damping: 0.0
+      friction: 0.0
+
+    motor_4:
+      type: continuous
+      parent: drone_body_link
+      child: prop_4_link
+      origin_mm: [192.994, 202.428, 85.3]
+      origin_rpy: [0.0, 0.0, 0.0]
+      axis: [0.0, 0.0, 1.0]
+      effort: 1.0
+      velocity: 1500.0
+      damping: 0.0
+      friction: 0.0

@@ -23,7 +23,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 
-install(DIRECTORY config launch models worlds
+install(DIRECTORY config launch models worlds scripts
     DESTINATION share/${PROJECT_NAME}
 )
 

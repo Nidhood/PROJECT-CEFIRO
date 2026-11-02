@@ -11,6 +11,10 @@
 
     <!-- Build tool dependencies for ament package -->
     <buildtool_depend>ament_cmake</buildtool_depend>
+    <exec_depend>cefiro_description</exec_depend>
+    <exec_depend>cefiro_sensors</exec_depend>
+    <exec_depend>ros_gz_bridge</exec_depend>
+    <exec_depend>ros_gz_sim</exec_depend>
 
     <!-- Test dependencies -->
     <test_depend>ament_cmake_gtest</test_depend>

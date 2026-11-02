@@ -1,0 +1,14 @@
+cefiro_hmi:
+  ros__parameters:
+    use_sim_time: true
+    imu_topic: /imu/data
+    magnetometer_topic: /magnetometer/data
+    barometer_topic: /bmp581/air_pressure
+    reference_topic: /cefiro/control/attitude_reference
+    enable_topic: /cefiro/control/enable
+    stop_topic: /cefiro/control/emergency_stop
+    mode_topic: /cefiro/control/mode
+    strategy_topic: /cefiro/control/strategy
+    status_topic: /cefiro/control/status
+    pid_gains_topic: /cefiro/control/pid_gains
+    lqr_gain_topic: /cefiro/control/lqr_gain

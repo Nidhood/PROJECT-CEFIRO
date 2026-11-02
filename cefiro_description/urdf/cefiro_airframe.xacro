@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="cefiro_airframe" params="config mount_to_gimbal:=false">
+    <xacro:property name="L" value="${config['links']}"/>
+    <xacro:property name="J" value="${config['joints']}"/>
+    <xacro:cefiro_link link_name="drone_body_link" config="${L['drone_body_link']}"/>
+    <xacro:cefiro_link link_name="prop_1_link" config="${L['prop_1_link']}"/>
+    <xacro:cefiro_link link_name="prop_2_link" config="${L['prop_2_link']}"/>
+    <xacro:cefiro_link link_name="prop_3_link" config="${L['prop_3_link']}"/>
+    <xacro:cefiro_link link_name="prop_4_link" config="${L['prop_4_link']}"/>
+
+    <xacro:if value="${mount_to_gimbal}">
+      <xacro:cefiro_joint joint_name="gyro_to_frame" config="${J['gyro_to_frame']}"/>
+    </xacro:if>
+    <xacro:cefiro_joint joint_name="motor_1" config="${J['motor_1']}"/>
+    <xacro:cefiro_joint joint_name="motor_2" config="${J['motor_2']}"/>
+    <xacro:cefiro_joint joint_name="motor_3" config="${J['motor_3']}"/>
+    <xacro:cefiro_joint joint_name="motor_4" config="${J['motor_4']}"/>
+  </xacro:macro>
+
+</robot>

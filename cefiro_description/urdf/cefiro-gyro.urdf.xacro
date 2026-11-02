@@ -1,14 +1,23 @@
-<?xml version="1.0" ?>
-<robot name="cefiro-gyro"
-    xmlns:xacro="http://www.ros.org/wiki/xacro">
-    <xacro:include filename="$(find cefiro_description)/urdf/materials.xacro" />
-    <xacro:include filename="$(find cefiro_description)/urdf/cefiro.urdf.xacro" />
-    <xacro:include filename="$(find cefiro_description)/urdf/gyro.urdf.xacro" />
+<?xml version="1.0"?>
+<robot name="cefiro_gyro" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <joint name="gyro_to_frame" type="fixed">
-        <origin xyz="-0.005 -0.050 0" rpy="0 0 1.571"/>
-        <parent link="gyro_drone_baseB_1"/>
-        <child link="chassis_lower_plate"/>
-    </joint>
+  <xacro:include filename="$(find cefiro_description)/urdf/cefiro_utils.xacro"/>
+  <xacro:include filename="$(find cefiro_description)/urdf/materials.xacro"/>
+  <xacro:include filename="$(find cefiro_description)/urdf/cefiro_gimbal.xacro"/>
+  <xacro:include filename="$(find cefiro_description)/urdf/cefiro_airframe.xacro"/>
 
+  <xacro:arg name="physical_config_file" default="$(find cefiro_description)/config/cefiro_params.yaml"/>
+
+  <xacro:arg name="visual_mode" default="separated"/>
+  <xacro:arg name="enable_collision" default="true"/>
+  <xacro:arg name="enable_sensors" default="true"/>
+  <xacro:property name="P" value="${xacro.load_yaml('$(arg physical_config_file)')['cefiro']}"/>
+
+  <xacro:cefiro_gimbal config="${P}"/>
+  <xacro:cefiro_airframe config="${P}" mount_to_gimbal="true"/>
+  <!-- Mount the IMU, magnetometer and barometer on the last FMU deck. -->
+  <xacro:if value="$(arg enable_sensors)">
+    <xacro:include filename="$(find cefiro_sensors)/urdf/cefiro_fmu_sensors.xacro"/>
+    <xacro:cefiro_fmu_sensors config="${P['sensors']}"/>
+  </xacro:if>
 </robot>

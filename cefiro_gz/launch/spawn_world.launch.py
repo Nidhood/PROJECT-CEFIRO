@@ -34,6 +34,7 @@ def generate_launch_description():
     
     cefiro_gz_prefix = get_package_prefix('cefiro_gz')
     cefiro_sensors_prefix = get_package_prefix('cefiro_sensors')
+    cefiro_description_prefix = get_package_prefix('cefiro_description')
 
     gazebo_models_path = os.path.join(
         get_package_share_directory('cefiro_gz'),
@@ -49,6 +50,12 @@ def generate_launch_description():
         cefiro_sensors_prefix,
         'share'
     )
+    
+    cefiro_description_share = os.path.join(
+        cefiro_description_prefix,
+        'share'
+    )
+    
 
     # Environment variables configuration:
     env_vars = [
@@ -59,6 +66,7 @@ def generate_launch_description():
                 os.environ.get('GZ_SIM_RESOURCE_PATH', ''),
                 cefiro_gz_share,
                 cefiro_sensors_share,
+                cefiro_description_share,
                 gazebo_models_path,
             ])
         ),
@@ -69,6 +77,7 @@ def generate_launch_description():
                 os.environ.get('GAZEBO_MODEL_PATH', ''),
                 cefiro_gz_share,
                 cefiro_sensors_share,
+                cefiro_description_share,
                 gazebo_models_path,
             ])
         ),

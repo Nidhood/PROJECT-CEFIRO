@@ -34,7 +34,7 @@ Visualization Manager:
     - Alpha: 0.5
       Cell Size: 1
       Class: rviz_default_plugins/Grid
-      Color: 255; 255; 255
+      Color: 13; 44; 86
       Enabled: true
       Line Style:
         Line Width: 0.029999999329447746
@@ -47,16 +47,16 @@ Visualization Manager:
         Z: 0
       Plane: XY
       Plane Cell Count: 10
-      Reference Frame: <Fixed Frame>
+      Reference Frame: base_link
       Value: true
     - Alpha: 1
       Class: rviz_default_plugins/RobotModel
-      Collision Enabled: true
+      Collision Enabled: false
       Description File: ""
       Description Source: Topic
       Description Topic:
         Depth: 5
-        Durability Policy: Volatile
+        Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /robot_description
@@ -67,342 +67,47 @@ Visualization Manager:
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
-        arm-motor_coupling_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        arm-motor_coupling__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        arm-motor_coupling__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        arm-motor_coupling__3__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        arm_coupling_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        arm_coupling__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        arm_coupling_left__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        arm_coupling_left___1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
         base_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        chassis_lower_plate:
+        drone_body_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        chassis_upper_plate_1:
+        narya_ring:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        damper_plate__1:
+        nenya_ring:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        damper_rubber_1:
+        prop_1_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        damper_rubber__1__1:
+        prop_2_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        damper_rubber__2__1:
+        prop_3_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        damper_rubber__3__1:
+        prop_4_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        esc_dummy_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        fmu_dummy_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_A1-LW_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_A1-LW__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_A2-LW_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_A2-LW__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_B1P_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_B2S-R_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_B2S_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CF_Rod_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CON-BED-ADAPTER_6mm_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CON-P_360mm_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CON-P_360mm__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CON-P_360mm__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CON-P_360mm__3__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CON-Y_368mm_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_CON-Y_368mm__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_R-BED_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_R-BED__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_X1-SV_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_X1-SV__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_X1_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_X1__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_Y-DBA_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_Y-LOCK_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_base_CPv12_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_ccv12_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_drone_baseB_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_snap-in-leg_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_snap-in-leg__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_snap-in-leg__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        gyro_snap-in-leg__3__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_coupling_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_coupling__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_coupling__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_coupling__3__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536__3__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536_mount_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536_mount__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536_mount__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor_d3536_mount__3__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller__3__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller_arm_1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller_arm__1__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller_arm__2__1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        propeller_arm__3__1:
+        vilya_ring:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -417,7 +122,7 @@ Visualization Manager:
       Visual Enabled: true
   Enabled: true
   Global Options:
-    Background Color: 13; 44; 86
+    Background Color: 154; 153; 150
     Fixed Frame: base_link
     Frame Rate: 30
   Name: root
@@ -476,10 +181,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.49020200967788696
+      Pitch: 0.5852020382881165
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 5.5767107009887695
+      Yaw: 2.1766936779022217
     Saved: ~
 Window Geometry:
   Displays:
