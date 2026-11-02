@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+    port: /dev/ttyUSB0
+    baudrate: 115200
+    protocol_mode: legacy_text
+    enable_command_tx: false
+    allow_direction_commands: false
+    serial_reconnect_s: 2.0
+    sensor_stale_s: 1.5
+    command_timeout_s: 0.5
+    orientation_timeout_s: 0.2
+    max_command_rpm: 12000.0
+    imu_frame_id: cefiro_fmu_imu
+    mag_frame_id: cefiro_fmu_mag
+    baro_frame_id: cefiro_fmu_baro
+    body_frame_id: drone_body_link
