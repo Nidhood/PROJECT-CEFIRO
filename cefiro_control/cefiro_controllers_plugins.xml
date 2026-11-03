@@ -1,0 +1,11 @@
+<library path="cefiro_attitude_controller">
+
+    <class name="cefiro_control/CefiroAttitudeController" type="cefiro::control::CefiroAttitudeController" base_class_type="controller_interface::ControllerInterface">
+
+        <description>
+            Full-state feedback attitude controller for CEFIRO.
+        </description>
+
+    </class>
+
+</library>

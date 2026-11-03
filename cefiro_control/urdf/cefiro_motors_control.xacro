@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- Load motor parameters -->
+    <xacro:property name="motor_parameters_file" value="$(find cefiro_control)/config/cefiro_motor.yaml"/>
+    <xacro:property name="motor_config" value="${xacro.load_yaml(motor_parameters_file)}"/>
+    <xacro:property name="motor" value="${motor_config['cefiro']['ros__parameters']['motor']}"/>
+
+    <!-- Controller manager configuration -->
+    <xacro:property name="controller_manager_config" value="$(find cefiro_control)/config/controller_manager.yaml"/>
+
+    <ros2_control name="CefiroSystem" type="system">
+
+        <hardware>
+            <plugin>
+                cefiro_actuators/CefiroGazeboSystem                                                                                                                                                                                                                   <!-- I think that that is something related to the Hardware Interface -->
+            </plugin>
+            <param name="resistance">${motor['resistance']}</param>
+            <param name="inductance">${motor['inductance']}</param>
+            <param name="torque_constant">${motor['torque_constant']}</param>
+            <param name="back_emf_constant">${motor['back_emf_constant']}</param>
+            <param name="voltage_limit">${motor['voltage_limit']}</param>
+            <param name="peak_current_limit">${motor['peak_current_limit']}</param>
+            <param name="viscous_friction">${motor['viscous_friction']}</param>
+            <param name="coulomb_friction">${motor['coulomb_friction']}</param>
+            <param name="friction_smoothing">${motor['friction_smoothing']}</param>
+
+        </hardware>
+
+        <joint name="motor_1">
+
+            <!-- Command interface -->
+            <command_interface name="rpm"/>
+
+            <!-- Mechanical states -->
+            <state_interface name="velocity"/>
+
+        </joint>
+
+        <joint name="motor_2">
+
+            <!-- Command interface -->
+            <command_interface name="rpm"/>
+
+            <!-- Mechanical states -->
+            <state_interface name="velocity"/>
+
+        </joint>
+
+        <joint name="motor_3">
+
+            <!-- Command interface -->
+            <command_interface name="rpm"/>
+
+            <!-- Mechanical states -->
+            <state_interface name="velocity"/>
+
+        </joint>
+
+        <joint name="motor_4">
+
+            <!-- Command interface -->
+            <command_interface name="rpm"/>
+
+            <!-- Mechanical states -->
+            <state_interface name="velocity"/>
+
+        </joint>
+
+        <!-- CEFIRO IMU sensor -->
+        <sensor name="imu_sensor">
+            <state_interface name="angular_velocity.x"/>
+            <state_interface name="angular_velocity.y"/>
+            <state_interface name="angular_velocity.z"/>
+
+            <state_interface name="linear_acceleration.x"/>
+            <state_interface name="linear_acceleration.y"/>
+            <state_interface name="linear_acceleration.z"/>
+        </sensor>
+
+        <!-- CEFIRO Barometer sensor -->
+        <sensor name="barometer_sensor">
+            <state_interface name="pressure"/>
+            <state_interface name="altitude"/>
+            <state_interface name="temperature"/>
+        </sensor>
+
+        <!-- CEFIRO Magnetometer sensor -->
+        <sensor name="magnetometer_sensor">
+            <state_interface name="magnetic_field.x"/>
+            <state_interface name="magnetic_field.y"/>
+            <state_interface name="magnetic_field.z"/>
+        </sensor>
+
+    </ros2_control>
+
+    <gazebo>
+        <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+            <parameters>
+                ${controller_manager_config}
+            </parameters>
+        </plugin>
+    </gazebo>
+
+</robot>

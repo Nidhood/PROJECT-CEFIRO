@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<robot name="cefiro"
+    xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- CEFIRO mechanical description -->
+    <xacro:include filename="$(find cefiro_description)/urdf/cefiro-gyro.urdf.xacro"/>
+
+    <!-- CEFIRO motors and ROS 2 control interface -->
+    <xacro:include filename="$(find cefiro_control)/urdf/cefiro_motors_control.xacro"/>
+
+</robot>
