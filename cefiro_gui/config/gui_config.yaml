@@ -10,5 +10,6 @@ cefiro_hmi:
     mode_topic: /cefiro/control/mode
     strategy_topic: /cefiro/control/strategy
     status_topic: /cefiro/control/status
+    hardware_status_topic: /real/cefiro/hardware/status # host-confirmed DShot settings and command requests
     pid_gains_topic: /cefiro/control/pid_gains
     lqr_gain_topic: /cefiro/control/lqr_gain

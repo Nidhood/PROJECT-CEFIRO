@@ -11,7 +11,7 @@ bool validManualMotorMap(const ManualMotorMap& map) noexcept {
          map.rpm_deadband >= 0.0 &&
          map.rpm_deadband < map.reference_max_rpm &&
          map.dshot_min >= 48 && map.dshot_min <= map.dshot_max &&
-         map.dshot_max <= 300;
+         map.dshot_max <= 2047;
 }
 
 std::optional<std::uint16_t> mapGuiRpmToDshot(

@@ -26,6 +26,8 @@ RosBridge::RosBridge() {
     sub_mag_=node_->create_subscription<Mag>(mag_topic_,rclcpp::SensorDataQoS(),[this](const Mag::SharedPtr m){onMag(*m);});
     sub_baro_=node_->create_subscription<Baro>(baro_topic_,rclcpp::SensorDataQoS(),[this](const Baro::SharedPtr m){onBaro(*m);});
     sub_status_=node_->create_subscription<std_msgs::msg::String>(status_topic,10,[this](const std_msgs::msg::String::SharedPtr m){onStatus(*m);});
+    auto hardware_status_topic=node_->declare_parameter<std::string>("hardware_status_topic","/real/cefiro/hardware/status");
+    sub_hardware_status_=node_->create_subscription<std_msgs::msg::String>(hardware_status_topic,10,[this](const std_msgs::msg::String::SharedPtr m){onHardwareStatus(*m);});
     pub_reference_=node_->create_publisher<Ref>(reference_topic_,10);
     pub_enabled_=node_->create_publisher<std_msgs::msg::Bool>(enable_topic,10);
     pub_stop_=node_->create_publisher<std_msgs::msg::Bool>(stop_topic,10);
@@ -87,6 +89,9 @@ void RosBridge::onBaro(const Baro& msg){
     latest_.barometer_valid=true;latest_.baro_frame=msg.header.frame_id;
 }
 void RosBridge::onStatus(const std_msgs::msg::String& msg){std::lock_guard<std::mutex> g(mutex_);status_=msg.data;status_rx_=std::chrono::steady_clock::now();}
+void RosBridge::onHardwareStatus(const std_msgs::msg::String& msg){std::lock_guard<std::mutex> g(mutex_);hardware_status_=msg.data;hardware_status_rx_=std::chrono::steady_clock::now();}
+bool RosBridge::hardwareStatusFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(hardware_status_rx_,t);}
+std::string RosBridge::hardwareStatus()const{std::lock_guard<std::mutex>g(mutex_);return hardware_status_;}
 std::vector<Telemetry> RosBridge::drain(){
     std::lock_guard<std::mutex> g(mutex_);
     std::vector<Telemetry> out;out.reserve(queue_.size());

@@ -1,4 +1,4 @@
-> **Release 0.4.1 (Raspberry installation fix):** use `INSTALLAR_EN_RASPBERRY.md` and
+> **Release 0.5.0 (configurable DShot up to 2047):** use `INSTALLAR_EN_RASPBERRY.md` and
 > `tools/install_and_verify.sh`. A stale v0.3 binary rejects the valid 0.60 s
 > GUI lease. This release provides `hardware_node --version` and reports
 > `hardware_interface_version` in `/real/cefiro/hardware/status`.
@@ -17,7 +17,7 @@ from the real plant under `/real`.
   firmware interlocks.
 * **`CMD_RPM` is explicitly `UNSUPPORTED`**. There is no measured motor RPM.
 * **`CMD_DIR` and `CMD_PID` are explicitly `UNSUPPORTED`**.
-* `CF_MANUAL_MAX_DSHOT=300`; accepted throttle codes: `0` or `48..300`.
+* `CF_MANUAL_MAX_DSHOT=2047`; accepted throttle codes: `0` or `48..2047`. The host defaults to a cap of 300.
 * `CF_HOST_COMMAND_TTL_MS=300`: the STM32 autonomously stops manual output after
   loss of commands. The Raspberry Pi refreshes a recent GUI setpoint every **40 ms** and
   enforces a **600 ms maximum GUI silence** by default. This is a bounded lease,
@@ -45,14 +45,14 @@ The GUI's numeric RPM **is only a nominal position on the GUI scale**, NOT
 measured RPM. Default explicit mapping for a nonzero nominal GUI request is:
 
 ```
-DShot = 48 + round((GUI_RPM - 25) / (12000 - 25) * (300 - 48))
+DShot = 48 + round((GUI_RPM - 25) / (12000 - 25) * (HOST_DSHOT_MAX - 48))
 GUI_RPM <= 25 -> DShot 0
 ```
 
 This mapping assumes **no actual RPM calibration**, cannot regulate RPM,
 and must never be reported as motor-speed feedback. It is not enabled by default.
 The exact upper bound and lower bound are parameters, and must remain within
-firmware `48..300`. The host never emits special DShot commands `1..47`.
+firmware `48..2047`. The host never emits special DShot commands `1..47`.
 
 ## Build only the real hardware package
 

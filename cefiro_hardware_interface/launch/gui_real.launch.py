@@ -22,6 +22,7 @@ def generate_launch_description():
                 'mode_topic': '/real/cefiro/control/mode',
                 'strategy_topic': '/real/cefiro/control/strategy',
                 'status_topic': '/real/cefiro/control/status',
+                'hardware_status_topic': '/real/cefiro/hardware/status',
                 'pid_gains_topic': '/real/cefiro/control/pid_gains',
                 'lqr_gain_topic': '/real/cefiro/control/lqr_gain',
                 'motor_rpm_topic': '/real/cefiro_actuators/target_rpm',

@@ -40,6 +40,7 @@
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QPen>
 #include <algorithm>
@@ -70,7 +71,7 @@ QWidget* MainWindow::titledPanel(const QString& title,QVBoxLayout*& inner,QWidge
  auto* panel=new QFrame(parent);panel->setObjectName("panel");inner=new QVBoxLayout(panel);inner->setContentsMargins(11,9,11,10);inner->setSpacing(7);inner->addWidget(label(title,"panelTitle"));return panel;
 }
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
- setWindowTitle("CEFIRO GUI v1.4.0 | ATTITUDE CONTROL HMI");setMinimumSize(1180,700);resize(1600,930);
+ setWindowTitle("CEFIRO GUI v1.5.0 | ATTITUDE CONTROL HMI");setMinimumSize(1180,700);resize(1600,930);
  clock_.start();publish_clock_.start();
  stack_=new QStackedWidget(this);setCentralWidget(stack_);
  buildToolbar();buildDashboard();buildControl();buildSystem();
@@ -170,7 +171,7 @@ void MainWindow::buildControl() {
     title->setSpacing(0);
     title->addWidget(label("CEFIRO / ATTITUDE OPERATIONS", "eyebrow"));
     title->addWidget(label("ATTITUDE CONTROL & EXPERIMENTS", "pageTitle"));
-    title->addWidget(label("CEFIRO GUI v1.4.0  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
+    title->addWidget(label("CEFIRO GUI v1.5.0  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
     header->addLayout(title);
     header->addStretch();
     record_btn_ = new QPushButton("DATA RECORDER", page);
@@ -327,7 +328,7 @@ void MainWindow::buildControl() {
     manual_layout->setContentsMargins(2, 0, 2, 0);
     manual_layout->setSpacing(4);
     manual_layout->addWidget(label("DIRECT MOTOR COMMAND  /  TEST EACH ROTOR INDEPENDENTLY", "eyebrow"));
-    auto* motor_hint = label("Use MASTER when you want the same request on all motors. Disable the link and the four channels remain where they were for independent trimming.", "hint");
+    auto* motor_hint = label("NOMINAL RPM REQUESTS mapped open-loop to DShot, NOT measured RPM. The Raspberry configures the DShot cap (300 by default; protocol max 2047). MASTER links all four requests; disable link to trim each motor. Direction is determined by physical phases.", "hint");
     motor_hint->setWordWrap(true);
     manual_layout->addWidget(motor_hint);
 
@@ -340,11 +341,12 @@ void MainWindow::buildControl() {
     master_layout->addWidget(label("MASTER COMMAND  /  APPLY SAME REQUEST TO ALL MOTORS", "eyebrow"), 0, 0, 1, 5);
     link_all_motors_ = new QCheckBox("Link all motors to master", master_panel);
     master_layout->addWidget(link_all_motors_, 1, 0, 1, 2);
-    master_layout->addWidget(label("MASTER RPM", "eyebrow"), 1, 2);
+    master_layout->addWidget(label("MASTER NOMINAL RPM", "eyebrow"), 1, 2);
     master_motor_speed_ = spin(0.0, 12000.0, 0.0, 50.0, 0);
     master_layout->addWidget(master_motor_speed_, 1, 3);
     master_motor_direction_ = new QComboBox(master_panel);
-    master_motor_direction_->addItems({"Normal (request)", "Reverse (request)"});
+    master_motor_direction_->addItems({"Direction: hardware phases"});
+    master_motor_direction_->setEnabled(false);
     master_layout->addWidget(master_motor_direction_, 1, 4);
     master_motor_slider_ = new QSlider(Qt::Horizontal, master_panel);
     master_motor_slider_->setRange(0, 12000);
@@ -357,7 +359,7 @@ void MainWindow::buildControl() {
         "QSlider::add-page:horizontal { background:#0d1620; border-radius:8px; }"
         "QSlider::handle:horizontal { background:#ff5468; border:1px solid #070a0f; width:22px; margin:-4px 0; border-radius:11px; }");
     master_layout->addWidget(master_motor_slider_, 2, 0, 1, 5);
-    master_motor_label_ = label("0 rpm · dir +1", "hint");
+    master_motor_label_ = label("0 nominal RPM · DShot cap: awaiting bridge", "hint");
     master_motor_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     master_layout->addWidget(master_motor_label_, 3, 0, 1, 5);
     master_layout->setColumnStretch(0, 1);
@@ -394,15 +396,16 @@ void MainWindow::buildControl() {
         motor_speed_[std::size_t(i)] = spin(0.0, 12000.0, 0.0, 50.0, 0);
         mv->addWidget(motor_speed_[std::size_t(i)]);
         motor_direction_[std::size_t(i)] = new QComboBox(motor_panel);
-        motor_direction_[std::size_t(i)]->addItems({"Normal (request)", "Reverse (request)"});
+        motor_direction_[std::size_t(i)]->addItems({"Direction: hardware phases"});
+        motor_direction_[std::size_t(i)]->setEnabled(false);
         mv->addWidget(motor_direction_[std::size_t(i)]);
-        motor_labels_[std::size_t(i)] = label("0 rpm · dir +1", "hint");
+        motor_labels_[std::size_t(i)] = label("0 nominal RPM · DShot TX 0", "hint");
         motor_labels_[std::size_t(i)]->setAlignment(Qt::AlignCenter);
         mv->addWidget(motor_labels_[std::size_t(i)]);
         motors->addWidget(motor_panel, 1);
     }
     manual_layout->addLayout(motors, 1);
-    manual_layout->addWidget(label("Suggested use: keep low RPM during bench tests and verify rotor direction before enabling the full plant. Enable OUTPUT below before pressing START TEST.", "hint"));
+    manual_layout->addWidget(label("Bench use: keep the cap at 300 initially, remove propellers, secure the drone and measure current/temperature. After validation use hardware launch argument dshot_max:=2047. No RPM feedback or physical direction control is provided by DShot here.", "hint"));
     command_source_stack_->addWidget(manual_page);
     ref_tabs_->addTab(reference_tab, "Command");
 
@@ -583,14 +586,14 @@ void MainWindow::connectUi(){
  auto updateMotorLabel = [this](int idx) {
    if (idx < 0 || idx >= 4) return;
    motor_labels_[size_t(idx)]->setText(
-       QString("%1 rpm · dir %2")
+       QString("Nom %1 · dir %2")
            .arg(f(motor_command_rpm_[size_t(idx)],0))
            .arg(motor_command_direction_[size_t(idx)] >= 0 ? "+1" : "-1"));
  };
  auto updateMasterLabel = [this]() {
    if (!master_motor_label_) return;
    const int dir = master_motor_direction_ && master_motor_direction_->currentIndex() == 0 ? 1 : -1;
-   master_motor_label_->setText(QString("%1 rpm · dir %2")
+   master_motor_label_->setText(QString("Nom %1 · dir %2")
        .arg(f(master_motor_speed_ ? master_motor_speed_->value() : 0.0,0))
        .arg(dir >= 0 ? "+1" : "-1"));
  };
@@ -659,7 +662,7 @@ void MainWindow::connectUi(){
      for (int i = 0; i < 4; ++i) {
          if (motor_sliders_[size_t(i)]) motor_sliders_[size_t(i)]->setEnabled(manual_mode_ && !on);
          if (motor_speed_[size_t(i)]) motor_speed_[size_t(i)]->setEnabled(manual_mode_ && !on);
-         if (motor_direction_[size_t(i)]) motor_direction_[size_t(i)]->setEnabled(manual_mode_ && !on);
+         if (motor_direction_[size_t(i)]) motor_direction_[size_t(i)]->setEnabled(false);
      }
      if (on) {
          syncAllMotors(master_motor_speed_->value(), master_motor_direction_->currentIndex(), true);
@@ -712,10 +715,10 @@ void MainWindow::setManual(bool yes){
  const bool linked = link_all_motors_ && link_all_motors_->isChecked();
  for(auto* s:motor_sliders_) if(s) s->setEnabled(yes && !linked);
  for(auto* s:motor_speed_) if(s) s->setEnabled(yes && !linked);
- for(auto* d:motor_direction_) if(d) d->setEnabled(yes && !linked);
+ for(auto* d:motor_direction_) if(d) d->setEnabled(false);
  if (master_motor_slider_) master_motor_slider_->setEnabled(yes);
  if (master_motor_speed_) master_motor_speed_->setEnabled(yes);
- if (master_motor_direction_) master_motor_direction_->setEnabled(yes);
+ if (master_motor_direction_) master_motor_direction_->setEnabled(false);
  if (link_all_motors_) link_all_motors_->setEnabled(yes);
  command_source_stack_->setCurrentIndex(yes ? 1 : 0);
  if (command_pad_) {
@@ -808,7 +811,7 @@ void MainWindow::publishMotorCommand(){
    summary << QString("M%1 %2 rpm (%3)").arg(i+1).arg(f(motor_command_rpm_[size_t(i)],0)).arg(motor_command_direction_[size_t(i)] >= 0 ? "+" : "-");
  }
  command_value_->setText("Motors: " + summary.join(" · "));
- applied_value_->setText("Motor RPM commands published · direction reversal not implemented by actuator node");
+ applied_value_->setText("Nominal motor commands published (open-loop DShot); hardware phases determine direction");
 }
 void MainWindow::setMonitorAxis(int idx){if(idx<0||idx>2)return;monitor_axis_=idx;live_->clear();live_->setYRange(idx==1?-95.0:-185.0,idx==1?95.0:185.0);}
 void MainWindow::tick(){
@@ -816,6 +819,36 @@ void MainWindow::tick(){
  status_ros_->setText(fresh?"ROS: IMU ONLINE":"ROS: IMU WAITING / STALE");
  status_control_->setText(command_active_?"OUTPUT REQUEST: ENABLED":"CONTROL: DISABLED");
  if(bridge_.feedbackFresh())status_control_->setText("CTRL: "+QString::fromStdString(bridge_.controllerStatus()));
+ // Show the bridge's requested DShot values, never a fabricated measured RPM.
+ // The host's configured ceiling is authoritative (300 unless explicitly raised).
+ if (manual_mode_) {
+   if (bridge_.hardwareStatusFresh()) {
+     const auto json=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus()));
+     if (json.isObject()) {
+       const auto state=json.object();
+       const int max_dshot=state.value("configured_dshot_max").toInt(300);
+       const auto commands=state.value("last_commanded_dshot").toArray();
+       const bool serial_ok=state.value("serial_connected").toBool(false);
+       if (master_motor_label_) {
+         master_motor_label_->setText(QString("%1 nominal RPM · host DShot cap %2/2047 · UART %3")
+           .arg(f(master_motor_speed_ ? master_motor_speed_->value() : 0.0,0))
+           .arg(max_dshot)
+           .arg(serial_ok ? "connected" : "offline"));
+       }
+       for (int i=0; i<4; ++i) {
+         if (!motor_labels_[size_t(i)]) continue;
+         const int requested=commands.size()>i ? commands.at(i).toInt(0) : 0;
+         motor_labels_[size_t(i)]->setText(QString("Nom %1\nDShot req %2")
+           .arg(f(motor_command_rpm_[size_t(i)],0)).arg(requested));
+       }
+     }
+   } else {
+     if (master_motor_label_) master_motor_label_->setText("DShot bridge telemetry unavailable · commands NOT verified");
+     for(int i=0;i<4;++i) if(motor_labels_[size_t(i)])
+       motor_labels_[size_t(i)]->setText(QString("Nom %1\nBridge offline")
+         .arg(f(motor_command_rpm_[size_t(i)],0)));
+   }
+ }
  for(size_t i=0;i<items.size();++i){const auto& s=items[i];++collected_;stats_.add(s);
     if (s.orientation_valid) {
         for (int axis = 0; axis < 3; ++axis) {

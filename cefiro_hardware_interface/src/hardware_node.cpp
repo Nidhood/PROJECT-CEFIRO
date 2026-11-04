@@ -45,7 +45,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.4.1";
+constexpr const char* kHardwareVersion = "0.5.0";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -99,16 +99,16 @@ public:
     protocol_mode_ = declare_parameter<std::string>("protocol_mode", "legacy_text");
     enable_command_tx_ = declare_parameter<bool>("enable_command_tx", false);
     // Explicit opt-in: this is NOT measured-RPM closed-loop control. The MCU
-    // supports manual DShot 0 / 48..300, but rejects CMD_RPM and CMD_DIR.
+    // supports manual DShot 0 / 48..2047; host defaults to 300. CMD_RPM/CMD_DIR unsupported.
     rpm_to_dshot_enabled_ = declare_parameter<bool>("rpm_to_dshot_enabled", false);
     allow_direct_dshot_ = declare_parameter<bool>("allow_direct_dshot", false);
     manual_map_.reference_max_rpm = declare_parameter<double>("rpm_full_scale", 12000.0);
     manual_map_.rpm_deadband = declare_parameter<double>("rpm_deadband", 25.0);
     const int dshot_min_param = declare_parameter<int>("dshot_min", 48);
     const int dshot_max_param = declare_parameter<int>("dshot_max", 300);
-    if (dshot_min_param < 48 || dshot_max_param > 300 ||
+    if (dshot_min_param < 48 || dshot_max_param > 2047 ||
         dshot_max_param < dshot_min_param) {
-      throw std::invalid_argument("Firmware manual DShot allowed: zero or 48..300");
+      throw std::invalid_argument("Firmware manual DShot allowed: zero or 48..2047; host cap is configurable");
     }
     manual_map_.dshot_min = static_cast<std::uint16_t>(dshot_min_param);
     manual_map_.dshot_max = static_cast<std::uint16_t>(dshot_max_param);
@@ -142,7 +142,7 @@ public:
         manual_keepalive_period_s_ > 0.100 ||
         manual_keepalive_period_s_ * 3.0 > command_timeout_s_) {
       throw std::invalid_argument(
-          "Invalid manual motor configuration: DShot=0 or 48..300; "
+          "Invalid manual motor configuration: DShot=0 or 48..2047; "
           "command_timeout_s (GUI lease) must be 0.15..0.90 s, "
           "manual_keepalive_period_s 0.020..0.100 s and at least 3 periods "
           "within the GUI lease. Received lease=" + number(command_timeout_s_, 3) +
@@ -869,6 +869,9 @@ private:
       << "\"gui_output_enabled\":" << controller_enabled_ << ','
       << "\"rpm_to_dshot_enabled\":" << rpm_to_dshot_enabled_ << ','
       << "\"allow_direct_dshot\":" << allow_direct_dshot_ << ','
+      << "\"configured_dshot_min\":" << manual_map_.dshot_min << ','
+      << "\"configured_dshot_max\":" << manual_map_.dshot_max << ','
+      << "\"nominal_rpm_full_scale\":" << manual_map_.reference_max_rpm << ','
       << "\"manual_mode_acknowledged\":" << manual_mode_confirmed_ << ','
       << "\"firmware_fault_latched\":" << fault_latched_ << ','
       << "\"mcu_fmu_state\":" << mcu_fmu_state_ << ','
@@ -975,7 +978,7 @@ private:
 
 int main(int argc, char** argv) {
   if (argc == 2 && std::string_view(argv[1]) == "--version") {
-    std::cout << "cefiro_hardware_interface 0.4.1\n";
+    std::cout << "cefiro_hardware_interface 0.5.0\n";
     return 0;
   }
   rclcpp::init(argc, argv);

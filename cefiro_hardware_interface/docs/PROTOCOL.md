@@ -25,13 +25,13 @@ Host and STM32 C encoder were cross-compiled and tested to generate
 | `CMD_STOP` | empty | Normal stop, clears manual output, no fault latch |
 | `CMD_ARM` | `0` or `1` | MCU checks battery, ESC readiness, emergency latch; `ARM=1` needs ACK `OK` |
 | `CMD_MODE` | `MANUAL` or `AUTO` | Only accepted while disarmed; bridge requests MANUAL |
-| `CMD_DSHOT` | `d1,d2,d3,d4` | 0 stop or 48..300 inclusive; only while armed in MANUAL, active host watchdog |
+| `CMD_DSHOT` | `d1,d2,d3,d4` | 0 stop or 48..2047 inclusive (host cap defaults to 300); only while armed in MANUAL, active host watchdog |
 | `CMD_ESTOP` | empty | Stop and latch MCU FMU FAULT |
 | `CMD_RESET_FAULT` | empty | Only when disarmed and battery safe; use explicit reset service |
 | `CMD_LQR` | 18 floating-point values | Configuration only, disarmed |
 | `CMD_L` | 36 floating-point values | Observer gains; disarmed |
 | `CMD_MIX` | 12 floating-point values | Mix matrix; disarmed |
-| `CMD_BASE` | 1 DShot 48..300 | Base throttle; disarmed |
+| `CMD_BASE` | 1 DShot 48..2047 | Base throttle; disarmed |
 | `CMD_STRATEGY` | `LQR` or `STATE_FEEDBACK` | Supported selection, but no automatic actuation currently |
 | `CMD_ATT` | 3 radians | Auto must already be running, thus inhibited currently |
 | `CMD_ENABLE` | `0` or `1` | `1` returns `INHIBITED` while `CF_ENABLE_AUTOMATIC_OUTPUT=0` |

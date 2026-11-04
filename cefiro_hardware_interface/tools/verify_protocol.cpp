@@ -19,7 +19,16 @@ int main() {
   const auto four = mapGuiRpmToDshot({0, 2000, 6000, 12000}, map);
   assert(four && (*four)[0] == 0 && (*four)[3] == 300);
   for (std::uint16_t d : *four) assert(d == 0 || (d >= 48 && d <= 300));
-  const auto cmd = encodeFrame(101, "CMD_DSHOT", {"0","48","150","300"});
+  map.dshot_max = 2047;
+  assert(validManualMotorMap(map));
+  assert(mapGuiRpmToDshot(12000, map).value() == 2047);
+  assert(mapGuiRpmToDshot(25, map).value() == 0);
+  assert(mapGuiRpmToDshot(26, map).value() >= 48);
+  assert(mapGuiRpmToDshot(6000, map).value() > 300);
+  map.dshot_max = 2048;
+  assert(!validManualMotorMap(map));
+  map.dshot_max = 2047;
+  const auto cmd = encodeFrame(101, "CMD_DSHOT", {"0","48","150","2047"});
   assert(cmd && cmd->starts_with("@CF1|101|CMD_DSHOT|"));
   const auto parsed = decodeFrame(*cmd);
   assert(parsed && parsed->sequence == 101 && parsed->fields.size() == 4);

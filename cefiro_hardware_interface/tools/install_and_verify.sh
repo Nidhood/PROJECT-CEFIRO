@@ -41,7 +41,7 @@ fi
 VERSION="$("$BIN" --version)"
 echo "Binary: $BIN"
 echo "Version: $VERSION"
-if [[ "$VERSION" != 'cefiro_hardware_interface 0.4.1' ]]; then
+if [[ "$VERSION" != 'cefiro_hardware_interface 0.5.0' ]]; then
   echo 'ERROR: stale binary detected; please check the overlay and package paths.' >&2
   exit 3
 fi
@@ -50,4 +50,4 @@ echo "ROS package prefix: $PREFIX"
 if [[ "$PREFIX" != "$WS/install/cefiro_hardware_interface" ]]; then
   echo "WARNING: ROS resolved a different prefix; open a fresh terminal and source $WS/install/setup.bash" >&2
 fi
-printf '\nOK: hardware interface 0.4.1 installed. Start in receive-only mode first.\n'
+printf '\nOK: hardware interface 0.5.0 installed. Start in receive-only mode first.\n'

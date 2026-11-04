@@ -38,6 +38,8 @@ public:
     void emergencyStop();
     std::string controllerStatus() const;
     bool feedbackFresh(double timeout_s=2.0) const;
+    bool hardwareStatusFresh(double timeout_s=2.0) const;
+    std::string hardwareStatus() const;
     std::string imuTopic() const {return imu_topic_;}
     std::string magTopic() const {return mag_topic_;}
     std::string baroTopic() const {return baro_topic_;}
@@ -51,12 +53,14 @@ private:
     void onMag(const Mag& msg);
     void onBaro(const Baro& msg);
     void onStatus(const std_msgs::msg::String& msg);
+    void onHardwareStatus(const std_msgs::msg::String& msg);
     rclcpp::Node::SharedPtr node_;
     rclcpp::executors::SingleThreadedExecutor executor_;
     rclcpp::Subscription<Imu>::SharedPtr sub_imu_;
     rclcpp::Subscription<Mag>::SharedPtr sub_mag_;
     rclcpp::Subscription<Baro>::SharedPtr sub_baro_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_status_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_hardware_status_;
     rclcpp::Publisher<Ref>::SharedPtr pub_reference_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_enabled_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_stop_;
@@ -73,8 +77,9 @@ private:
     Telemetry latest_{};
     Vec3 latest_reference_{};
     double first_pressure_pa_{0.0};
-    std::chrono::steady_clock::time_point imu_rx_{},mag_rx_{},baro_rx_{},status_rx_{};
+    std::chrono::steady_clock::time_point imu_rx_{},mag_rx_{},baro_rx_{},status_rx_{},hardware_status_rx_{};
     std::string status_{"NO CONTROLLER FEEDBACK"};
+    std::string hardware_status_{""};
     std::string imu_topic_,mag_topic_,baro_topic_,reference_topic_;
     std::string motor_rpm_topic_,motor_direction_topic_;
     bool running_{false};
