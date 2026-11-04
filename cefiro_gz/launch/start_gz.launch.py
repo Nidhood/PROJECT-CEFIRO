@@ -23,21 +23,33 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     enable_sensors = LaunchConfiguration('enable_sensors')
     pkg_gz = FindPackageShare('cefiro_gz')
+    pkg_control = FindPackageShare('cefiro_control')
     pkg_description = FindPackageShare('cefiro_description')
 
     gazebo_launch = PathJoinSubstitution([
         pkg_gz, 'launch', 'spawn_world.launch.py'
     ])
+
     urdf_launch = PathJoinSubstitution([
-        pkg_description, 'launch', 'publish_cefiro_urdf.launch.py'
+        pkg_control, 'launch', 'publish_cefiro_control_urdf.launch.py'
     ])
+
     models_launch = PathJoinSubstitution([
         pkg_gz, 'launch', 'spawn_models.launch.py'
     ])
+
+    controllers_launch = PathJoinSubstitution([
+        pkg_control,
+        'launch',
+        'spawn_controllers.launch.py'
+    ])
+
+
     bridge_launch = PathJoinSubstitution([
         pkg_gz, 'launch', 'gz_bridge.launch.py'
     ])
 
+  
     # Start Gazebo and independent ROS nodes immediately. Scenery begins
     # only when the local world creation service becomes available.
     world = IncludeLaunchDescription(
@@ -53,6 +65,10 @@ def generate_launch_description():
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(bridge_launch)
     )
+
+    controllers = IncludeLaunchDescription(
+    PythonLaunchDescriptionSource(controllers_launch)
+)
 
     # spawn_models creates desk -> lamp -> robot, each triggered only when
     # the preceding local ros_gz_sim/create command finishes successfully.
@@ -125,6 +141,7 @@ def generate_launch_description():
         world,
         actuator_node,
         description,
+        controllers,
         bridge,
         wait_for_server,
     ])
