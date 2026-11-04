@@ -1,14 +1,22 @@
 /**:
   ros__parameters:
     use_sim_time: false
+    # Matches STM32H743 USART2 PA2/PA3 and the current main.c.
     port: /dev/ttyUSB0
     baudrate: 115200
     protocol_mode: legacy_text
+    # Keep false until the MCU supports CF1 RX, ACK and its own motor watchdog.
     enable_command_tx: false
-    allow_direction_commands: false
+    allow_direction_commands: false  # current STM32 does not support CMD_DIR
+    allow_direct_dshot: false
+    rpm_to_dshot_enabled: false # explicit opt-in for GUI manual conversion
+    rpm_full_scale: 12000.0    # GUI nominal scale, NOT measured motor RPM
+    rpm_deadband: 25.0        # near-zero requests -> stop code 0
+    dshot_min: 48             # DSHOT 1..47 are SPECIAL commands, never use as throttle
+    dshot_max: 300            # CF_MANUAL_MAX_DSHOT in uploaded STM32 firmware
     serial_reconnect_s: 2.0
     sensor_stale_s: 1.5
-    command_timeout_s: 0.5
+    command_timeout_s: 0.20
     orientation_timeout_s: 0.2
     max_command_rpm: 12000.0
     imu_frame_id: cefiro_fmu_imu

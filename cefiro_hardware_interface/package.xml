@@ -1,18 +1,19 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>cefiro_hardware_interface</name>
-  <version>0.1.0</version>
-  <description>Raspberry Pi USB-USART adapter for the real CEFIRO_FMU_V3; separate /real ROS 2 topics.</description>
+  <version>0.3.0</version>
+  <description>C++20 ROS 2 Jazzy bridge between CEFIRO Qt6 GUI and the actual STM32 CF1 DShot/IMU interface under /real.</description>
   <maintainer email="maintainers@example.invalid">CEFIRO Development Team</maintainer>
   <license>MIT</license>
-  <buildtool_depend>ament_python</buildtool_depend>
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>cefiro_msgs</exec_depend>
-  <exec_depend>python3-serial</exec_depend>
-  <exec_depend>launch</exec_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>cefiro_msgs</depend>
   <exec_depend>launch_ros</exec_depend>
-  <export><build_type>ament_python</build_type></export>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
 </package>

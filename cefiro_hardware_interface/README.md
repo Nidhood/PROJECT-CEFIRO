@@ -1,124 +1,186 @@
-# cefiro_hardware_interface
+# cefiro_hardware_interface — C++20 / ROS 2 Jazzy / CEFIRO FMU V3
 
-ROS 2 Jazzy package (`ament_python`) for a **Raspberry Pi connected by USB-to-UART** to `CEFIRO_FMU_V3`, based on the provided STM32H743 `main.c`. All hardware ROS topics are in **`/real`**, leaving Gazebo simulation topics untouched.
+This package bridges the **actual** CEFIRO STM32H743 modular firmware to the
+CEFIRO Qt6 HMI using Linux USB-to-USART (115200 8N1). Simulation remains isolated
+from the real plant under `/real`.
 
-## What works with the uploaded firmware, today
+## Verified integration contract (from `CEFIRO_FMU_V3_Modular_Main_Explicito.zip`)
 
-`main.c` currently prints IMU/MAG/BARO human-readable text via **USART2 PA2/PA3, 115200 baud, 8N1**. The package supports this directly via `protocol_mode=legacy_text`, **read-only**: it does not need you to flash a new MCU image.
+* `cf_protocol.c`, `cf_link.c`: CF1 ASCII with CRC16-CCITT and `@CF1|seq|KIND|a,b*FFFF\n`.
+* `cf_fmu.c`: `CMD_MODE MANUAL`, `CMD_ARM 1/0`, `CMD_DSHOT 4 values`, `CMD_STOP`,
+  `CMD_ESTOP`, `CMD_RESET_FAULT`, `CMD_LQR` (18 values) and `CMD_ATT` subject to
+  firmware interlocks.
+* **`CMD_RPM` is explicitly `UNSUPPORTED`**. There is no measured motor RPM.
+* **`CMD_DIR` and `CMD_PID` are explicitly `UNSUPPORTED`**.
+* `CF_MANUAL_MAX_DSHOT=300`; accepted throttle codes: `0` or `48..300`.
+* `CF_HOST_COMMAND_TTL_MS=300`: the STM32 autonomously stops manual output after
+  loss of commands. The Raspberry Pi uses **200 ms** command watchdog by default.
+* `CF_ENABLE_AUTOMATIC_OUTPUT=0`: automatic attitude-control actuation is blocked
+  in the firmware. **Do not bypass this protection in the host bridge**.
+* `IMU`, `ATT`, `MAG`, `BARO`, `STAT`, `ACK` are emitted in CF1. `ATT` contains a
+  quaternion from the STM32 estimator (yaw drifts without calibrated mag yaw).
 
-ROS conversions:
+## Compatibility with the existing C++ GUI
 
-- IMU accel m/s² unchanged, gyro **degrees/s -> radians/s**.
-- Magnetic field **µT -> Tesla**.
-- Pressure **hPa -> Pa**, using current printed (filtered) `P=` value.
-- Barometer `Alt_ISA` and `Z_REL` as supplemental Float64 topics in m.
-- IMU/MAG/BARO temperature as supplemental sensor_msgs/Temperature topics in °C.
-- Current `main.c` has **no quaternion**. `Imu.orientation_covariance[0]=-1` advertises that the orientation is unavailable. Your GUI's roll/pitch/yaw 3D view will **not** be driven until the MCU or another estimator provides attitude. No orientation data are fabricated.
-- There is no real ESC/RPM telemetry in current `main.c`, so motor measurement topics remain silent until firmware supports them.
+| GUI topic / message | Bridge action | STM32 CF1 action |
+|---|---|---|
+| `/real/cefiro/control/enable` (`std_msgs/Bool`) | GUI output gate | **NOT** forwarded as `CMD_ENABLE=1` (auto inhibited) |
+| `/real/cefiro_actuators/armed` (`std_msgs/Bool`) | Explicit ARM request only after GUI output enable, MCU STAT, and CMD_MODE ACK | `CMD_ARM,1` → matching `ACK` |
+| `/real/cefiro_actuators/target_rpm` (`cefiro_msgs/MotorRpm`) | Optional, explicitly enabled **open-loop** scaling; per motor, preserves MASTER and independent selection | `CMD_DSHOT,d1,d2,d3,d4` |
+| `/real/cefiro_actuators/dshot_throttle` (`cefiro_msgs/MotorDshot`) | Direct bounded manual bench command after ARM ACK; also needs `allow_direct_dshot=true` | `CMD_DSHOT` |
+| `/real/cefiro_actuators/motor_direction` (`std_msgs/Int8MultiArray`) | `+1` tolerated; reverse/invalid values rejected, with stop if active | `CMD_DIR` **never** sent |
+| `/real/cefiro/control/emergency_stop` (`std_msgs/Bool`) | If `true`, latch emergency stop | `CMD_ESTOP` (requires explicit fault reset) |
+| GUI SAFE STOP / `enable=false` / `armed=false` | Stop, disarm, clear stale commands | `CMD_STOP`, `CMD_ARM,0` |
+| `/real/cefiro/control/attitude_reference` | Telemetry/reference interface only | **No motor output** while firmware auto output is inhibited |
+| `/real/cefiro/control/lqr_gain` | Configure only when GUI output OFF and motors disarmed | `CMD_LQR` |
 
-## Topics (under /real by default)
+The GUI's numeric RPM **is only a nominal position on the GUI scale**, NOT
+measured RPM. Default explicit mapping for a nonzero nominal GUI request is:
 
-| ROS topic | Type | Direction relative to Raspberry Pi | Actual firmware support |
-|---|---|---|---|
-| `/real/imu/data` | `sensor_msgs/msg/Imu` | publish | legacy RX |
-| `/real/magnetometer/data` | `sensor_msgs/msg/MagneticField` | publish | legacy RX |
-| `/real/bmp581/air_pressure` | `sensor_msgs/msg/FluidPressure` | publish | legacy RX (actual sensor LPS22HB; topic alias retained for compatibility) |
-| `/real/cefiro/sensors/imu_temperature` | `sensor_msgs/msg/Temperature` | publish | legacy RX |
-| `/real/cefiro/sensors/baro_temperature` | `sensor_msgs/msg/Temperature` | publish | legacy RX |
-| `/real/cefiro/sensors/baro/isa_altitude` | `std_msgs/msg/Float64` | publish | legacy RX |
-| `/real/cefiro/sensors/baro/relative_altitude` | `std_msgs/msg/Float64` | publish | legacy RX |
-| `/real/cefiro/hardware/status` | `std_msgs/msg/String` (JSON) | publish | both modes |
-| `/real/cefiro/control/status` | `std_msgs/msg/String` | publish | CF1 future |
-| `/real/cefiro_actuators/measured_rpm` | `cefiro_msgs/msg/MotorRpm` | publish | CF1 future |
-| `/real/cefiro_actuators/telemetry` | `cefiro_msgs/msg/MotorTelemetry` | publish | CF1 `MOTOR_FULL` future |
-| `/real/cefiro_actuators/target_rpm` | `cefiro_msgs/msg/MotorRpm` | subscribe | CF1 future |
-| `/real/cefiro_actuators/dshot_throttle` | `cefiro_msgs/msg/MotorDshot` | subscribe | CF1 future |
-| `/real/cefiro_actuators/armed` | `std_msgs/msg/Bool` | subscribe | CF1 future |
-| `/real/cefiro_actuators/motor_direction` | `std_msgs/msg/Int8MultiArray` | subscribe | CF1 future, opt-in |
-| `/real/cefiro/control/attitude_reference` | `geometry_msgs/msg/Vector3Stamped` | subscribe | CF1 future |
-| `/real/cefiro/control/enable`, `/real/cefiro/control/emergency_stop` | `std_msgs/msg/Bool` | subscribe | CF1 future |
-| `/real/cefiro/control/mode`, `/real/cefiro/control/strategy` | `std_msgs/msg/String` | subscribe | CF1 future |
-| `/real/cefiro/control/pid_gains`, `/real/cefiro/control/lqr_gain` | `std_msgs/msg/Float64MultiArray` | subscribe | CF1 future |
+```
+DShot = 48 + round((GUI_RPM - 25) / (12000 - 25) * (300 - 48))
+GUI_RPM <= 25 -> DShot 0
+```
 
-**Names are compatibility aliases**: `/real/bmp581/air_pressure` deliberately uses the existing `cefiro_gui` subscriber's topic even though `main.c` actually uses an **LPS22HB**. This does not mean the physical device is a BMP581. Frame IDs should be mapped to your real CAD/TF frames before using navigation.
+This mapping assumes **no actual RPM calibration**, cannot regulate RPM,
+and must never be reported as motor-speed feedback. It is not enabled by default.
+The exact upper bound and lower bound are parameters, and must remain within
+firmware `48..300`. The host never emits special DShot commands `1..47`.
 
-## Install on Raspberry Pi (Ubuntu 24.04 / ROS 2 Jazzy)
-
-The RPi and the PC running the existing GUI can join the same ROS domain if you configure the ROS network appropriately. Build this package and `cefiro_msgs`; **do not run the simulated `cefiro_actuators` process for the real plant**.
+## Build only the real hardware package
 
 ```bash
-sudo apt update
-sudo apt install python3-serial
-
-cd ~/cefiro_ws/src
-# Extract the ZIP here, yielding src/cefiro_hardware_interface/
 cd ~/cefiro_ws
 source /opt/ros/jazzy/setup.bash
-colcon build --symlink-install --packages-select cefiro_msgs cefiro_hardware_interface
+rm -rf build/cefiro_hardware_interface install/cefiro_hardware_interface
+colcon build --symlink-install --packages-up-to cefiro_hardware_interface \
+  --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
 source install/setup.bash
 ```
 
-If you do not have `cefiro_msgs` yet, copy its existing package from your development workspace (the message definitions must be identical on PC and Pi).
+This package uses **C++20, `rclcpp`, `ament_cmake`, and `termios`**. There is no
+`rclpy` or `pyserial`; Python is used only by ROS launch files.
 
-Inspect the actual adapter path:
+## Stage A — verify firmware CF1 telemetry, no motor output
+
+**Remove propellers, isolate ESC power as appropriate, secure the gimbal.**
+Use the actual persistent CP2102 device name from `ls -l /dev/serial/by-id/`,
+not a guessed tty index. Example:
 
 ```bash
-ls -l /dev/serial/by-id/
-ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
-# Raspberry Pi user must have read/write access to the serial device.
-sudo usermod -aG dialout "$USER"
-# Re-login so supplementary group membership is refreshed.
+ros2 launch cefiro_hardware_interface hardware.launch.py \
+  port:=/dev/ttyUSB0 protocol_mode:=cf1 \
+  enable_command_tx:=false rpm_to_dshot_enabled:=false
 ```
 
-**Wiring**: STM32 USART2 TX -> USB-UART RX, STM32 USART2 RX <- USB-UART TX (needed for future commands), common GND; use **3.3V UART logic**. Connect USB-UART USB to Pi. Power the STM32 separately and correctly; **do not connect 5V USB-UART TTL output to STM32 3.3V pin**. Confirm CP2102/adapter voltage selection and grounds. Only one process can open the serial device at a time.
-
-### Run current `main.c` (real sensor telemetry)
+Separate terminal:
 
 ```bash
-ros2 launch cefiro_hardware_interface hardware.launch.py port:=/dev/ttyUSB0
-
-# Separate terminal (source the same workspace):
-ros2 topic echo /real/imu/data
-ros2 topic echo /real/magnetometer/data
-ros2 topic echo /real/bmp581/air_pressure
+source ~/cefiro_ws/install/setup.bash
 ros2 topic echo /real/cefiro/hardware/status
+ros2 topic echo /real/imu/data
+ros2 topic echo /real/cefiro/control/status
 ```
 
-Optional GUI for the *real* plant, **only if cefiro_gui is installed on that computer**:
+Expect `mcu_status` beginning with `FMU_V3`, `rx_valid_frames` increasing and
+`orientation_available=true` once `ATT` frames arrive. If valid frames stay at
+zero but plain IMU text exists, **the old firmware is still running**: reflash
+the modular STM32 firmware; do not enable CF1 command TX.
+
+To continue using the old text-only STM32 binary, instead launch
+`protocol_mode:=legacy_text` with TX disabled.
+
+## Stage B — bench-only manual GUI command interface
+
+This stage is **only for a supervised bench test with propellers removed and
+confirmed firmware power/ESC interlocks**. Do **not** enable TX in flight or
+with exposed spinning propellers. Start from all four GUI sliders at zero.
+
+After successful Stage A and confirming that the modular firmware is flashed:
 
 ```bash
+ros2 launch cefiro_hardware_interface hardware.launch.py \
+  port:=/dev/ttyUSB0 protocol_mode:=cf1 \
+  enable_command_tx:=true rpm_to_dshot_enabled:=true
+```
+
+In a **different terminal** on a machine with a GUI display:
+
+```bash
+source ~/cefiro_ws/install/setup.bash
 ros2 launch cefiro_hardware_interface gui_real.launch.py
 ```
 
-The GUI's default simulation launch still uses `/imu/data`, `/cefiro_actuators/...` and `use_sim_time=true`. `gui_real.launch.py` changes only **its parameters** to `/real/...` and `use_sim_time=false`; simulation and real topics do not collide. The real GUI's motor command buttons will be disabled by the hardware adapter while in `legacy_text` mode (you can interact visually, but the stock MCU cannot accept those commands). The GUI itself may still show a locally requested "enabled" state: use `/real/cefiro/hardware/status` and **MCU acknowledgment** as the source of truth.
+In CEFIRO GUI select `MANUAL`, `Output enabled`, then `START TEST`. The GUI
+publishes periodic 4-motor setpoints. The Raspberry Pi will not send throttle
+until the STM32 acknowledges manual mode and arming. If startup outputs
+`DENIED`, check battery validity, FMU `STAT`, attached ESC, and firmware.
 
-### Future bidirectional firmware
+When manually adjusting one motor, the other three retain their individual
+values. The GUI's `Link all motors to master` synchronizes requests; after
+unlinking it retains each channel's last setting. Reverse direction is
+**not supported** by this firmware, and selecting it stops output.
 
-```bash
-# Only after the STM32 CF1 parser, ACK, ESC interlocks and MCU watchdog exist:
-ros2 launch cefiro_hardware_interface hardware.launch.py \
-  port:=/dev/ttyUSB0 protocol_mode:=cf1 enable_command_tx:=true
-```
-
-Both the Raspberry Pi and the STM32 must enforce the watchdog; command TX is **off by default**. `CMD_ARM` must be ACKed by firmware before motor requests can be forwarded. `CMD_DIR` is disabled by default and blocked by host when armed or when any requested RPM is nonzero; the real ESC must separately support reversal. The `MotorRpm` request alone does **not** guarantee actual regulated RPM without ESC/firmware feedback control.
-
-## Checks (no `test/` dependency in colcon)
+Observe live diagnostics:
 
 ```bash
-python3 ~/cefiro_ws/src/cefiro_hardware_interface/tools/protocol_selfcheck.py
-python3 -m compileall -q ~/cefiro_ws/src/cefiro_hardware_interface/cefiro_hardware_interface
+ros2 topic echo /real/cefiro/hardware/status
+ros2 topic echo /real/cefiro/hardware/command_ack
+ros2 topic echo /real/cefiro/hardware/commanded_dshot
 ```
 
-See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the proposed MCU packet types, CRC, ACK and the phased firmware implementation. No changes to the original user-provided `main.c` are included in this package.
+The `commanded_dshot` message is **requested**, not measured motor feedback;
+`measured_rpm` and `telemetry` remain silent until a real telemetry source
+is implemented on the STM32.
 
-## Optional isolated serial smoke test (NOT hardware)
-
-For a workstation without an attached STM32, you can create a temporary **simulated** pseudo-serial source:
+**If EMERGENCY ZERO was requested**, the STM32 deliberately enters latched
+FMU FAULT. After resolving the cause, stopping the GUI and verifying motors
+are stopped, explicitly request reset:
 
 ```bash
-python3 ~/cefiro_ws/src/cefiro_hardware_interface/tools/virtual_legacy_fmu.py
-# The program prints a /dev/pts/N path. In a different terminal:
-ros2 launch cefiro_hardware_interface hardware.launch.py port:=/dev/pts/N
+ros2 service call /real/cefiro/hardware/reset_fault std_srvs/srv/Trigger '{}'
+ros2 topic echo /real/cefiro/hardware/command_ack
 ```
 
-This is a deliberately fixed fixture for testing the ROS 2 plumbing only; it **must not** be used to calibrate the real IMU, control the physical drone, or validate motor safety.
+The service only confirms that the reset command was queued; an `ACK OK` and
+a subsequent `STAT` without FAULT are required before trying GUI ARM again.
+
+## Real topics
+
+**Sensor publishers:**
+`/real/imu/data`, `/real/magnetometer/data`, `/real/bmp581/air_pressure`,
+`/real/cefiro/sensors/imu_temperature`,
+`/real/cefiro/sensors/baro_temperature`,
+`/real/cefiro/sensors/baro/isa_altitude`,
+`/real/cefiro/sensors/baro/relative_altitude`.
+
+**Status:**
+`/real/cefiro/hardware/status` (JSON in `std_msgs/String`),
+`/real/cefiro/hardware/command_ack` (CF1 ACK summary),
+`/real/cefiro/hardware/commanded_dshot` (`MotorDshot` request),
+`/real/cefiro/control/status` (human-readable MCU state).
+
+**Reserved, NOT fabricated:**
+`/real/cefiro_actuators/measured_rpm`,
+`/real/cefiro_actuators/telemetry`.
+
+## Additional safety notes
+
+* `hardware.launch.py` defaults to TX OFF, nominal RPM conversion OFF,
+  and direct DShot input OFF.
+* On port reconnect, output gate and ARM intent are cleared; no stale commands
+  are resent. A new explicit GUI action is required.
+* The firmware independently enforces 300 ms timeout, battery limits and
+  emergency latch. Host timestamps use a steady clock for timeouts.
+* The `CMD_STOP`/`CMD_ARM,0` path does **not** latch FMU FAULT, unlike `CMD_ESTOP`.
+* No attempt is made to activate automatic attitude control while the firmware
+  configuration explicitly inhibits it.
+* Only one process can open `/dev/ttyUSB0`. Close `minicom` before launching.
+
+Test the ROS-independent codec without a hardware device:
+
+```bash
+bash tools/verify_protocol.sh
+```
+
+See [`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the command/ACK contract.

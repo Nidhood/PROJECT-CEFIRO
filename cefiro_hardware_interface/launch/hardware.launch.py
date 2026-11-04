@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""ROS 2 launch description. The hardware node and serial protocol are C++."""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -9,16 +9,18 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    default_config = PathJoinSubstitution([
+    config_file = PathJoinSubstitution([
         FindPackageShare('cefiro_hardware_interface'), 'config', 'hardware.yaml'
     ])
     return LaunchDescription([
         DeclareLaunchArgument('namespace', default_value='real'),
-        DeclareLaunchArgument('config', default_value=default_config),
+        DeclareLaunchArgument('config', default_value=config_file),
         DeclareLaunchArgument('port', default_value='/dev/ttyUSB0'),
         DeclareLaunchArgument('protocol_mode', default_value='legacy_text',
                               choices=['legacy_text', 'cf1']),
         DeclareLaunchArgument('enable_command_tx', default_value='false',
+                              choices=['true', 'false']),
+        DeclareLaunchArgument('rpm_to_dshot_enabled', default_value='false',
                               choices=['true', 'false']),
         Node(
             package='cefiro_hardware_interface',
@@ -26,10 +28,13 @@ def generate_launch_description():
             name='cefiro_hardware_interface',
             namespace=LaunchConfiguration('namespace'),
             output='screen',
-            parameters=[default_config, LaunchConfiguration('config'), {
+            parameters=[LaunchConfiguration('config'), {
                 'port': LaunchConfiguration('port'),
                 'protocol_mode': LaunchConfiguration('protocol_mode'),
-                'enable_command_tx': ParameterValue(LaunchConfiguration('enable_command_tx'), value_type=bool),
+                'enable_command_tx': ParameterValue(
+                    LaunchConfiguration('enable_command_tx'), value_type=bool),
+                'rpm_to_dshot_enabled': ParameterValue(
+                    LaunchConfiguration('rpm_to_dshot_enabled'), value_type=bool),
                 'use_sim_time': False,
             }],
         ),

@@ -1,0 +1,23 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+    port: /dev/ttyUSB0
+    baudrate: 115200
+    protocol_mode: cf1
+    enable_command_tx: false # launch CLI must explicitly opt in; leave off for sensor bringup
+    allow_direct_dshot: false
+    rpm_to_dshot_enabled: false # launch CLI opt in, AFTER bench validation
+    allow_direction_commands: false
+    serial_reconnect_s: 2.0
+    sensor_stale_s: 1.5
+    command_timeout_s: 0.20 # < CF_HOST_COMMAND_TTL_MS = 300 ms
+    orientation_timeout_s: 0.20
+    max_command_rpm: 12000.0
+    rpm_full_scale: 12000.0
+    rpm_deadband: 25.0
+    dshot_min: 48
+    dshot_max: 300 # validated firmware limit, reduce here for restricted commissioning
+    imu_frame_id: cefiro_fmu_imu
+    mag_frame_id: cefiro_fmu_mag
+    baro_frame_id: cefiro_fmu_baro
+    body_frame_id: drone_body_link

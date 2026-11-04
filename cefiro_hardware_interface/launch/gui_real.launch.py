@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""Launch existing C++ cefiro_gui with real-plant topic remapping."""
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
