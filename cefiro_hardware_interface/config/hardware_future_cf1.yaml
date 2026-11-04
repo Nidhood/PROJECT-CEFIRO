@@ -15,7 +15,8 @@
     dshot_max: 300            # CF_MANUAL_MAX_DSHOT in uploaded STM32 firmware
     serial_reconnect_s: 2.0
     sensor_stale_s: 1.5
-    command_timeout_s: 0.20
+    command_timeout_s: 0.60 # max GUI silence; MCU still uses 300 ms DShot TTL
+    manual_keepalive_period_s: 0.040 # Raspberry re-sends fresh DShot every 40 ms
     orientation_timeout_s: 0.2
     max_command_rpm: 12000.0
     imu_frame_id: cefiro_fmu_imu

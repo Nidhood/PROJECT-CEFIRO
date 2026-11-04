@@ -14,7 +14,9 @@ from the real plant under `/real`.
 * **`CMD_DIR` and `CMD_PID` are explicitly `UNSUPPORTED`**.
 * `CF_MANUAL_MAX_DSHOT=300`; accepted throttle codes: `0` or `48..300`.
 * `CF_HOST_COMMAND_TTL_MS=300`: the STM32 autonomously stops manual output after
-  loss of commands. The Raspberry Pi uses **200 ms** command watchdog by default.
+  loss of commands. The Raspberry Pi refreshes a recent GUI setpoint every **40 ms** and
+  enforces a **600 ms maximum GUI silence** by default. This is a bounded lease,
+  not a disabled STM32 failsafe; the FMU continues to enforce 300 ms without DShot.
 * `CF_ENABLE_AUTOMATIC_OUTPUT=0`: automatic attitude-control actuation is blocked
   in the firmware. **Do not bypass this protection in the host bridge**.
 * `IMU`, `ATT`, `MAG`, `BARO`, `STAT`, `ACK` are emitted in CF1. `ATT` contains a
@@ -184,3 +186,46 @@ bash tools/verify_protocol.sh
 ```
 
 See [`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the command/ACK contract.
+
+
+## v0.4.0 — Manual command stream stabilization (2026-11-04)
+
+**Why `CMD_DSHOT,DENIED` previously occurred intermittently:** the STM32
+terminates its manual state when no `CMD_DSHOT` frame arrives for 300 ms.
+The original bridge only sent DShot upon receiving a GUI `target_rpm` ROS
+message, which was produced by a Qt GUI-thread QTimer every 50 ms. Brief UI
+rendering or DDS scheduling pauses could exceed the MCU deadline. After a
+watchdog disarm, the next DShot was correctly rejected as `DENIED`.
+
+The new bridge **owns DShot refresh on the Raspberry in its 10-ms serial
+poll**. It sends the most recently requested motor values every 40 ms only
+while the GUI setpoint is newer than the bounded `command_timeout_s` lease
+(default 0.60 s). It does NOT rearm automatically and does NOT extend this
+lease when refreshing the serial output. GUI SAFE STOP/ESTOP, link disconnect,
+FMU denied ACK, and stale GUI input still immediately stop or disarm.
+
+- `manual_keepalive_period_s`: 0.040 (allowed 0.020..0.100); MCU 300 ms TTL unchanged.
+- `command_timeout_s`: 0.60 (allowed 0.15..0.90), **GUI input freshness**.
+  Worst-case host loss of GUI then MCU timeout is about 0.60+0.30 seconds;
+  a physical emergency stop / power cut remains required. The 0.60 seconds
+  is **not** suitable for an unrestrained flying vehicle or safety-critical
+  remote actuation.
+
+The status JSON now adds `gui_setpoint_age_s`, `last_dshot_tx_age_s`,
+`gui_setpoint_timeout_s`, `manual_keepalive_period_s`, `gui_setpoints_received`,
+`manual_keepalive_sent`, `gui_timeout_stops`, and `dshot_denials`.
+
+To verify the safety scheduling helper without ROS installed:
+
+```bash
+./tools/verify_manual_keepalive.sh
+./tools/verify_protocol.sh
+```
+
+**Diagnosis:** if `gui_setpoints_received` keeps increasing while
+`manual_keepalive_sent` grows and `gui_setpoint_age_s` stays small, the
+periodic bridge is operating. If `gui_timeout_stops` increases, investigate
+Qt GUI or DDS stalls. If `dshot_denials` still increases while the command
+stream is fresh, inspect `STAT` and the firmware ESC/power interlocks: DENIED
+can have causes other than the manual TTL (e.g. power drop or ESC stop).
+Do not remove the STM32 safety watchdog to silence DENIED.

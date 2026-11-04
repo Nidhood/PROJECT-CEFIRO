@@ -10,7 +10,8 @@
     allow_direction_commands: false
     serial_reconnect_s: 2.0
     sensor_stale_s: 1.5
-    command_timeout_s: 0.20 # < CF_HOST_COMMAND_TTL_MS = 300 ms
+    command_timeout_s: 0.60 # max GUI silence; bounded host lease, no indefinite hold
+    manual_keepalive_period_s: 0.040 # Raspberry re-sends fresh DShot every 40 ms
     orientation_timeout_s: 0.20
     max_command_rpm: 12000.0
     rpm_full_scale: 12000.0

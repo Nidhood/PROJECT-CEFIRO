@@ -1,5 +1,6 @@
 #include "cefiro_hardware_interface/protocol.hpp"
 #include "cefiro_hardware_interface/motor_command.hpp"
+#include "cefiro_hardware_interface/manual_keepalive.hpp"
 #include "cefiro_hardware_interface/serial_port.hpp"
 
 #include <rclcpp/rclcpp.hpp>
@@ -112,7 +113,10 @@ public:
     allow_direction_commands_ = declare_parameter<bool>("allow_direction_commands", false);
     reconnect_s_ = declare_parameter<double>("serial_reconnect_s", 2.0);
     sensor_stale_s_ = declare_parameter<double>("sensor_stale_s", 1.5);
-    command_timeout_s_ = declare_parameter<double>("command_timeout_s", 0.20);
+    // Maximum GUI input gap; Raspberry independently refreshes already-received
+    // DShot every 40 ms. This is a bounded lease, NOT a disabled failsafe.
+    command_timeout_s_ = declare_parameter<double>("command_timeout_s", 0.60);
+    manual_keepalive_period_s_ = declare_parameter<double>("manual_keepalive_period_s", 0.040);
     orientation_timeout_s_ = declare_parameter<double>("orientation_timeout_s", 0.2);
     max_command_rpm_ = declare_parameter<double>("max_command_rpm", 12000.0);
     imu_frame_ = declare_parameter<std::string>("imu_frame_id", "cefiro_fmu_imu");
@@ -126,13 +130,20 @@ public:
         command_timeout_s_ <= 0.0 || orientation_timeout_s_ <= 0.0 ||
         !std::isfinite(reconnect_s_) || !std::isfinite(sensor_stale_s_) ||
         !std::isfinite(command_timeout_s_) || !std::isfinite(orientation_timeout_s_) ||
-        !std::isfinite(max_command_rpm_) || max_command_rpm_ <= 0.0) {
+        !std::isfinite(max_command_rpm_) || max_command_rpm_ <= 0.0 ||
+        !std::isfinite(manual_keepalive_period_s_)) {
       throw std::invalid_argument("Invalid UART/timing/motor parameter");
     }
     if (!validManualMotorMap(manual_map_) ||
-        command_timeout_s_ >= 0.300 || command_timeout_s_ <= 0.050) {
-      throw std::invalid_argument("Require valid open-loop DShot map and command_timeout_s in (0.05, 0.30)");
+        command_timeout_s_ > 0.90 || command_timeout_s_ < 0.15 ||
+        manual_keepalive_period_s_ < 0.020 ||
+        manual_keepalive_period_s_ > 0.100 ||
+        manual_keepalive_period_s_ * 3.0 > command_timeout_s_) {
+      throw std::invalid_argument(
+          "Require a valid DShot map; GUI lease 0.15..0.90 s, "
+          "motor refresh 0.020..0.100 s (3+ periods per lease)");
     }
+    manual_stream_.configure(manual_keepalive_period_s_, command_timeout_s_);
     can_tx_ = protocol_mode_ == "cf1" && enable_command_tx_;
     // All names are relative; default launch namespace 'real' isolates the real plant.
     const auto sensor_qos = rclcpp::SensorDataQoS();
@@ -251,10 +262,9 @@ private:
     mode_ack_sequence_.reset();
     reset_fault_ack_sequence_.reset();
     arm_confirmed_at_.reset();
-    last_motor_command_.reset();
+    manual_stream_.reset();
     last_mcu_stat_.reset();
     last_imu_.reset(); last_mag_.reset(); last_baro_.reset(); last_motor_.reset();
-    pending_motor_dshot_.reset();
     orientation_.reset();
     requested_rpm_.fill(0.0);
     last_dshot_.fill(0);
@@ -281,9 +291,8 @@ private:
     arm_ack_sequence_.reset();
     mode_ack_sequence_.reset();
     arm_confirmed_at_.reset();
-    last_motor_command_.reset();
+    manual_stream_.reset();
     last_mcu_stat_.reset();
-    pending_motor_dshot_.reset();
     tx_queue_.clear();
     pending_tx_.clear();
     pending_offset_ = 0;
@@ -316,14 +325,18 @@ private:
       if (arm_ack_sequence_ && current >= arm_ack_deadline_) {
         disarm("STM32 ARM ACK timeout");
       }
-      // Firmware manual TTL=300 ms. Host timeout must be smaller.
+      // The STM32 has an INDEPENDENT 300 ms DShot watchdog. Refresh its
+      // command from the Raspberry on a steady ROS timer, independent of the
+      // Qt event/render thread. Never refresh from a stale GUI command.
       if (arm_confirmed_) {
-        // Short grace after ARM ACK: the first GUI setpoint may arrive on
-        // another ROS topic slightly later than armed=true.
-        const auto last = last_motor_command_.value_or(
-            arm_confirmed_at_.value_or(current));
-        if (std::chrono::duration<double>(current - last).count() > command_timeout_s_) {
-          disarm("GUI motor-command watchdog expired");
+        if (manual_stream_.expired(current, arm_confirmed_at_.value_or(current))) {
+          ++gui_timeout_stops_;
+          RCLCPP_WARN(get_logger(),
+            "GUI setpoint stream expired (last GUI age %.3f s, limit %.3f s); SAFE STOP",
+            manual_stream_.guiAgeSeconds(current), command_timeout_s_);
+          disarm("GUI setpoint timeout");
+        } else if (manual_stream_.due(current)) {
+          if (const auto* codes = manual_stream_.setpoint()) sendMotorDshot(*codes);
         }
       }
       if (arm_confirmed_ &&
@@ -386,8 +399,7 @@ private:
     controller_enabled_ = false;
     arm_ack_sequence_.reset();
     arm_confirmed_at_.reset();
-    last_motor_command_.reset();
-    pending_motor_dshot_.reset();
+    manual_stream_.reset();
     requested_rpm_.fill(0.0);
     last_dshot_.fill(0);
     // Stale queued DShot requests must never execute after STOP.
@@ -457,8 +469,7 @@ private:
     arm_requested_ = true;
     arm_confirmed_ = false;
     arm_confirmed_at_.reset();
-    last_motor_command_.reset();
-    pending_motor_dshot_.reset();
+    manual_stream_.reset();
     maybeArm();
   }
   void sendMotorDshot(const std::array<std::uint16_t, 4>& codes) {
@@ -474,6 +485,8 @@ private:
       fields.push_back(std::to_string(code));
     }
     if (!queueCommand("CMD_DSHOT", fields)) return;
+    manual_stream_.transmitted(Clock::now());
+    ++manual_refresh_sent_;
     last_dshot_ = codes;
     cefiro_msgs::msg::MotorDshot msg;
     msg.data = codes;
@@ -501,9 +514,10 @@ private:
     }
     if (!can_tx_ || !controller_enabled_ || !arm_requested_ || reverse_requested_) return;
     requested_rpm_ = msg.data;
-    pending_motor_dshot_ = *codes;
-    last_motor_command_ = Clock::now();
-    if (arm_confirmed_) sendMotorDshot(*codes);
+    manual_stream_.update(*codes, Clock::now());
+    ++gui_setpoints_received_;
+    // Do not send immediately for every GUI message. The 40-ms Raspberry
+    // refresh loop provides a smooth, bounded DShot stream instead.
   }
   void onDshot(const cefiro_msgs::msg::MotorDshot& msg) {
     if (!allow_direct_dshot_) return;
@@ -516,9 +530,9 @@ private:
       }
     }
     if (!can_tx_ || !controller_enabled_ || !arm_requested_ || reverse_requested_) return;
-    pending_motor_dshot_ = msg.data;
-    last_motor_command_ = Clock::now();
-    if (arm_confirmed_) sendMotorDshot(msg.data);
+    manual_stream_.update(msg.data, Clock::now());
+    ++gui_setpoints_received_;
+    // Periodic refresh is owned by the Raspberry, not by GUI event scheduling.
   }
   void onDirection(const std_msgs::msg::Int8MultiArray& msg) {
     if (msg.data.size() != 4) return;
@@ -660,10 +674,8 @@ private:
         } else {
           arm_confirmed_at_ = Clock::now();
           RCLCPP_INFO(get_logger(), "STM32 ACK accepted GUI MANUAL ARM");
-          if (pending_motor_dshot_ && last_motor_command_ &&
-              std::chrono::duration<double>(Clock::now() - *last_motor_command_).count() <=
-                  command_timeout_s_) {
-            sendMotorDshot(*pending_motor_dshot_);
+          if (manual_stream_.fresh(Clock::now())) {
+            if (const auto* codes = manual_stream_.setpoint()) sendMotorDshot(*codes);
           }
         }
       }
@@ -678,7 +690,15 @@ private:
         RCLCPP_INFO(get_logger(), "STM32 CMD_RESET_FAULT: %s", fields[2].c_str());
       }
       if (fields[1] == "CMD_DSHOT" && fields[2] != "OK") {
-        RCLCPP_ERROR(get_logger(), "STM32 rejected motor command: %s", fields[2].c_str());
+        ++dshot_denials_;
+        RCLCPP_ERROR(get_logger(),
+          "STM32 rejected CMD_DSHOT (seq=%s, reason=%s, GUI age=%.3fs, "
+          "last DShot TX age=%.3fs, MCU state=%d). "
+          "Firmware DENIED may mean its independent 300ms watchdog "
+          "disarmed, ESC timeout, or power/mode interlock.",
+          fields[0].c_str(), fields[2].c_str(),
+          manual_stream_.guiAgeSeconds(Clock::now()),
+          manual_stream_.txAgeSeconds(Clock::now()), mcu_fmu_state_);
         disarm("STM32 DShot rejected");
       }
       return true;
@@ -846,6 +866,14 @@ private:
       << "\"mcu_fmu_state\":" << mcu_fmu_state_ << ','
       << "\"mcu_auto_enabled\":" << mcu_auto_enabled_ << ','
       << "\"last_command_ack\":" << jsonQuote(last_ack_) << ','
+      << "\"gui_setpoint_age_s\":" << manual_stream_.guiAgeSeconds(Clock::now()) << ','
+      << "\"last_dshot_tx_age_s\":" << manual_stream_.txAgeSeconds(Clock::now()) << ','
+      << "\"gui_setpoint_timeout_s\":" << command_timeout_s_ << ','
+      << "\"manual_keepalive_period_s\":" << manual_keepalive_period_s_ << ','
+      << "\"gui_setpoints_received\":" << gui_setpoints_received_ << ','
+      << "\"manual_keepalive_sent\":" << manual_refresh_sent_ << ','
+      << "\"gui_timeout_stops\":" << gui_timeout_stops_ << ','
+      << "\"dshot_denials\":" << dshot_denials_ << ','
       << "\"orientation_available\":" << att << ','
       << "\"imu_online\":" << (imu_age >= 0 && imu_age <= sensor_stale_s_) << ','
       << "\"mag_online\":" << (mag_age >= 0 && mag_age <= sensor_stale_s_) << ','
@@ -884,7 +912,8 @@ private:
   bool can_tx_{false};
   double reconnect_s_{2.0};
   double sensor_stale_s_{1.5};
-  double command_timeout_s_{0.20};
+  double command_timeout_s_{0.60};
+  double manual_keepalive_period_s_{0.040};
   double orientation_timeout_s_{0.2};
   double max_command_rpm_{12000.0};
   std::string imu_frame_, mag_frame_, baro_frame_, body_frame_;
@@ -902,15 +931,17 @@ private:
   std::optional<std::uint16_t> mode_ack_sequence_;
   std::optional<std::uint16_t> reset_fault_ack_sequence_;
   std::optional<Time> arm_confirmed_at_, last_mcu_stat_;
-  std::optional<std::array<std::uint16_t,4>> pending_motor_dshot_;
+  ManualKeepalive manual_stream_{};
   std::array<std::uint16_t,4> last_dshot_{};
   std::string last_ack_{"NONE"};
   Time arm_ack_deadline_{};
-  std::optional<Time> last_motor_command_, last_imu_, last_mag_, last_baro_, last_motor_;
+  std::optional<Time> last_imu_, last_mag_, last_baro_, last_motor_;
   std::optional<std::array<double,4>> orientation_;
   Time orientation_received_{};
   std::array<double,4> requested_rpm_{};
   std::uint64_t rx_frames_{0}, bad_frames_{0}, serial_errors_{0};
+  std::uint64_t gui_setpoints_received_{0}, manual_refresh_sent_{0};
+  std::uint64_t gui_timeout_stops_{0}, dshot_denials_{0};
   std::string last_sensor_error_, last_mcu_status_{"NO MCU STATUS"};
 
   rclcpp::TimerBase::SharedPtr io_timer_, status_timer_;

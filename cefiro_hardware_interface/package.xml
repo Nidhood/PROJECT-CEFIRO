@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>cefiro_hardware_interface</name>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
   <description>C++20 ROS 2 Jazzy bridge between CEFIRO Qt6 GUI and the actual STM32 CF1 DShot/IMU interface under /real.</description>
   <maintainer email="maintainers@example.invalid">CEFIRO Development Team</maintainer>
   <license>MIT</license>
