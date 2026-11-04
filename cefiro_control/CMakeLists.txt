@@ -29,6 +29,7 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(cefiro_msgs REQUIRED)
 
 # State feedback controller:
 add_library(cefiro_attitude_controller SHARED
@@ -49,6 +50,7 @@ ament_target_dependencies(cefiro_attitude_controller
     rclcpp_lifecycle
     realtime_tools
     std_msgs
+    cefiro_msgs
 )
 
 target_link_libraries(cefiro_attitude_controller

@@ -292,6 +292,12 @@ CefiroAttitudeController::update ( const rclcpp::Time & /* time */, const rclcpp
     const auto mz_opt = state_interfaces_[8].get_optional<double> ();
 
     if ( !p_opt || !q_opt || !r_opt || !ax_opt || !ay_opt || !az_opt || !mx_opt || !my_opt || !mz_opt ) {
+        RCLCPP_WARN_THROTTLE(
+        get_node()->get_logger(),
+        *get_node()->get_clock(),
+        1000, // Imprime como máximo UNA VEZ cada 1000 ms (1 segundo)
+        "Sensors not ready yet. Skipping update cycle..."
+        );
         return controller_interface::return_type::OK; // Sensores no listos aún
     }
 

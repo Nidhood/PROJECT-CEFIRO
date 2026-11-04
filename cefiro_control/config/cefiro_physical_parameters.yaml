@@ -1,16 +1,16 @@
 cefiro_physical_parameters:
   ros parameters:
-    mass: 1.2 # kg
+    mass: 1.627 # kg
 
     inertia:
-      jx: 0.01 # kg*m^2
-      jy: 0.01 # kg*m^2
-      jz: 0.02 # kg*m^2
+      jx: 0.03378 # kg*m^2
+      jy: 0.02444 # kg*m^2
+      jz: 0.05613 # kg*m^2
 
     mixer:
-      arm_length: 0.25      # l: Longitud del brazo desde el centro de masa al motor [m]
-      thrust_coeff: 1.2e-6  # b: Coeficiente de empuje [N/(RPM^2)]
-      drag_coeff: 2.5e-8    # d: Coeficiente de arrastre/torque [N*m/(RPM^2)]
+      arm_length: 0.23      # l: Longitud del brazo desde el centro de masa al motor [m]
+      thrust_coeff: 3.13e-5  # b: Coeficiente de empuje [N/(RPM^2)]
+      drag_coeff: 7.5e-7    # d: Coeficiente de arrastre/torque [N*m/(RPM^2)]
       frame_type: "cross"   # Configuración de los brazos: "cross" (X)
       
       # En configuración 'X', el brazo efectivo proyectado sobre los ejes X e Y es l * sin(45°)

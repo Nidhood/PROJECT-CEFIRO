@@ -21,6 +21,7 @@
     <depend>realtime_tools</depend>
     <depend>std_msgs</depend>
     <depend>eigen</depend>
+    <depend>cefiro_msgs</depend>
 
     <!-- Test dependencies -->
     <test_depend>ament_cmake_gtest</test_depend>

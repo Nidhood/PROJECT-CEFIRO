@@ -9,9 +9,8 @@
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <string>
 #include <vector>
-
-// Encabezado necesario para declarar objetos matriciales en la clase
 #include <Eigen/Dense>
+#include "cefiro_msgs/msg/motor_rpm.hpp"
 
 namespace cefiro::control {
 
@@ -38,25 +37,25 @@ class CefiroAttitudeController final : public controller_interface::ControllerIn
         double max_torque_{ 0.0 };
 
         // --- 4. Parámetros Físicos ---
-        double jx_{ 0.01 };
-        double jy_{ 0.01 };
-        double jz_{ 0.02 };
+        double jx_{ 0.00 };
+        double jy_{ 0.00 };
+        double jz_{ 0.00 };
         
-        double arm_length_{ 0.25 };
-        double thrust_coeff_{ 1.2e-6 };
-        double drag_coeff_{ 2.5e-8 };
+        double arm_length_{ 0.00  };
+        double thrust_coeff_{ 0.00  };
+        double drag_coeff_{ 0.00  };
         std::string frame_type_{ "cross" };
-        double arm_angle_rad_{ 0.785398 }; 
+        double arm_angle_rad_{ 0.00  }; 
 
         std::vector<double> motor_signs_{};
 
         // --- 5. Matrices Nativas de Eigen (Memoria Estática) ---
-        Eigen::Matrix<double, 3, 6> k_matrix_;
-        Eigen::Matrix<double, 6, 6> l_matrix_;
-        Eigen::Matrix<double, 6, 6> a_matrix_;
-        Eigen::Matrix<double, 6, 3> b_matrix_;
-        Eigen::Matrix<double, 6, 6> c_matrix_;
-        Eigen::Matrix<double, 4, 4> inverse_mixer_matrix_;
+        Eigen::Matrix<double, 3, 6> k_matrix_{Eigen::Matrix<double, 3, 6>::Zero()};
+        Eigen::Matrix<double, 6, 6> l_matrix_{Eigen::Matrix<double, 6, 6>::Zero()};
+        Eigen::Matrix<double, 6, 6> a_matrix_{Eigen::Matrix<double, 6, 6>::Zero()};
+        Eigen::Matrix<double, 6, 3> b_matrix_{Eigen::Matrix<double, 6, 3>::Zero()};
+        Eigen::Matrix<double, 6, 6> c_matrix_{Eigen::Matrix<double, 6, 6>::Zero()};
+        Eigen::Matrix<double, 4, 4> inverse_mixer_matrix_{Eigen::Matrix<double, 4, 4>::Zero()};
 
         // --- 6. Comunicaciones ---
         rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr reference_subscriber_;
