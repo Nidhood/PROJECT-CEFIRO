@@ -1,3 +1,8 @@
+> **Release 0.4.1 (Raspberry installation fix):** use `INSTALLAR_EN_RASPBERRY.md` and
+> `tools/install_and_verify.sh`. A stale v0.3 binary rejects the valid 0.60 s
+> GUI lease. This release provides `hardware_node --version` and reports
+> `hardware_interface_version` in `/real/cefiro/hardware/status`.
+
 # cefiro_hardware_interface — C++20 / ROS 2 Jazzy / CEFIRO FMU V3
 
 This package bridges the **actual** CEFIRO STM32H743 modular firmware to the

@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <deque>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -44,6 +45,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
+constexpr const char* kHardwareVersion = "0.4.1";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -140,8 +142,11 @@ public:
         manual_keepalive_period_s_ > 0.100 ||
         manual_keepalive_period_s_ * 3.0 > command_timeout_s_) {
       throw std::invalid_argument(
-          "Require a valid DShot map; GUI lease 0.15..0.90 s, "
-          "motor refresh 0.020..0.100 s (3+ periods per lease)");
+          "Invalid manual motor configuration: DShot=0 or 48..300; "
+          "command_timeout_s (GUI lease) must be 0.15..0.90 s, "
+          "manual_keepalive_period_s 0.020..0.100 s and at least 3 periods "
+          "within the GUI lease. Received lease=" + number(command_timeout_s_, 3) +
+          "s refresh=" + number(manual_keepalive_period_s_, 3) + "s");
     }
     manual_stream_.configure(manual_keepalive_period_s_, command_timeout_s_);
     can_tx_ = protocol_mode_ == "cf1" && enable_command_tx_;
@@ -221,6 +226,8 @@ public:
       });
     io_timer_ = create_wall_timer(10ms, [this] { pollSerial(); });
     status_timer_ = create_wall_timer(500ms, [this] { publishStatus(); });
+    RCLCPP_INFO(get_logger(), "CEFIRO hardware interface v%s (manual keepalive + 0.60 s GUI lease)",
+      kHardwareVersion);
     RCLCPP_INFO(get_logger(),
       "CEFIRO USART %s at %d 8N1, namespace=%s, protocol=%s, command TX=%s",
       port_.c_str(), baudrate_, get_namespace(), protocol_mode_.c_str(), can_tx_ ? "ENABLED" : "DISABLED");
@@ -852,6 +859,7 @@ private:
         std::chrono::duration<double>(Clock::now() - orientation_received_).count() < orientation_timeout_s_;
     std::ostringstream stream;
     stream << std::boolalpha << '{'
+      << "\"hardware_interface_version\":" << jsonQuote(kHardwareVersion) << ','
       << "\"serial_connected\":" << serial_.connected() << ','
       << "\"device\":" << jsonQuote(port_) << ','
       << "\"protocol\":" << jsonQuote(protocol_mode_) << ','
@@ -966,6 +974,10 @@ private:
 }  // namespace cefiro::hardware
 
 int main(int argc, char** argv) {
+  if (argc == 2 && std::string_view(argv[1]) == "--version") {
+    std::cout << "cefiro_hardware_interface 0.4.1\n";
+    return 0;
+  }
   rclcpp::init(argc, argv);
   try {
     rclcpp::spin(std::make_shared<cefiro::hardware::HardwareNode>());
