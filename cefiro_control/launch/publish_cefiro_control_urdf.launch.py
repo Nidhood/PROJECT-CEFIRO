@@ -10,17 +10,18 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
 
     use_sim_time = LaunchConfiguration('use_sim_time')
+    enable_sensors = LaunchConfiguration('enable_sensors')
 
     xacro_file = PathJoinSubstitution([
-        FindPackageShare('cefiro_control'),
+        FindPackageShare('cefiro_description'),
         'urdf',
-        'cefiro_control.urdf.xacro'
+        'cefiro-gyro.urdf.xacro'
     ])
 
     robot_description = ParameterValue(
         Command([
             'xacro ',
-            xacro_file
+            xacro_file, ' enable_sensors:=', enable_sensors
         ]),
         value_type=str
     )
@@ -37,6 +38,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument('enable_sensors', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument(
             'use_sim_time',
             default_value='true',

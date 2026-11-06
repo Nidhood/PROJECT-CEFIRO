@@ -82,4 +82,9 @@ install(DIRECTORY config launch urdf
 )
 
 
+# Independent simulation-only ROS 2 controller (GUI -> capture -> actuators).
+install(PROGRAMS scripts/cefiro_balance_node.py
+    DESTINATION lib/${PROJECT_NAME})
+install(FILES scripts/cefiro_multibody.py
+    DESTINATION lib/${PROJECT_NAME})
 ament_package()

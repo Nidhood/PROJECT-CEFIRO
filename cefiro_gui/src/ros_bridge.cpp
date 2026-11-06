@@ -1,7 +1,10 @@
 #include "cefiro_gui/ros_bridge.hpp"
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 #include <utility>
 using namespace std::chrono_literals;
 namespace cefiro::gui {
@@ -13,6 +16,45 @@ bool fresh(std::chrono::steady_clock::time_point t, double timeout) {
 }
 RosBridge::RosBridge() {
     node_=std::make_shared<rclcpp::Node>("cefiro_hmi");
+    display_relative_attitude_=node_->declare_parameter<bool>("display_relative_attitude",false);
+    // Support both numeric and quoted-string YAML values without crashing the GUI.
+    // The parameter is an angle in DEGREES, not an actuator command.
+    rcl_interfaces::msg::ParameterDescriptor yaw_descriptor;
+    yaw_descriptor.description = "Nominal world yaw in degrees for relative attitude display";
+    yaw_descriptor.dynamic_typing = true;
+    node_->declare_parameter(
+        "equilibrium_world_yaw_deg", rclcpp::ParameterValue(151.318), yaw_descriptor);
+    const auto yaw_parameter = node_->get_parameter("equilibrium_world_yaw_deg");
+    try {
+        if (yaw_parameter.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+            equilibrium_world_yaw_deg_ = yaw_parameter.as_double();
+        } else if (yaw_parameter.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
+            equilibrium_world_yaw_deg_ = static_cast<double>(yaw_parameter.as_int());
+        } else if (yaw_parameter.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
+            const std::string raw = yaw_parameter.as_string();
+            std::size_t parsed = 0;
+            const double value = std::stod(raw, &parsed);
+            if (raw.find_first_not_of(" \t\r\n", parsed) != std::string::npos) {
+                throw std::invalid_argument("trailing characters in yaw parameter");
+            }
+            equilibrium_world_yaw_deg_ = value;
+            RCLCPP_WARN(node_->get_logger(),
+                "equilibrium_world_yaw_deg arrived as STRING. Parsed %.3f deg; "
+                "prefer an unquoted YAML number.", equilibrium_world_yaw_deg_);
+        } else {
+            RCLCPP_WARN(node_->get_logger(),
+                "equilibrium_world_yaw_deg has unsupported type; using 151.318 deg.");
+        }
+        if (!std::isfinite(equilibrium_world_yaw_deg_)) {
+            RCLCPP_WARN(node_->get_logger(),
+                "equilibrium_world_yaw_deg must be finite; using 151.318 deg.");
+            equilibrium_world_yaw_deg_ = 151.318;
+        }
+    } catch (const std::exception & e) {
+        RCLCPP_WARN(node_->get_logger(),
+            "Invalid equilibrium_world_yaw_deg: %s; using 151.318 deg.", e.what());
+        equilibrium_world_yaw_deg_ = 151.318;
+    }
     imu_topic_=node_->declare_parameter<std::string>("imu_topic","/imu/data");
     mag_topic_=node_->declare_parameter<std::string>("magnetometer_topic","/magnetometer/data");
     baro_topic_=node_->declare_parameter<std::string>("barometer_topic","/bmp581/air_pressure");
@@ -61,7 +103,22 @@ void RosBridge::onImu(const Imu& msg){
     s.imu_frame=msg.header.frame_id;
     s.orientation={msg.orientation.w,msg.orientation.x,msg.orientation.y,msg.orientation.z};
     s.orientation_valid=msg.orientation_covariance[0]!=-1.0 && s.orientation.normalize();
-    if(s.orientation_valid) s.attitude_deg=s.orientation.eulerDeg();
+    if(s.orientation_valid) {
+        // In Gazebo the nominal gimbal orientation is world yaw 1.07 rad +
+        // gyro_to_frame yaw 1.571 rad. GUI setpoints of zero denote
+        // deviations about THIS attitude, not absolute world yaw=0.
+        if(display_relative_attitude_) {
+            const double half=-0.5*equilibrium_world_yaw_deg_*deg2rad;
+            const double c=std::cos(half), v=std::sin(half);
+            const Quaternion a=s.orientation;
+            Quaternion relative{c*a.w-v*a.z,
+                                c*a.x-v*a.y,
+                                c*a.y+v*a.x,
+                                c*a.z+v*a.w};
+            if(relative.normalize()) s.orientation=relative;
+        }
+        s.attitude_deg=s.orientation.eulerDeg();
+    }
     s.angular_rate_deg_s={msg.angular_velocity.x*rad2deg,msg.angular_velocity.y*rad2deg,msg.angular_velocity.z*rad2deg};
     s.accel_m_s2={msg.linear_acceleration.x,msg.linear_acceleration.y,msg.linear_acceleration.z};
     std::lock_guard<std::mutex> g(mutex_);

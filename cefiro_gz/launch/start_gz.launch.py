@@ -38,12 +38,6 @@ def generate_launch_description():
         pkg_gz, 'launch', 'spawn_models.launch.py'
     ])
 
-    controllers_launch = PathJoinSubstitution([
-        pkg_control,
-        'launch',
-        'spawn_controllers.launch.py'
-    ])
-
 
     bridge_launch = PathJoinSubstitution([
         pkg_gz, 'launch', 'gz_bridge.launch.py'
@@ -66,9 +60,17 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(bridge_launch)
     )
 
-    controllers = IncludeLaunchDescription(
-    PythonLaunchDescriptionSource(controllers_launch)
-)
+    # Dedicated simulation-only controller. Do not spawn the legacy
+    # ros2_control plugin, which is not wired to the standalone actuator node.
+    balance = Node(
+        package='cefiro_control',
+        executable='cefiro_balance_node.py',
+        name='cefiro_balance',
+        parameters=[PathJoinSubstitution([
+            pkg_control, 'config', 'balance_sim.yaml'
+        ]), {'use_sim_time': use_sim_time}],
+        output='screen',
+    )
 
     # spawn_models creates desk -> lamp -> robot, each triggered only when
     # the preceding local ros_gz_sim/create command finishes successfully.
@@ -141,7 +143,7 @@ def generate_launch_description():
         world,
         actuator_node,
         description,
-        controllers,
+        balance,
         bridge,
         wait_for_server,
     ])

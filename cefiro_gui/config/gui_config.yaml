@@ -1,6 +1,10 @@
 cefiro_hmi:
   ros__parameters:
     use_sim_time: true
+    # Show simulation attitude relative to the nominal URDF gimbal pose.
+    # Disable for hardware GUI configurations.
+    display_relative_attitude: true
+    equilibrium_world_yaw_deg: 151.318
     imu_topic: /imu/data
     magnetometer_topic: /magnetometer/data
     barometer_topic: /bmp581/air_pressure

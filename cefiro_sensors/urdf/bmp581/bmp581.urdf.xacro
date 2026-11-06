@@ -13,7 +13,7 @@
   <xacro:property name="g_mm2_to_kg_m2" value="${0.000000001}"/>
 
   <!-- Base link configuration -->
-  <link name="base_link">
+  <link name="bmp581_link">
 
     <visual name="bmp581_visual">
       <origin xyz="${L['visual_origin_rpy'][0]} ${L['visual_origin_rpy'][1]} ${L['visual_origin_rpy'][2]}" rpy="${L['visual_origin_rpy'][0]} ${L['visual_origin_rpy'][1]} ${L['visual_origin_rpy'][2]}" />

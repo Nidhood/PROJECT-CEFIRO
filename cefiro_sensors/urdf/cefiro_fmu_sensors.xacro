@@ -2,18 +2,21 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <!-- The board is part of the measured drone mass and the frame STL.
-       These fixed child links provide sensor coordinates and Gazebo measurements,
-       without counting the small chips twice or adding self-collisions. -->
+       The meshless fixed links preserve sensor TF frames; all Gazebo sensors
+       are attached to drone_body_link, with no sensor visual/collision meshes. -->
   <xacro:property name="sensor_mm_to_m" value="${0.001}"/>
 
-  <xacro:macro name="cefiro_fmu_chip" params="name parent mount mesh rgba">
+  <!-- Meshless sensor TF frames. Gazebo lumps these fixed child frames into
+       drone_body_link; sensors are attached directly to the body in SDF. -->
+  <xacro:macro name="cefiro_fmu_chip" params="name parent mount">
+    <!-- Tiny valid inertial avoids URDF parser warnings; no visual or collision.
+         These masses are numerical placeholders and not characterized. -->
     <link name="${name}_link">
-      <visual name="${name}_visual">
+      <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <!-- Sensor STL vertices are already expressed in metres. -->
-        <geometry><mesh filename="${mesh}" scale="1 1 1"/></geometry>
-        <material name="${name}_material"><color rgba="${rgba}"/></material>
-      </visual>
+        <mass value="0.00001"/>
+        <inertia ixx="1e-10" ixy="0" ixz="0" iyy="1e-10" iyz="0" izz="1e-10"/>
+      </inertial>
     </link>
     <joint name="${name}_joint" type="fixed">
       <parent link="${parent}"/>
@@ -31,7 +34,13 @@
 
     <!-- The top face of the FMU mesh occupies X=[29,69], Y=[-14.5,85.5]
          and is at Z=54.1014 mm in the drone_body_link CAD frame. -->
-    <link name="fmu_mount_link"/>
+    <link name="fmu_mount_link">
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.00001"/>
+        <inertia ixx="1e-10" ixy="0" ixz="0" iyy="1e-10" iyz="0" izz="1e-10"/>
+      </inertial>
+    </link>
     <joint name="drone_to_fmu_mount" type="fixed">
       <parent link="${mount['parent']}"/>
       <child link="fmu_mount_link"/>
@@ -39,19 +48,24 @@
               rpy="${mount['origin_rpy'][0]} ${mount['origin_rpy'][1]} ${mount['origin_rpy'][2]}"/>
     </joint>
 
-    <xacro:cefiro_fmu_chip name="imu_icm42670p" parent="fmu_mount_link"
-      mount="${imu}" mesh="package://cefiro_sensors/urdf/imu_icm42670p/meshes/base_link.stl"
-      rgba="0.14 0.66 0.34 1"/>
-    <xacro:cefiro_fmu_chip name="magnetometer_mmc5983ma" parent="fmu_mount_link"
-      mount="${mag}" mesh="package://cefiro_sensors/urdf/magnetometer_mmc5983ma/meshes/base_link.stl"
-      rgba="0.94 0.63 0.18 1"/>
-    <xacro:cefiro_fmu_chip name="bmp581" parent="fmu_mount_link"
-      mount="${baro}" mesh="package://cefiro_sensors/urdf/bmp581/meshes/visuals/base_link.stl"
-      rgba="0.34 0.72 0.88 1"/>
 
-    <!-- Gazebo Harmonic sensor systems are already enabled in main_world.sdf. -->
-    <gazebo reference="imu_icm42670p_link">
+    <xacro:cefiro_fmu_chip name="imu_icm42670p" parent="fmu_mount_link"
+      mount="${imu}"/>
+    <xacro:cefiro_fmu_chip name="magnetometer_mmc5983ma" parent="fmu_mount_link"
+      mount="${mag}"/>
+    <xacro:cefiro_fmu_chip name="bmp581" parent="fmu_mount_link"
+      mount="${baro}"/>
+
+    <!-- Gazebo Harmonic sensor systems are enabled in main_world.sdf.
+         Attach each Gazebo sensor directly to the physical drone body.
+         Therefore fixed-joint lumping cannot discard the Gazebo sensors.
+         The current mount/chip orientation values are all zero in YAML;
+         sensor pose XYZ equals FMU mount + chip offset in this configuration.
+         If board RPY is changed, update these pose expressions to rotate
+         chip offsets using the board orientation. TF chip links remain. -->
+    <gazebo reference="${mount['parent']}">
       <sensor name="imu_icm42670p" type="imu">
+        <pose>${(mount['origin_mm'][0] + imu['offset_mm'][0]) * sensor_mm_to_m} ${(mount['origin_mm'][1] + imu['offset_mm'][1]) * sensor_mm_to_m} ${(mount['origin_mm'][2] + imu['offset_mm'][2]) * sensor_mm_to_m} ${mount['origin_rpy'][0] + imu['rpy'][0]} ${mount['origin_rpy'][1] + imu['rpy'][1]} ${mount['origin_rpy'][2] + imu['rpy'][2]}</pose>
         <always_on>true</always_on>
         <update_rate>${imu['update_rate_hz']}</update_rate>
         <topic>/imu/data</topic>
@@ -71,8 +85,9 @@
       </sensor>
     </gazebo>
 
-    <gazebo reference="magnetometer_mmc5983ma_link">
+    <gazebo reference="${mount['parent']}">
       <sensor name="magnetometer_mmc5983ma" type="magnetometer">
+        <pose>${(mount['origin_mm'][0] + mag['offset_mm'][0]) * sensor_mm_to_m} ${(mount['origin_mm'][1] + mag['offset_mm'][1]) * sensor_mm_to_m} ${(mount['origin_mm'][2] + mag['offset_mm'][2]) * sensor_mm_to_m} ${mount['origin_rpy'][0] + mag['rpy'][0]} ${mount['origin_rpy'][1] + mag['rpy'][1]} ${mount['origin_rpy'][2] + mag['rpy'][2]}</pose>
         <always_on>true</always_on>
         <update_rate>${mag['update_rate_hz']}</update_rate>
         <topic>/magnetometer/data</topic>
@@ -85,8 +100,9 @@
       </sensor>
     </gazebo>
 
-    <gazebo reference="bmp581_link">
+    <gazebo reference="${mount['parent']}">
       <sensor name="bmp581_barometer" type="air_pressure">
+        <pose>${(mount['origin_mm'][0] + baro['offset_mm'][0]) * sensor_mm_to_m} ${(mount['origin_mm'][1] + baro['offset_mm'][1]) * sensor_mm_to_m} ${(mount['origin_mm'][2] + baro['offset_mm'][2]) * sensor_mm_to_m} ${mount['origin_rpy'][0] + baro['rpy'][0]} ${mount['origin_rpy'][1] + baro['rpy'][1]} ${mount['origin_rpy'][2] + baro['rpy'][2]}</pose>
         <always_on>true</always_on>
         <update_rate>${baro['update_rate_hz']}</update_rate>
         <topic>/bmp581/air_pressure</topic>

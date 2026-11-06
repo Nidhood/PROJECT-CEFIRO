@@ -3,6 +3,7 @@ project(cefiro_msgs)
 
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}

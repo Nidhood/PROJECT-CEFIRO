@@ -4,6 +4,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -17,6 +18,6 @@ def generate_launch_description():
             executable='cefiro_gui_node',
             name='cefiro_hmi',
             output='screen',
-            parameters=[config, {'use_sim_time': LaunchConfiguration('use_sim_time')}],
+            parameters=[config, {'use_sim_time': ParameterValue(LaunchConfiguration('use_sim_time'), value_type=bool)}],
         ),
     ])

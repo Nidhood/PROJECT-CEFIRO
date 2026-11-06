@@ -43,6 +43,8 @@ private:
     void tickWaveform();
     void previewWaveform();
     void publishCommand();
+    void resetEquilibriumReference();
+    void updateReferenceGate();
     void publishMotorCommand();
     void startOutput();
     void stopOutput(bool emergency);
@@ -120,6 +122,7 @@ private:
     QTableWidget* response_metrics_table_{nullptr};
     QTabWidget* ref_tabs_{nullptr};
     QLabel* command_value_{nullptr};
+    QLabel* reference_gate_label_{nullptr};
     QLabel* applied_value_{nullptr};
     QLabel* metric_value_{nullptr};
     QLabel* system_imu_{nullptr};
@@ -147,6 +150,7 @@ private:
     bool manual_mode_{false};
     bool manual_dirty_{false};
     bool command_active_{false};
+    bool reference_pad_unlocked_{false};
     bool wave_running_{false};
     bool e_stop_{false};
     bool recorder_active_{false};

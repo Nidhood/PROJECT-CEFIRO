@@ -12,7 +12,9 @@ namespace cefiro::gui {
 namespace {
 constexpr std::array<const char*,3> kNames = {"ROLL", "PITCH", "YAW"};
 constexpr std::array<const char*,3> kColors = {"#ff5252", "#4ee58c", "#448cff"};
-constexpr double kFullCircle = 360.0;
+constexpr double kHalfCircle = 180.0;
+// Must match balance_sim.yaml reference_limits_deg, BODY roll / pitch / yaw.
+constexpr std::array<double,3> kSafeLimits = {5.0,5.0,10.0};
 }
 
 AttitudeCommandPad::AttitudeCommandPad(QWidget* parent) : QWidget(parent) {
@@ -20,7 +22,9 @@ AttitudeCommandPad::AttitudeCommandPad(QWidget* parent) : QWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setMouseTracking(true);
     setToolTip("Select a colored ring and drag its needle to set the reference. "
-               "Mouse wheel adjusts the selected axis; double-click resets it.");
+               "Experimental reference limits: R +/-5 deg, P +/-5 deg, Y +/-10 deg. "
+               "Full-circle scale: top=0, right=+half range, left=-half range; bottom=range limits. "
+               "Mouse wheel: 1 deg; double-click resets. Enabled only after BALANCE: CAPTURED.");
 }
 void AttitudeCommandPad::setAngles(const Vec3& angles) { angles_ = angles; update(); }
 void AttitudeCommandPad::setEnabledForEditing(bool enabled) {
@@ -53,11 +57,17 @@ int AttitudeCommandPad::ringAt(const QPointF& position) const {
 void AttitudeCommandPad::editAt(const QPointF& pos) {
     if (active_axis_ < 0 || !editing_enabled_) return;
     const QPointF delta = pos - center();
-    const double bearing = std::atan2(-delta.y(), delta.x()) * rad2deg;
-    // Angle zero is at the 12 o'clock position; clockwise is positive.
-    double angle = std::remainder(90.0 - bearing, kFullCircle);
-    if (active_axis_ == 1) angle = std::clamp(angle, -89.0, 89.0);
-    else angle = std::clamp(angle, -180.0, 180.0);
+    // Use the ENTIRE circle for the SAFE reference range:
+    // top = 0, right = +limit/2, left = -limit/2,
+    // bottom clockwise = +limit, bottom counter-clockwise = -limit.
+    // The single unavoidable +/- endpoint seam is at 6 o'clock.
+    const double bearing = std::atan2(delta.x(), -delta.y()) * rad2deg;
+    const double limit = kSafeLimits[std::size_t(active_axis_)];
+    double angle = std::clamp(bearing / kHalfCircle * limit, -limit, limit);
+    // Crossing the bottom seam must NOT jump directly from +limit to -limit.
+    const double previous = angles_[std::size_t(active_axis_)];
+    if (previous > .8*limit && angle < -.8*limit) angle = limit;
+    if (previous < -.8*limit && angle > .8*limit) angle = -limit;
     if (std::abs(angle - angles_[std::size_t(active_axis_)]) < 0.02) return;
     angles_[std::size_t(active_axis_)] = angle;
     if (on_edited_) on_edited_(active_axis_, angle);
@@ -94,8 +104,8 @@ void AttitudeCommandPad::wheelEvent(QWheelEvent* event) {
     const int axis = ringAt(event->position());
     if (axis < 0 || event->angleDelta().y() == 0) { event->ignore(); return; }
     active_axis_ = axis;
-    const double lo = axis == 1 ? -89.0 : -180.0;
-    const double hi = axis == 1 ? 89.0 : 180.0;
+    const double lo = -kSafeLimits[std::size_t(axis)];
+    const double hi =  kSafeLimits[std::size_t(axis)];
     const double updated = std::clamp(angles_[std::size_t(axis)] +
                   event->angleDelta().y() / 120.0, lo, hi);
     angles_[std::size_t(axis)] = updated;
@@ -127,9 +137,10 @@ void AttitudeCommandPad::paintEvent(QPaintEvent*) {
         p.setPen(QPen(color,3,Qt::SolidLine,Qt::RoundCap));
         const QRectF arc(c.x()-r,c.y()-r,2*r,2*r);
         const double start_angle = 90.0;
-        const double sweep = std::clamp(a[std::size_t(i)],-179.9,179.9);
+        const double sweep = std::clamp(a[std::size_t(i)] / kSafeLimits[std::size_t(i)] * kHalfCircle,
+                                        -kHalfCircle,kHalfCircle);
         p.drawArc(arc,int(start_angle*16),int(-sweep*16));
-        const double theta = (90.0-a[std::size_t(i)])*deg2rad;
+        const double theta = (90.0-sweep)*deg2rad;
         const QPointF needle(c.x()+r*std::cos(theta),c.y()-r*std::sin(theta));
         p.setPen(QPen(color,2));
         p.drawLine(c,needle);

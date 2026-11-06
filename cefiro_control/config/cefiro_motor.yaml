@@ -10,4 +10,3 @@ cefiro:
       viscous_friction: 0.001 # N*m/(rad/s)
       coulomb_friction: 0.0 # N*m
       friction_smoothing: 0.1 # rad/s
-      # It is necessary to update this information with D3536 motor's official data

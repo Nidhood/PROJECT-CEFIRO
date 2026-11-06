@@ -82,6 +82,8 @@ private:
     std::string hardware_status_{""};
     std::string imu_topic_,mag_topic_,baro_topic_,reference_topic_;
     std::string motor_rpm_topic_,motor_direction_topic_;
+    bool display_relative_attitude_{false};
+    double equilibrium_world_yaw_deg_{151.318};
     bool running_{false};
 };
 }

@@ -1,0 +1,87 @@
+cefiro_balance:
+  ros__parameters:
+    use_sim_time: true
+    simulation_only: true
+    enable_swingup: true
+    # Must match cefiro_gz/launch/spawn_robot.launch.py R,P,Y
+    spawn_rpy_rad: [0.0, 0.0, 1.07]
+    # Empty => resolved from installed cefiro_description share directory.
+    model_yaml: ''
+    update_rate_hz: 50.0
+
+    # Joint-space model follows the URDF chain yaw -> pitch -> roll -> drone.
+    # The last ring's hinge is almost body +Y because gyro_to_frame has yaw=1.571.
+    # A body-frame ROLL PID would therefore actuate the wrong hinge.
+    swingup_duration_s: 11.0
+    swingup_timeout_s: 36.0
+    braking_timeout_s: 12.0
+    spinup_hold_s: 0.9
+    spinup_timeout_s: 7.0
+    spinup_fraction: 0.40
+    trajectory_kp_nm_rad: [0.12, 0.65, 0.90]
+    trajectory_kd_nm_s_rad: [0.14, 0.32, 0.32]
+    max_generalized_torque_nm: [0.40, 1.25, 1.25]
+
+    lqr_angle_scale_deg: [14.0, 12.0, 12.0]
+    lqr_rate_scale_deg_s: [70.0, 65.0, 65.0]
+    lqr_torque_scale_nm: [0.07, 0.20, 0.20]
+    yaw_return_duration_s: 20.0
+    lqr_blend_duration_s: 1.8
+    catch_min_hold_s: 2.5
+    catch_timeout_s: 18.0
+    yaw_align_timeout_s: 35.0
+    brake_angle_deg: 12.0
+    brake_rate_deg_s: 18.0
+    brake_hold_s: 0.35
+    yaw_start_angle_deg: 6.0
+    yaw_start_rate_deg_s: 14.0
+    yaw_motion_angle_deg: 9.0
+    yaw_motion_rate_deg_s: 25.0
+    catch_yaw_torque_nm: 0.075
+    yaw_align_torque_nm: 0.10
+    local_escape_angle_deg: 35.0
+    local_escape_rate_deg_s: 100.0
+    local_escape_hold_s: 0.35
+    joint_rate_filter_alpha: 0.45
+    catch_angle_deg: 32.0
+    catch_rate_deg_s: 90.0
+    capture_roll_pitch_deg: 9.0
+    capture_yaw_deg: 14.0
+    capture_rate_deg_s: 25.0
+    capture_hold_s: 0.55
+    max_angle_deg: 170.0
+    max_rate_deg_s: 400.0
+    max_joint_ik_condition: 15.0
+    max_joint_ik_residual_deg: 2.0
+
+    # Provisional CEFIRO actuator coefficients (consistent with actuators.yaml).
+    nominal_rpm: 4700.0
+    max_rpm: 5400.0
+    rpm_slew_per_s: 10000.0
+    max_allocation_residual_nm: 0.22
+    allocation_fault_hold_s: 1.0
+    max_rpm_tracking_error: 650.0
+    rpm_tracking_fault_hold_s: 1.2
+    prop_ct: 0.10
+    prop_cq: 0.015
+    prop_diameter_m: 0.254
+    air_density_kg_m3: 1.225
+
+    imu_timeout_s: 0.25
+    mag_timeout_s: 0.60
+    actuator_timeout_s: 0.45
+    reference_timeout_s: 0.9
+    # Conservative initial SIM reference envelope: [BODY roll,pitch,yaw] deg.
+    # Must match GUI visible limits; these are TEST LIMITS, not proven capability.
+    reference_limits_deg: [5.0, 5.0, 10.0]
+    reference_slew_deg_s: [6.0, 6.0, 8.0]
+    reference_accel_deg_s2: [18.0, 18.0, 24.0]
+    # Anti-windup residual trim, active ONLY in CAPTURED (URDF joint yaw,pitch,roll)
+    reference_integral_gain_nm_rad_s: [0.12, 0.45, 0.45]
+    reference_integral_limit_nm: [0.055, 0.12, 0.12]
+    reference_integral_leak_per_s: 0.015
+    reference_integral_allocation_gate_nm: 0.025
+    reference_integral_rpm_gate: 450.0
+    reference_integral_target_rate_gate_deg_s: 0.8
+    arm_ack_timeout_s: 0.75
+    require_magnetometer: true

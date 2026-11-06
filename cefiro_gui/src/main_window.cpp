@@ -59,6 +59,7 @@ const std::array<Theme,6> kTheme{{
  {"#141b2e","#e2e8f0","#334155","#60a5fa","#34d399","#a78bfa"},
  {"#000f1a","#d0f0ff","#135071","#00e6ff","#b084ff","#00ff99"},
  {"#0b0b18","#eaf2ff","#26325b","#ff2bd6","#00f5ff","#ccff00"}}};
+constexpr std::array<double,3> kReferenceLimitsDeg = {5.0,5.0,10.0};
 QString f(double v,int places=2){return QString::number(std::abs(v)<1.e-7?0.:v,'f',places);}
 QFrame* hline(QWidget* p){auto* l=new QFrame(p);l->setFrameShape(QFrame::HLine);l->setObjectName("hudSeparator");return l;}
 }
@@ -71,7 +72,7 @@ QWidget* MainWindow::titledPanel(const QString& title,QVBoxLayout*& inner,QWidge
  auto* panel=new QFrame(parent);panel->setObjectName("panel");inner=new QVBoxLayout(panel);inner->setContentsMargins(11,9,11,10);inner->setSpacing(7);inner->addWidget(label(title,"panelTitle"));return panel;
 }
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
- setWindowTitle("CEFIRO GUI v1.5.0 | ATTITUDE CONTROL HMI");setMinimumSize(1180,700);resize(1600,930);
+ setWindowTitle("CEFIRO GUI v1.5.3 | FULL-CIRCLE REFERENCE | SIM");setMinimumSize(1180,700);resize(1600,930);
  clock_.start();publish_clock_.start();
  stack_=new QStackedWidget(this);setCentralWidget(stack_);
  buildToolbar();buildDashboard();buildControl();buildSystem();
@@ -171,7 +172,7 @@ void MainWindow::buildControl() {
     title->setSpacing(0);
     title->addWidget(label("CEFIRO / ATTITUDE OPERATIONS", "eyebrow"));
     title->addWidget(label("ATTITUDE CONTROL & EXPERIMENTS", "pageTitle"));
-    title->addWidget(label("CEFIRO GUI v1.5.0  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
+    title->addWidget(label("CEFIRO GUI v1.5.3 BALANCED REFERENCES  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
     header->addLayout(title);
     header->addStretch();
     record_btn_ = new QPushButton("DATA RECORDER", page);
@@ -203,7 +204,7 @@ void MainWindow::buildControl() {
     auto* ctrl = new QHBoxLayout;
     ctrl->addWidget(label("STRATEGY", "eyebrow"));
     controller_ = new QComboBox(architecture);
-    controller_->addItems({"OPEN LOOP", "PID", "LQR", "CUSTOM"});
+    controller_->addItems({"OPEN LOOP", "PID", "LQR", "SWING-UP + LQR (SIM)", "CUSTOM"});
     ctrl->addWidget(controller_, 1);
     arch->addLayout(ctrl);
     auto* source = new QHBoxLayout;
@@ -257,7 +258,10 @@ void MainWindow::buildControl() {
     auto* gimbal_layout = new QVBoxLayout(gimbal_tab);
     gimbal_layout->setContentsMargins(4, 4, 4, 4);
     gimbal_layout->setSpacing(4);
-    gimbal_layout->addWidget(label("3-AXIS REFERENCE GIMBAL  /  DRAG THE COLORED RINGS", "eyebrow"));
+    gimbal_layout->addWidget(label("BALANCED ATTITUDE REFERENCE  /  DRAG THE COLORED RINGS", "eyebrow"));
+    reference_gate_label_ = label("LOCKED · Waiting for controller state BALANCE: CAPTURED", "hint");
+    reference_gate_label_->setWordWrap(true);
+    gimbal_layout->addWidget(reference_gate_label_);
     command_pad_ = new AttitudeCommandPad(gimbal_tab);
     command_pad_->setMinimumHeight(210);
     gimbal_layout->addWidget(command_pad_, 1);
@@ -265,7 +269,7 @@ void MainWindow::buildControl() {
     auto_fields->setHorizontalSpacing(4);
     auto_fields->setVerticalSpacing(2);
     for (int i=0; i<3; ++i) {
-        const double limit = i == 1 ? 89.0 : 180.0;
+        const double limit = kReferenceLimitsDeg[std::size_t(i)];
         auto_fields->addWidget(label(kAxisNames[i], "eyebrow"), 0, i);
         manual_[std::size_t(i)] = spin(-limit, limit, 0., 1., 2);
         auto_fields->addWidget(manual_[std::size_t(i)], 1, i);
@@ -273,7 +277,7 @@ void MainWindow::buildControl() {
         auto_fields->addWidget(manual_labels_[std::size_t(i)], 2, i);
     }
     gimbal_layout->addLayout(auto_fields);
-    gimbal_layout->addWidget(label("Wheel: 1° increments · Double-click: zero selected axis", "hint"));
+    gimbal_layout->addWidget(label("360° dial: top=0, right=+half range, left=-half range, bottom=+/-limit · 1° wheel", "hint"));
     auto_command_tabs_->addTab(gimbal_tab, "Reference gimbal");
 
     auto* trajectory_tab = new QWidget(auto_command_tabs_);
@@ -459,7 +463,7 @@ void MainWindow::buildControl() {
     send->setObjectName("secondary");
     gains_layout->addWidget(send);
     connect(send,&QPushButton::clicked,this,[this]{sendGains();});
-    gains_layout->addWidget(label("Requires a compatible external controller subscriber.","hint"));
+    gains_layout->addWidget(label("Balance LQR gains are generated from balance_sim.yaml on controller startup; GUI gain publication does not retune this controller.","hint"));
     ref_tabs_->addTab(gains_tab,"Gains");
 
     auto* metrics_tab = new QWidget(ref_tabs_);
@@ -553,18 +557,26 @@ void MainWindow::buildSystem(){
  system_controller_=label("Controller: NO FEEDBACK","metricValue");system_topics_=label("Topics initializing...","hint");system_topics_->setTextInteractionFlags(Qt::TextSelectableByMouse);
  ros->addWidget(system_controller_);ros->addWidget(hline(ros_panel));ros->addWidget(system_topics_);ros->addStretch();g->addWidget(ros_panel,0,1);
  g->setColumnStretch(0,1);g->setColumnStretch(1,1);
- auto* note=label("The GUI publishes controller requests but does not implement attitude dynamics, controllers, actuators or motor arming.\n"
- "A controller node must subscribe to the documented interface and report status before actuation can be confirmed.","hint");root->addWidget(note);root->addStretch();
+ auto* note=label("LQR = manual capture. SWING-UP + LQR (SIM) = automatic roll inversion and capture in Gazebo ONLY.\n"
+ "Select SWING-UP + LQR (SIM), Output enabled and START TEST; monitor BALANCE status and SAFE STOP.","hint");root->addWidget(note);root->addStretch();
  system_topics_->setText(QString("IMU: %1\nMAG: %2\nBARO: %3\nREF: %4\n"
  "ENABLE: /cefiro/control/enable\nSTOP: /cefiro/control/emergency_stop\n"
  "STATUS: /cefiro/control/status\nPID: /cefiro/control/pid_gains\nLQR: /cefiro/control/lqr_gain")
  .arg(QString::fromStdString(bridge_.imuTopic()),QString::fromStdString(bridge_.magTopic()),QString::fromStdString(bridge_.baroTopic()),QString::fromStdString(bridge_.refTopic())));
 }
 void MainWindow::connectUi(){
+ connect(controller_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+         this,[this](int){
+             if(command_active_)stopOutput(false);
+             resetEquilibriumReference();
+             updateReferenceGate();
+         });
  connect(manual_btn_,&QPushButton::clicked,this,[this]{setManual(true);});
  connect(automatic_btn_,&QPushButton::clicked,this,[this]{setManual(false);});
  command_pad_->setOnEdited([this](int axis, double value) {
-     if (axis < 0 || axis > 2 || manual_mode_) return;
+     if (axis < 0 || axis > 2 || manual_mode_ || !reference_pad_unlocked_) return;
+     value = std::clamp(value,-kReferenceLimitsDeg[std::size_t(axis)],
+                         kReferenceLimitsDeg[std::size_t(axis)]);
      {
          QSignalBlocker block(manual_[std::size_t(axis)]);
          manual_[std::size_t(axis)]->setValue(value);
@@ -577,8 +589,9 @@ void MainWindow::connectUi(){
  for(int i=0;i<3;++i){connect(manual_[size_t(i)],QOverload<double>::of(&QDoubleSpinBox::valueChanged),this,[this,i](double value){
    manual_labels_[size_t(i)]->setText(f(value)+"°");
    command_pad_->setAngles({manual_[0]->value(), manual_[1]->value(), manual_[2]->value()});
-   if (!manual_mode_) {
-       command_deg_[size_t(i)] = value;
+   if (!manual_mode_ && reference_pad_unlocked_) {
+       command_deg_[size_t(i)] = std::clamp(value,-kReferenceLimitsDeg[size_t(i)],
+                                          kReferenceLimitsDeg[size_t(i)]);
        manual_dirty_ = true;
        if (command_active_ && publish_clock_.elapsed() > 45) publishCommand();
    }
@@ -722,19 +735,74 @@ void MainWindow::setManual(bool yes){
  if (link_all_motors_) link_all_motors_->setEnabled(yes);
  command_source_stack_->setCurrentIndex(yes ? 1 : 0);
  if (command_pad_) {
-   command_pad_->setEnabledForEditing(!yes);
+   command_pad_->setEnabledForEditing(!yes && reference_pad_unlocked_);
    command_pad_->setAngles({manual_[0]->value(),manual_[1]->value(),manual_[2]->value()});
  }
  if(wave_running_){waveform_timer_->stop();wave_running_=false;}
- if(!yes) for(int i=0;i<3;++i) command_deg_[size_t(i)] = manual_[size_t(i)]->value();
+ if(!yes) for(int i=0;i<3;++i) command_deg_[size_t(i)] =
+    std::clamp(manual_[size_t(i)]->value(),-kReferenceLimitsDeg[size_t(i)],
+               kReferenceLimitsDeg[size_t(i)]);
+ updateReferenceGate();
  if(command_active_){ if(manual_mode_) publishMotorCommand(); else publishCommand(); }
+}
+void MainWindow::resetEquilibriumReference(){
+    reference_pad_unlocked_ = false;
+    command_deg_ = {0.0,0.0,0.0};
+    for (int i=0;i<3;++i) {
+        QSignalBlocker block(manual_[size_t(i)]);
+        manual_[size_t(i)]->setValue(0.0);
+        manual_[size_t(i)]->setEnabled(false);
+        manual_labels_[size_t(i)]->setText("0.00°");
+    }
+    if(command_pad_){
+        command_pad_->setAngles({0.,0.,0.});
+        command_pad_->setEnabledForEditing(false);
+    }
+    manual_dirty_ = false;
+}
+void MainWindow::updateReferenceGate(){
+    const bool is_lqr = controller_ && controller_->currentText().contains("LQR");
+    // IMPORTANT: only an acknowledged CAPTURED is a proof of successful
+    // state transition. An enabled button does NOT prove balance.
+    const bool balanced = bridge_.feedbackFresh(1.2) &&
+                          bridge_.controllerStatus()=="BALANCE: CAPTURED";
+    const bool ready = is_lqr && !manual_mode_ && command_active_ &&
+                       !e_stop_ && bridge_.imuFresh(0.5) && balanced;
+    if(reference_pad_unlocked_ && !ready){
+        resetEquilibriumReference();
+        // Never leave a stale off-equilibrium reference after losing CAPTURED.
+        if(command_active_ && !manual_mode_) publishCommand();
+    }
+    reference_pad_unlocked_=ready;
+    if(command_pad_)command_pad_->setEnabledForEditing(ready);
+    for(auto* m:manual_)if(m)m->setEnabled(ready);
+    if(auto_command_tabs_ && is_lqr){
+        auto_command_tabs_->setTabEnabled(1,false); // no waveform bypass for LQR
+        if(auto_command_tabs_->currentIndex()!=0)auto_command_tabs_->setCurrentIndex(0);
+    } else if(auto_command_tabs_)auto_command_tabs_->setTabEnabled(1,!manual_mode_);
+    if(reference_gate_label_){
+        if(ready) reference_gate_label_->setText(
+            "UNLOCKED · BALANCE: CAPTURED · R +/-5°, P +/-5°, Y +/-10° (SIM pilot limits)");
+        else reference_gate_label_->setText(
+            "LOCKED · Wait for BALANCE: CAPTURED and valid IMU · pilot inputs disabled");
+    }
 }
 void MainWindow::startOutput(){
  if(!output_enabled_->isChecked()){
   QMessageBox::information(this,"Output inhibited","Enable 'Output enabled' before sending controller commands.");return;
  }
+ if(!manual_mode_ && controller_->currentText().contains("LQR") && !bridge_.magFresh()) {
+  QMessageBox::warning(this,"Magnetometer unavailable", "CEFIRO balance capture requires the characterized MMC5983MA magnetometer topic."); return;
+ }
  if(!manual_mode_ && !bridge_.imuFresh()){
   QMessageBox::warning(this,"IMU unavailable","No recent IMU data. Automatic reference generation is inhibited to avoid blind actuation.");return;
+ }
+ if (!manual_mode_ && controller_->currentText() == "SWING-UP + LQR (SIM)" && !bridge_.feedbackFresh()) {
+   QMessageBox::critical(this, "Swing-up controller OFFLINE",
+     "No live controller feedback on /cefiro/control/status.\n"
+     "Start Gazebo with cefiro_balance, verify the selected ROS overlay, and retry.\n"
+     "Automatic inversion is inhibited until the controller is online.");
+   return;
  }
  if(!manual_mode_ && !bridge_.feedbackFresh()){
   const auto response=QMessageBox::warning(this,"Controller feedback unavailable",
@@ -743,13 +811,37 @@ void MainWindow::startOutput(){
     QMessageBox::Yes|QMessageBox::No,QMessageBox::No);
   if(response!=QMessageBox::Yes)return;
  }
+ if (!manual_mode_ && controller_->currentText() == "SWING-UP + LQR (SIM)") {
+   const auto response=QMessageBox::warning(this,"SIMULATION ONLY: automatic inversion",
+     "This experimental roll swing-up can spin the quadrotor through large angles.\n"
+     "It is NOT validated for real ESCs or propellers. Launch Gazebo only, "
+     "keep the simulated gimbal clear, and watch SAFE STOP.\n\n"
+     "Start automatic inversion in SIMULATION?",
+     QMessageBox::Yes|QMessageBox::No,QMessageBox::No);
+   if(response!=QMessageBox::Yes)return;
+ }
+ // Tell the balance node that manual RPM mode owns the actuator topic BEFORE enabling.
+ // Avoid stale ATTITUDE/LQR mode causing dual publishers on the same motors.
+ if (manual_mode_) bridge_.publishReference({0.0,0.0,0.0},"MANUAL","OPEN LOOP");
+ resetEquilibriumReference();
  e_stop_=false;command_active_=true;bridge_.setEnabled(true);
+ updateReferenceGate();
  if (manual_mode_) bridge_.setMotorArmed(true);
  activate_btn_->setText("COMMANDS ENABLED");
  if(auto_record_->isChecked()&&!recorder_active_)startRecording();
  if(manual_mode_){
    wave_running_=false;
    publishMotorCommand();
+ } else if (controller_->currentText().contains("LQR")) {
+   // Equilibrium-only reference. The simulation node performs swing-up if explicitly selected.
+   command_deg_={0.0,0.0,0.0};
+   for (int i=0;i<3;++i) {
+     QSignalBlocker block(manual_[size_t(i)]);
+     manual_[size_t(i)]->setValue(0.0);
+   }
+   command_pad_->setAngles({0.0,0.0,0.0});
+   wave_running_=false;
+   publishCommand();
  } else {
    waveform_clock_.start();
    wave_running_=true;
@@ -764,7 +856,7 @@ void MainWindow::stopOutput(bool emergency){
     wave_running_ = false;
     command_active_ = false;
     e_stop_ = emergency;
-    command_deg_={0.,0.,0.};
+    resetEquilibriumReference();
     bridge_.publishReference(command_deg_,"ATTITUDE",controller_->currentText().toStdString());
     bridge_.publishMotorCommand({0.0,0.0,0.0,0.0}, motor_command_direction_);
     bridge_.setMotorArmed(false);
@@ -783,6 +875,12 @@ void MainWindow::tickWaveform(){
 }
 void MainWindow::publishCommand(){
  if(!command_active_||e_stop_)return;
+ // Nonzero LQR references may only leave the GUI after confirmed CAPTURED.
+ if(!manual_mode_ && controller_->currentText().contains("LQR")) {
+    if (!reference_pad_unlocked_) command_deg_={0.0,0.0,0.0};
+    else for(std::size_t i=0;i<3;++i)command_deg_[i]=
+       std::clamp(command_deg_[i],-kReferenceLimitsDeg[i],kReferenceLimitsDeg[i]);
+ }
  publish_clock_.restart();
  if (have_sample_ && last_sample_.orientation_valid && !manual_mode_) {
      for (int axis = 0; axis < 3; ++axis) {
@@ -800,7 +898,12 @@ void MainWindow::publishCommand(){
  last_published_deg_ = command_deg_;
  manual_dirty_ = false;
  command_value_->setText(QString("Reference: R %1° · P %2° · Y %3°").arg(f(command_deg_[0]),f(command_deg_[1]),f(command_deg_[2])));
- applied_value_->setText("Reference request published · awaiting controller feedback");
+ // The UI must not report a controller transition based on a reference publish alone.
+ if (bridge_.feedbackFresh()) {
+   applied_value_->setText("Controller: " + QString::fromStdString(bridge_.controllerStatus()));
+ } else {
+   applied_value_->setText("NO CONTROLLER FEEDBACK - check /cefiro_balance");
+ }
 }
 void MainWindow::publishMotorCommand(){
  if(!command_active_||e_stop_)return;
@@ -815,10 +918,21 @@ void MainWindow::publishMotorCommand(){
 }
 void MainWindow::setMonitorAxis(int idx){if(idx<0||idx>2)return;monitor_axis_=idx;live_->clear();live_->setYRange(idx==1?-95.0:-185.0,idx==1?95.0:185.0);}
 void MainWindow::tick(){
+ updateReferenceGate();
+ // A fresh reference is a GUI heartbeat for the simulation-only balance node.
+ if(command_active_ && !manual_mode_ && controller_->currentText().contains("LQR") &&
+    publish_clock_.elapsed()>150) publishCommand();
  const auto items=bridge_.drain();const bool fresh=bridge_.imuFresh();
  status_ros_->setText(fresh?"ROS: IMU ONLINE":"ROS: IMU WAITING / STALE");
  status_control_->setText(command_active_?"OUTPUT REQUEST: ENABLED":"CONTROL: DISABLED");
  if(bridge_.feedbackFresh())status_control_->setText("CTRL: "+QString::fromStdString(bridge_.controllerStatus()));
+ if (command_active_ && !manual_mode_) {
+   if (bridge_.feedbackFresh()) {
+     applied_value_->setText("Controller: " + QString::fromStdString(bridge_.controllerStatus()));
+   } else {
+     applied_value_->setText("NO CONTROLLER FEEDBACK - swing-up inactive");
+   }
+ }
  // Show the bridge's requested DShot values, never a fabricated measured RPM.
  // The host's configured ceiling is authoritative (300 unless explicitly raised).
  if (manual_mode_) {

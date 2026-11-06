@@ -11,7 +11,7 @@ cefiro:
     spin_reference: viewed_from_positive_drone_z
 
   sensors:
-    # FMU top surface measured from frame.stl; coordinates in drone_body_link.
+    # Meshless FMU sensor frames on the top rectangular deck of frame.stl.
     fmu_mount:
       parent: drone_body_link
       origin_mm: [49.0, 35.5, 54.101]

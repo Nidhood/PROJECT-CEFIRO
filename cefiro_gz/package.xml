@@ -14,6 +14,7 @@
     <depend>gz-sim8</depend>
     <depend>gz-plugin2</depend>
     <exec_depend>cefiro_actuators</exec_depend>
+    <exec_depend>cefiro_control</exec_depend>
     <exec_depend>cefiro_description</exec_depend>
     <exec_depend>cefiro_sensors</exec_depend>
     <exec_depend>ros_gz_bridge</exec_depend>
