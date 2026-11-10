@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QList>
+#include <QPointF>
 #include <QTextStream>
 #include <array>
 #include <memory>
@@ -76,7 +77,10 @@ private:
     QTimer* refresh_{nullptr};
     QTimer* waveform_timer_{nullptr};
     QTimer* manual_publish_timer_{nullptr};
-    std::array<ScopePlot*,6> dash_{};
+    std::array<ScopePlot*,9> dash_{};
+ QCheckBox* real_switch_{nullptr};
+ std::array<QList<QPointF>,3> live_refs_{}, live_meas_{};
+ double last_dshot_time_{-1};
     std::array<QLabel*,3> attitude_values_{};
     std::array<QLabel*,3> rate_values_{};
     std::array<QLabel*,3> rmse_values_{};

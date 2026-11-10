@@ -36,6 +36,7 @@ struct Quaternion {
     }
 };
 struct Telemetry {
+ bool from_real{false};
     double ros_time_s{0.0};
     std::int64_t sequence{0};
     Quaternion orientation{};

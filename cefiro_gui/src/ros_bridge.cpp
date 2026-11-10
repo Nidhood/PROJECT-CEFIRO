@@ -64,40 +64,58 @@ RosBridge::RosBridge() {
     auto mode_topic=node_->declare_parameter<std::string>("mode_topic","/cefiro/control/mode");
     auto strategy_topic=node_->declare_parameter<std::string>("strategy_topic","/cefiro/control/strategy");
     auto status_topic=node_->declare_parameter<std::string>("status_topic","/cefiro/control/status");
-    sub_imu_=node_->create_subscription<Imu>(imu_topic_,rclcpp::SensorDataQoS(),[this](const Imu::SharedPtr m){onImu(*m);});
-    sub_mag_=node_->create_subscription<Mag>(mag_topic_,rclcpp::SensorDataQoS(),[this](const Mag::SharedPtr m){onMag(*m);});
-    sub_baro_=node_->create_subscription<Baro>(baro_topic_,rclcpp::SensorDataQoS(),[this](const Baro::SharedPtr m){onBaro(*m);});
+    sub_imu_=node_->create_subscription<Imu>(imu_topic_,rclcpp::SensorDataQoS(),[this](const Imu::SharedPtr m){onImu(*m,false);});
+ auto real_imu_topic=node_->declare_parameter<std::string>("real_imu_topic","/real/imu/data");
+ sub_real_imu_=node_->create_subscription<Imu>(real_imu_topic,rclcpp::SensorDataQoS(),[this](const Imu::SharedPtr m){onImu(*m,true);});
+    sub_mag_=node_->create_subscription<Mag>(mag_topic_,rclcpp::SensorDataQoS(),[this](const Mag::SharedPtr m){onMag(*m,false);});
+ auto real_mag_topic=node_->declare_parameter<std::string>("real_magnetometer_topic","/real/magnetometer/data");
+ sub_real_mag_=node_->create_subscription<Mag>(real_mag_topic,rclcpp::SensorDataQoS(),[this](const Mag::SharedPtr m){onMag(*m,true);});
+    sub_baro_=node_->create_subscription<Baro>(baro_topic_,rclcpp::SensorDataQoS(),[this](const Baro::SharedPtr m){onBaro(*m,false);});
+ auto real_baro_topic=node_->declare_parameter<std::string>("real_barometer_topic","/real/bmp581/air_pressure");
+ sub_real_baro_=node_->create_subscription<Baro>(real_baro_topic,rclcpp::SensorDataQoS(),[this](const Baro::SharedPtr m){onBaro(*m,true);});
     sub_status_=node_->create_subscription<std_msgs::msg::String>(status_topic,10,[this](const std_msgs::msg::String::SharedPtr m){onStatus(*m);});
     auto hardware_status_topic=node_->declare_parameter<std::string>("hardware_status_topic","/real/cefiro/hardware/status");
     sub_hardware_status_=node_->create_subscription<std_msgs::msg::String>(hardware_status_topic,10,[this](const std_msgs::msg::String::SharedPtr m){onHardwareStatus(*m);});
     pub_reference_=node_->create_publisher<Ref>(reference_topic_,10);
+ pub_real_reference_=node_->create_publisher<Ref>("/real/cefiro/control/attitude_reference",10);
     pub_enabled_=node_->create_publisher<std_msgs::msg::Bool>(enable_topic,10);
+ pub_real_enabled_=node_->create_publisher<std_msgs::msg::Bool>("/real/cefiro/control/enable",10);
     pub_stop_=node_->create_publisher<std_msgs::msg::Bool>(stop_topic,10);
+ pub_real_stop_=node_->create_publisher<std_msgs::msg::Bool>("/real/cefiro/control/emergency_stop",10);
     pub_mode_=node_->create_publisher<std_msgs::msg::String>(mode_topic,10);
+ pub_real_mode_=node_->create_publisher<std_msgs::msg::String>("/real/cefiro/control/mode",10);
     pub_strategy_=node_->create_publisher<std_msgs::msg::String>(strategy_topic,10);
+ pub_real_strategy_=node_->create_publisher<std_msgs::msg::String>("/real/cefiro/control/strategy",10);
     auto pid_topic=node_->declare_parameter<std::string>("pid_gains_topic","/cefiro/control/pid_gains");
     auto lqr_topic=node_->declare_parameter<std::string>("lqr_gain_topic","/cefiro/control/lqr_gain");
     motor_rpm_topic_=node_->declare_parameter<std::string>("motor_rpm_topic","/cefiro_actuators/target_rpm");
     motor_direction_topic_=node_->declare_parameter<std::string>("motor_direction_topic","/cefiro_actuators/motor_direction");
     pub_pid_=node_->create_publisher<std_msgs::msg::Float64MultiArray>(pid_topic,10);
+ pub_real_pid_=node_->create_publisher<std_msgs::msg::Float64MultiArray>("/real/cefiro/control/pid_gains",10);
     pub_lqr_=node_->create_publisher<std_msgs::msg::Float64MultiArray>(lqr_topic,10);
+ pub_real_lqr_=node_->create_publisher<std_msgs::msg::Float64MultiArray>("/real/cefiro/control/lqr_gain",10);
     pub_motor_rpm_=node_->create_publisher<cefiro_msgs::msg::MotorRpm>(motor_rpm_topic_,10);
+ pub_real_motor_rpm_=node_->create_publisher<cefiro_msgs::msg::MotorRpm>("/real/cefiro_actuators/target_rpm",10);
     pub_motor_direction_=node_->create_publisher<std_msgs::msg::Int8MultiArray>(motor_direction_topic_,10);
+ pub_real_motor_direction_=node_->create_publisher<std_msgs::msg::Int8MultiArray>("/real/cefiro_actuators/motor_direction",10);
     auto motor_armed_topic=node_->declare_parameter<std::string>("motor_armed_topic","/cefiro_actuators/armed");
     pub_motor_armed_=node_->create_publisher<std_msgs::msg::Bool>(motor_armed_topic,10);
+ pub_real_motor_armed_=node_->create_publisher<std_msgs::msg::Bool>("/real/cefiro_actuators/armed",10);
     executor_.add_node(node_);
 }
 RosBridge::~RosBridge(){stop();}
 void RosBridge::start(){ if(running_)return; running_=true; worker_=std::thread([this]{executor_.spin();}); }
 void RosBridge::stop(){ if(!running_)return; running_=false;executor_.cancel();if(worker_.joinable())worker_.join();executor_.remove_node(node_); }
-void RosBridge::onImu(const Imu& msg){
+void RosBridge::selectReal(bool v){std::lock_guard<std::mutex>g(mutex_);real_selected_=v;}
+bool RosBridge::isReal()const{std::lock_guard<std::mutex>g(mutex_);return real_selected_;}
+void RosBridge::onImu(const Imu& msg,bool real){
     Telemetry s;
     {
         std::lock_guard<std::mutex> g(mutex_);
-        s=latest_;
-        s.sequence=latest_.sequence+1;
+        s=real?latest_real_:latest_;
+ s.from_real=real;s.sequence=s.sequence+1;
         s.setpoint_deg=latest_reference_;
-        imu_rx_=std::chrono::steady_clock::now();
+        (real?real_imu_rx_:imu_rx_)=std::chrono::steady_clock::now();
     }
     s.ros_time_s=stampSeconds(msg.header.stamp);
     s.imu_frame=msg.header.frame_id;
@@ -107,7 +125,7 @@ void RosBridge::onImu(const Imu& msg){
         // In Gazebo the nominal gimbal orientation is world yaw 1.07 rad +
         // gyro_to_frame yaw 1.571 rad. GUI setpoints of zero denote
         // deviations about THIS attitude, not absolute world yaw=0.
-        if(display_relative_attitude_) {
+        if(display_relative_attitude_&&!real) {
             const double half=-0.5*equilibrium_world_yaw_deg_*deg2rad;
             const double c=std::cos(half), v=std::sin(half);
             const Quaternion a=s.orientation;
@@ -122,28 +140,24 @@ void RosBridge::onImu(const Imu& msg){
     s.angular_rate_deg_s={msg.angular_velocity.x*rad2deg,msg.angular_velocity.y*rad2deg,msg.angular_velocity.z*rad2deg};
     s.accel_m_s2={msg.linear_acceleration.x,msg.linear_acceleration.y,msg.linear_acceleration.z};
     std::lock_guard<std::mutex> g(mutex_);
-    s.mag_uT=latest_.mag_uT; s.magnetometer_valid=latest_.magnetometer_valid; s.mag_frame=latest_.mag_frame;
-    s.barometer_valid=latest_.barometer_valid; s.baro_frame=latest_.baro_frame;
-    s.pressure_hPa=latest_.pressure_hPa; s.relative_alt_m=latest_.relative_alt_m;
-    latest_=s;
+    const auto& current=real?latest_real_:latest_;
+ s.mag_uT=current.mag_uT;s.magnetometer_valid=current.magnetometer_valid;s.mag_frame=current.mag_frame;
+ s.barometer_valid=current.barometer_valid;s.baro_frame=current.baro_frame;s.pressure_hPa=current.pressure_hPa;s.relative_alt_m=current.relative_alt_m;
+ (real?latest_real_:latest_)=s;
     if(queue_.size()>=5000)queue_.pop_front();
     queue_.push_back(std::move(s));
 }
-void RosBridge::onMag(const Mag& msg){
+void RosBridge::onMag(const Mag& msg,bool real){
     std::lock_guard<std::mutex> g(mutex_);
-    mag_rx_=std::chrono::steady_clock::now();
-    latest_.mag_uT={msg.magnetic_field.x*1.e6,msg.magnetic_field.y*1.e6,msg.magnetic_field.z*1.e6};
-    latest_.magnetometer_valid=true;latest_.mag_frame=msg.header.frame_id;
+    (real?real_mag_rx_:mag_rx_)=std::chrono::steady_clock::now();auto& latest=real?latest_real_:latest_;
+ latest.mag_uT={msg.magnetic_field.x*1.e6,msg.magnetic_field.y*1.e6,msg.magnetic_field.z*1.e6};latest.magnetometer_valid=true;latest.mag_frame=msg.header.frame_id;
 }
-void RosBridge::onBaro(const Baro& msg){
+void RosBridge::onBaro(const Baro& msg,bool real){
     const double p=msg.fluid_pressure;
     if(!std::isfinite(p)||p<=0.0)return;
     std::lock_guard<std::mutex> g(mutex_);
-    baro_rx_=std::chrono::steady_clock::now();
-    if(first_pressure_pa_<=0.0)first_pressure_pa_=p;
-    latest_.pressure_hPa=p/100.0;
-    latest_.relative_alt_m=44330.0*(1.0-std::pow(p/first_pressure_pa_,0.190294957));
-    latest_.barometer_valid=true;latest_.baro_frame=msg.header.frame_id;
+    (real?real_baro_rx_:baro_rx_)=std::chrono::steady_clock::now();auto& latest=real?latest_real_:latest_;auto& baseline=real?real_initial_pressure_:first_pressure_pa_;
+ if(baseline<=0)baseline=p;latest.pressure_hPa=p/100.0;latest.relative_alt_m=44330.0*(1.0-std::pow(p/baseline,0.190294957));latest.barometer_valid=true;latest.baro_frame=msg.header.frame_id;
 }
 void RosBridge::onStatus(const std_msgs::msg::String& msg){std::lock_guard<std::mutex> g(mutex_);status_=msg.data;status_rx_=std::chrono::steady_clock::now();}
 void RosBridge::onHardwareStatus(const std_msgs::msg::String& msg){std::lock_guard<std::mutex> g(mutex_);hardware_status_=msg.data;hardware_status_rx_=std::chrono::steady_clock::now();}
@@ -155,9 +169,9 @@ std::vector<Telemetry> RosBridge::drain(){
     while(!queue_.empty()){out.push_back(std::move(queue_.front()));queue_.pop_front();}
     return out;
 }
-bool RosBridge::imuFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(imu_rx_,t);}
-bool RosBridge::magFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(mag_rx_,t);}
-bool RosBridge::baroFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(baro_rx_,t);}
+bool RosBridge::imuFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(real_selected_?real_imu_rx_:imu_rx_,t);}
+bool RosBridge::magFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(real_selected_?real_mag_rx_:mag_rx_,t);}
+bool RosBridge::baroFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(real_selected_?real_baro_rx_:baro_rx_,t);}
 bool RosBridge::feedbackFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(status_rx_,t);}
 std::string RosBridge::controllerStatus()const{std::lock_guard<std::mutex>g(mutex_);return status_;}
 void RosBridge::publishReference(const Vec3& degrees,const std::string& mode,const std::string& strategy){
@@ -166,9 +180,9 @@ void RosBridge::publishReference(const Vec3& degrees,const std::string& mode,con
     msg.vector.y=clampFinite(degrees[1],-90.,90.)*deg2rad;
     msg.vector.z=clampFinite(degrees[2],-180.,180.)*deg2rad;
     {std::lock_guard<std::mutex>g(mutex_);latest_reference_=degrees;}
-    pub_reference_->publish(msg);
-    std_msgs::msg::String m; m.data=mode;pub_mode_->publish(m);
-    m.data=strategy;pub_strategy_->publish(m);
+    (isReal()?pub_real_reference_:pub_reference_)->publish(msg);
+    std_msgs::msg::String m; m.data=mode;(isReal()?pub_real_mode_:pub_mode_)->publish(m);
+    m.data=strategy;(isReal()?pub_real_strategy_:pub_strategy_)->publish(m);
 }
 
 void RosBridge::publishMotorCommand(const std::array<double,4>& rpm,const std::array<int,4>& direction){
@@ -179,20 +193,20 @@ void RosBridge::publishMotorCommand(const std::array<double,4>& rpm,const std::a
         rpm_msg.data[i]=std::max(0.0, std::isfinite(rpm[i]) ? rpm[i] : 0.0);
         dir_msg.data[i]=direction[i] >= 0 ? 1 : -1;
     }
-    pub_motor_rpm_->publish(rpm_msg);
-    pub_motor_direction_->publish(dir_msg);
+    (isReal()?pub_real_motor_rpm_:pub_motor_rpm_)->publish(rpm_msg);
+    (isReal()?pub_real_motor_direction_:pub_motor_direction_)->publish(dir_msg);
 }
 
 void RosBridge::setMotorArmed(bool armed){
     std_msgs::msg::Bool msg;
     msg.data=armed;
-    pub_motor_armed_->publish(msg);
+    (isReal()?pub_real_motor_armed_:pub_motor_armed_)->publish(msg);
 }
 
 void RosBridge::publishGains(const std::vector<double>& pid,const std::vector<double>& lqr){
-    std_msgs::msg::Float64MultiArray msg;msg.data=pid;pub_pid_->publish(msg);
-    msg.data=lqr;pub_lqr_->publish(msg);
+    std_msgs::msg::Float64MultiArray msg;msg.data=pid;(isReal()?pub_real_pid_:pub_pid_)->publish(msg);
+    msg.data=lqr;(isReal()?pub_real_lqr_:pub_lqr_)->publish(msg);
 }
-void RosBridge::setEnabled(bool e){std_msgs::msg::Bool m;m.data=e;pub_enabled_->publish(m);if(e){m.data=false;pub_stop_->publish(m);}}
-void RosBridge::emergencyStop(){std_msgs::msg::Bool m;m.data=false;pub_enabled_->publish(m);m.data=true;pub_stop_->publish(m);}
+void RosBridge::setEnabled(bool e){std_msgs::msg::Bool m;m.data=e;(isReal()?pub_real_enabled_:pub_enabled_)->publish(m);if(e){m.data=false;(isReal()?pub_real_stop_:pub_stop_)->publish(m);}}
+void RosBridge::emergencyStop(){std_msgs::msg::Bool m;m.data=false;pub_enabled_->publish(m);pub_real_enabled_->publish(m);m.data=true;pub_stop_->publish(m);pub_real_stop_->publish(m);}
 }

@@ -72,7 +72,7 @@ QWidget* MainWindow::titledPanel(const QString& title,QVBoxLayout*& inner,QWidge
  auto* panel=new QFrame(parent);panel->setObjectName("panel");inner=new QVBoxLayout(panel);inner->setContentsMargins(11,9,11,10);inner->setSpacing(7);inner->addWidget(label(title,"panelTitle"));return panel;
 }
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
- setWindowTitle("CEFIRO GUI v1.5.3 | FULL-CIRCLE REFERENCE | SIM");setMinimumSize(1180,700);resize(1600,930);
+ setWindowTitle("CEFIRO GUI v1.6 | SIM + REAL");setMinimumSize(1180,700);resize(1600,930);
  clock_.start();publish_clock_.start();
  stack_=new QStackedWidget(this);setCentralWidget(stack_);
  buildToolbar();buildDashboard();buildControl();buildSystem();
@@ -133,7 +133,9 @@ void MainWindow::buildToolbar(){
        live_->setActive(i == 1);
    }
  });
- bar->addWidget(nav_);auto* spacer=new QWidget(bar);spacer->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);bar->addWidget(spacer);
+ bar->addWidget(nav_);
+ auto* real_switch=new QCheckBox("REAL PLANT",bar);real_switch_=real_switch;bar->addWidget(real_switch);
+ connect(real_switch,&QCheckBox::toggled,this,[this](bool real){if(command_active_){QSignalBlocker hold(real_switch_);real_switch_->setChecked(!real);return;}bridge_.selectReal(real);});auto* spacer=new QWidget(bar);spacer->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);bar->addWidget(spacer);
  bar->addWidget(label("THEME  ","eyebrow"));theme_combo_=new QComboBox(bar);theme_combo_->addItems(kThemes);theme_combo_->setMinimumWidth(160);bar->addWidget(theme_combo_);
  connect(theme_combo_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int i){setTheme(i);});addToolBar(Qt::TopToolBarArea,bar);
 }
@@ -144,21 +146,23 @@ void MainWindow::buildDashboard(){
  body->addWidget(label("Attitude, angular rates and FMU measurements  ·  cursor hover / zoom controls on each scope","pageSubtitle"));
  auto* scroll=new QScrollArea(page);scroll->setWidgetResizable(true);scroll->setFrameShape(QFrame::NoFrame);body->addWidget(scroll,1);
  auto* container=new QWidget(scroll);scroll->setWidget(container);auto* grid=new QGridLayout(container);grid->setSpacing(8);grid->setContentsMargins(0,2,0,2);
- const QStringList titles={"ROLL / φ","PITCH / θ","YAW / ψ","ANGULAR RATES / p q r","LINEAR ACCELERATION / axyz","MAGNETIC FIELD / Bxyz"};
- const QStringList units={"deg","deg","deg","deg/s","m/s²","µT"};
- for(int i=0;i<6;++i){QVBoxLayout* inner=nullptr;auto* panel=titledPanel(titles[i],inner,page);
-    auto* metric=label(i<3?"-- deg":"--","metricValue");if(i<3)attitude_values_[size_t(i)]=metric;else if(i==3)rate_values_[0]=metric;else if(i==4)rate_values_[1]=metric;else rate_values_[2]=metric;
+ const QStringList titles={"ROLL / φ","PITCH / θ","YAW / ψ","ANGULAR RATES / p q r","LINEAR ACCELERATION / axyz","MAGNETIC FIELD / Bxyz","BAROMETER","MAGNETOMETER / EXTRA","DSHOT / REQUESTED"};
+ const QStringList units={"deg","deg","deg","deg/s","m/s²","µT","hPa / m","µT","DShot"};
+ for(int i=0;i<9;++i){QVBoxLayout* inner=nullptr;auto* panel=titledPanel(titles[i],inner,page);
+    auto* metric=label(i<3?"-- deg":"--","metricValue");if(i<3)attitude_values_[size_t(i)]=metric;else if(i==3)rate_values_[0]=metric;else if(i==4)rate_values_[1]=metric;else if(i==5)rate_values_[2]=metric;
     inner->addWidget(metric);
-    QStringList keys=i<3?QStringList{"Reference","Measured"}:i==3?QStringList{"p","q","r"}:i==4?QStringList{"ax","ay","az"}:QStringList{"Bx","By","Bz"};
+    QStringList keys=i<3?QStringList{"Reference","SIM","REAL"}:i==3?QStringList{"SIM p","SIM q","SIM r","REAL p","REAL q","REAL r"}:i==4?QStringList{"SIM ax","SIM ay","SIM az","REAL ax","REAL ay","REAL az"}:(i==5||i==7)?QStringList{"SIM Bx","SIM By","SIM Bz","REAL Bx","REAL By","REAL Bz"}:i==6?QStringList{"SIM pressure","REAL pressure","SIM altitude","REAL altitude"}:QStringList{"M1","M2","M3","M4"};
     dash_[size_t(i)]=new ScopePlot("",units[i],keys,panel);dash_[size_t(i)]->setMinimumHeight(360);
     if(i<3){dash_[size_t(i)]->setDashed(0);dash_[size_t(i)]->setYRange(i==1?-95:-185,i==1?95:185);}
     if(i==3)dash_[size_t(i)]->setYRange(-30,30);
     if(i==4)dash_[size_t(i)]->setYRange(-15,15);
-    if(i==5)dash_[size_t(i)]->setYRange(-80,80);
+    if(i==5||i==7)dash_[size_t(i)]->setYRange(-80,80);
+ if(i==6)dash_[size_t(i)]->setYRange(700,1100);
+ if(i==8)dash_[size_t(i)]->setYRange(0,2047);
     inner->addWidget(dash_[size_t(i)],1);panel->setMinimumHeight(430);grid->addWidget(panel,i/2,i%2);
  }
  grid->setColumnStretch(0,1);grid->setColumnStretch(1,1);
- connect(clear_btn_,&QPushButton::clicked,this,[this]{for(auto* p:dash_)p->clear();if(live_)live_->clear();stats_.reset();});
+ connect(clear_btn_,&QPushButton::clicked,this,[this]{for(auto* p:dash_)p->clear();if(live_)live_->clear();for(auto& p:live_refs_)p.clear();for(auto& p:live_meas_)p.clear();stats_.reset();});
 }
 void MainWindow::buildControl() {
     QVBoxLayout* body = nullptr;
@@ -916,7 +920,7 @@ void MainWindow::publishMotorCommand(){
  command_value_->setText("Motors: " + summary.join(" · "));
  applied_value_->setText("Nominal motor commands published (open-loop DShot); hardware phases determine direction");
 }
-void MainWindow::setMonitorAxis(int idx){if(idx<0||idx>2)return;monitor_axis_=idx;live_->clear();live_->setYRange(idx==1?-95.0:-185.0,idx==1?95.0:185.0);}
+void MainWindow::setMonitorAxis(int idx){if(idx<0||idx>2)return;monitor_axis_=idx;live_->setSeriesData(0,live_refs_[size_t(idx)]);live_->setSeriesData(1,live_meas_[size_t(idx)]);live_->setYRange(idx==1?-95.0:-185.0,idx==1?95.0:185.0);}
 void MainWindow::tick(){
  updateReferenceGate();
  // A fresh reference is a GUI heartbeat for the simulation-only balance node.
@@ -963,7 +967,7 @@ void MainWindow::tick(){
          .arg(f(motor_command_rpm_[size_t(i)],0)));
    }
  }
- for(size_t i=0;i<items.size();++i){const auto& s=items[i];++collected_;stats_.add(s);
+ for(size_t i=0;i<items.size();++i){const auto& s=items[i];++collected_;if(s.from_real!=bridge_.isReal()){onSample(s,true);continue;}stats_.add(s);
     if (s.orientation_valid) {
         for (int axis = 0; axis < 3; ++axis) {
             response_analyzers_[std::size_t(axis)].add(
@@ -1001,6 +1005,7 @@ void MainWindow::tick(){
          elapsed_s,
          recording_events_, recording_path_, progress_fraction, estimate_text);
  }
+ if(bridge_.hardwareStatusFresh()){auto json=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus()));if(json.isObject()){auto cmds=json.object().value("last_commanded_dshot").toArray();double t=clock_.elapsed()/1000.;if(cmds.size()>=4&&t-last_dshot_time_>=0.05){for(int m=0;m<4;++m)dash_[8]->append(m,t,cmds.at(m).toDouble());last_dshot_time_=t;}}}
  status_samples_->setText(QString("SAMPLES: %1").arg(collected_));
  if(have_sample_){for(int i=0;i<3;++i){
    rmse_values_[size_t(i)]->setText(QString("%1° / RMSE %2°").arg(f(last_sample_.attitude_deg[i],1)).arg(f(stats_.rmse(i),2)));}
@@ -1014,19 +1019,21 @@ void MainWindow::tick(){
  }
 }
 void MainWindow::onSample(const Telemetry& s,bool draw){
- last_sample_=s;have_sample_=true;
+ if(s.from_real==bridge_.isReal()){last_sample_=s;have_sample_=true;}
  if(!draw)return;
  const double t=clock_.elapsed()/1000.0;
  for(int i=0;i<3;++i){
-   if(s.orientation_valid){dash_[size_t(i)]->append(0,t,s.setpoint_deg[i]);dash_[size_t(i)]->append(1,t,s.attitude_deg[i]);}
+   if(s.orientation_valid){if(!s.from_real)dash_[size_t(i)]->append(0,t,s.setpoint_deg[i]);dash_[size_t(i)]->append(s.from_real?2:1,t,s.attitude_deg[i]);}
  }
- for(int i=0;i<3;++i){dash_[3]->append(i,t,s.angular_rate_deg_s[i]);dash_[4]->append(i,t,s.accel_m_s2[i]);if(s.magnetometer_valid)dash_[5]->append(i,t,s.mag_uT[i]);}
+ for(int i=0;i<3;++i){int k=i+(s.from_real?3:0);dash_[3]->append(k,t,s.angular_rate_deg_s[i]);dash_[4]->append(k,t,s.accel_m_s2[i]);if(s.magnetometer_valid){dash_[5]->append(k,t,s.mag_uT[i]);dash_[7]->append(k,t,s.mag_uT[i]);}}
+ if(s.barometer_valid){dash_[6]->append(s.from_real?1:0,t,s.pressure_hPa);dash_[6]->append(s.from_real?3:2,t,s.relative_alt_m);}
+ if(s.from_real!=bridge_.isReal())return;
  for(int i=0;i<3;++i)attitude_values_[size_t(i)]->setText(s.orientation_valid?f(s.attitude_deg[i],2)+" deg":"NO ORIENTATION");
  rate_values_[0]->setText(QString("p %1   q %2   r %3 deg/s").arg(f(s.angular_rate_deg_s[0]),f(s.angular_rate_deg_s[1]),f(s.angular_rate_deg_s[2])));
  rate_values_[1]->setText(QString("ax %1   ay %2   az %3 m/s²").arg(f(s.accel_m_s2[0]),f(s.accel_m_s2[1]),f(s.accel_m_s2[2])));
  rate_values_[2]->setText(QString("Bx %1   By %2   Bz %3 µT").arg(f(s.mag_uT[0]),f(s.mag_uT[1]),f(s.mag_uT[2])));
  view_->setAttitude(s.orientation,s.orientation_valid);
- if(s.orientation_valid){live_->append(0,t,s.setpoint_deg[monitor_axis_]);live_->append(1,t,s.attitude_deg[monitor_axis_]);}
+ if(s.orientation_valid){for(int a=0;a<3;++a){auto& ref=live_refs_[size_t(a)];auto& meas=live_meas_[size_t(a)];ref.append(QPointF(t,s.setpoint_deg[a]));meas.append(QPointF(t,s.attitude_deg[a]));while(ref.size()>5000||(!ref.empty()&&ref.first().x()<t-70.0))ref.removeFirst();while(meas.size()>5000||(!meas.empty()&&meas.first().x()<t-70.0))meas.removeFirst();}live_->append(0,t,s.setpoint_deg[monitor_axis_]);live_->append(1,t,s.attitude_deg[monitor_axis_]);}
 }
 void MainWindow::updateSystem(const Telemetry& s){
  system_imu_->setText(QString("IMU  %1").arg(bridge_.imuFresh()?"ONLINE":"STALE"));
