@@ -11,9 +11,27 @@
   <xacro:property name="P" value="${xacro.load_yaml('$(arg physical_config_file)')['cefiro']}"/>
   <xacro:cefiro_airframe config="${P}" mount_to_gimbal="false"/>
   
-  <!-- Mount the IMU, magnetometer and barometer on the last FMU deck. -->
+  <gazebo>
+    <plugin filename="libcefiro_rotor_system.so"
+            name="cefiro::gz_plugins::RotorSystem">
+      <xacro:property name="joint_cfg" value="${P['joints']}"/>
+      <xacro:property name="mm" value="${0.001}"/>
+      <xacro:property name="m1" value="${joint_cfg['motor_1']['origin_mm']}"/>
+      <xacro:property name="m2" value="${joint_cfg['motor_2']['origin_mm']}"/>
+      <xacro:property name="m3" value="${joint_cfg['motor_3']['origin_mm']}"/>
+      <xacro:property name="m4" value="${joint_cfg['motor_4']['origin_mm']}"/>
+      <rotor_1_xyz>${m1[0]*mm} ${m1[1]*mm} ${m1[2]*mm}</rotor_1_xyz>
+      <rotor_2_xyz>${m2[0]*mm} ${m2[1]*mm} ${m2[2]*mm}</rotor_2_xyz>
+      <rotor_3_xyz>${m3[0]*mm} ${m3[1]*mm} ${m3[2]*mm}</rotor_3_xyz>
+      <rotor_4_xyz>${m4[0]*mm} ${m4[1]*mm} ${m4[2]*mm}</rotor_4_xyz>
+      <visual_slowdown>10.0</visual_slowdown>
+      <command_timeout_s>0.35</command_timeout_s>
+    </plugin>
+  </gazebo>
+
   <xacro:if value="$(arg enable_sensors)">
     <xacro:include filename="$(find cefiro_sensors)/urdf/cefiro_fmu_sensors.xacro"/>
     <xacro:cefiro_fmu_sensors config="${P['sensors']}"/>
   </xacro:if>
+  
 </robot>

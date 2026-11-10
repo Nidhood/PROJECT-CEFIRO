@@ -42,3 +42,21 @@ QCheckBox::indicator:checked {background:#ff2bd6;border:1px solid #ff2bd6;}
 
 /* Recorder dialog validation feedback */
 QLabel#errorText { color:#ff5468; font-weight:700; }
+/* Per-plot Y axis auto-fit toggle: checked = tracking, unchecked = fixed scale. */
+QToolButton#chartAutoFitButton {
+    font-size:10px;
+    font-weight:600;
+    min-height:18px;
+    min-width:88px;
+    padding:1px 5px;
+    border-radius:4px;
+    border:1px solid #00f5ff;
+    background:#0b0b18;
+    color:#eaf2ff;
+}
+QToolButton#chartAutoFitButton:checked {
+    color:#0b0b18;
+    background:#00f5ff;
+    border:1px solid #00f5ff;
+}
+QToolButton#chartAutoFitButton:hover { border:1px solid #00f5ff; }

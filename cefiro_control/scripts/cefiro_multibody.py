@@ -242,4 +242,3 @@ def allocate_motors(G,target_q_nm,nominal_rpm,max_rpm,reg=0.04,axis_weights=(1.,
     fit=lsq_linear(A,b,bounds=(np.zeros(4),np.ones(4)),tol=1e-7,max_iter=40)
     x=np.clip(fit.x,0.,1.)
     return max_rpm*np.sqrt(x), float(np.linalg.norm(H@x-target_q_nm)),H@x
-

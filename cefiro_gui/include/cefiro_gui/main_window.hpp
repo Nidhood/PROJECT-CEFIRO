@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QList>
+#include <QPointF>
 #include <QTextStream>
 #include <array>
 #include <memory>
@@ -45,6 +46,8 @@ private:
     void publishCommand();
     void resetEquilibriumReference();
     void updateReferenceGate();
+    void refreshReferenceLimits();
+    void applyReferenceLimits(const Vec3& limits);
     void publishMotorCommand();
     void startOutput();
     void stopOutput(bool emergency);
@@ -53,6 +56,14 @@ private:
     void setMonitorAxis(int index);
     void setTheme(int index);
     void onSample(const Telemetry& sample,bool draw);
+    void onMotorEvent(const MotorEvent& event,double time_s);
+    void clearMotorGroup(bool real,int group);
+    void expireMotorGroups(double time_s);
+    void updateSourceConnections();
+    void clearSourceHistory(bool real);
+    void clearSensorHistory(bool real,SampleKind sensor);
+    void setConnectionBadge(QLabel* badge,const QString& name,bool connected);
+    void resetSelectedFeedback();
     void showRecordingDialog();
     void startRecording();
     void stopRecording();
@@ -67,6 +78,7 @@ private:
     QWidget* titledPanel(const QString& title,QVBoxLayout*& inner,QWidget* parent);
     void updateSystem(const Telemetry& sample);
     RosBridge bridge_;
+    Vec3 reference_limits_deg_{{5.0,5.0,10.0}};
     QStackedWidget* stack_{nullptr};
     QTabBar* nav_{nullptr};
     QLabel* status_ros_{nullptr};
@@ -76,7 +88,28 @@ private:
     QTimer* refresh_{nullptr};
     QTimer* waveform_timer_{nullptr};
     QTimer* manual_publish_timer_{nullptr};
-    std::array<ScopePlot*,6> dash_{};
+    std::array<ScopePlot*,9> dash_{};
+ QComboBox* plant_selector_{nullptr};
+ QLabel* status_sim_connection_{nullptr};
+ QLabel* status_real_connection_{nullptr};
+ ScopePlot* altitude_plot_{nullptr};
+ ScopePlot* rpm_target_plot_{nullptr};
+ ScopePlot* rpm_feedback_plot_{nullptr};
+ QLabel* rpm_target_value_{nullptr};
+ QLabel* rpm_feedback_value_{nullptr};
+ std::array<std::array<double,3>,2> last_motor_group_s_{{{{-1.,-1.,-1.}},{{-1.,-1.,-1.}}}};
+ std::array<double,2> last_motor_telemetry_s_{{-1.,-1.}};
+ QLabel* altitude_value_{nullptr};
+ QLabel* pressure_value_{nullptr};
+ QLabel* magnitude_value_{nullptr};
+ QLabel* dshot_value_{nullptr};
+ std::array<bool,2> source_online_{{false,false}};
+ std::array<bool,2> imu_online_{{false,false}};
+ std::array<bool,2> mag_online_{{false,false}};
+ std::array<bool,2> baro_online_{{false,false}};
+ bool dshot_online_{false};
+ std::array<std::array<QList<QPointF>,3>,2> live_refs_{}, live_meas_{};
+ double last_dshot_time_{-1};
     std::array<QLabel*,3> attitude_values_{};
     std::array<QLabel*,3> rate_values_{};
     std::array<QLabel*,3> rmse_values_{};

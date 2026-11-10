@@ -2,5 +2,5 @@
 <robot name="cefiro" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <!-- Legacy compatibility entrypoint: Gazebo actuator bridge is separate. -->
   <!-- Do not load the old ros2_control controller concurrently. -->
-  <xacro:include filename="$(find cefiro_description)/urdf/cefiro-gyro.urdf.xacro"/>
+  <xacro:include filename="$(find cefiro_description)/urdf/cefiro-drone.urdf.xacro"/>
 </robot>

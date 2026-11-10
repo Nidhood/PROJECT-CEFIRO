@@ -34,6 +34,5 @@ ament_target_dependencies(hardware_node
 
 install(TARGETS hardware_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch config docs DESTINATION share/${PROJECT_NAME})
-install(FILES README.md LICENSE DESTINATION share/${PROJECT_NAME})
 
 ament_package()

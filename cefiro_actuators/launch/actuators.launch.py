@@ -19,6 +19,5 @@ def generate_launch_description():
             name='cefiro_actuators',
             output='screen',
             parameters=[LaunchConfiguration('config')],
-            # ROS private topics expand to /cefiro_actuators/{target_rpm,...}
         ),
     ])

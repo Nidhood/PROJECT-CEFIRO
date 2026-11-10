@@ -9,7 +9,6 @@ cefiro_actuators:
     command_watchdog_s: 0.5
 
     # 750 Kv refers to the D3536 motor in the supplied reference.
-    # ALL remaining numeric values are provisional pending bench characterization.
     motor.kv_rpm_per_volt: 750.0
     motor.resistance_ohm: 0.30
     motor.inductance_h: 0.0001
@@ -19,7 +18,6 @@ cefiro_actuators:
     motor.viscous_friction_nm_per_rad_s: 0.000004
     motor.max_rpm: 20000.0
 
-    # Replace the diameter with the CEFIRO-installed propeller, not a mesh size.
     propeller.diameter_m: 0.254
     propeller.ct: 0.10
     propeller.cq: 0.015

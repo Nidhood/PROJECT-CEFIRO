@@ -3,15 +3,10 @@ cefiro_balance:
     use_sim_time: true
     simulation_only: true
     enable_swingup: true
-    # Must match cefiro_gz/launch/spawn_robot.launch.py R,P,Y
     spawn_rpy_rad: [0.0, 0.0, 1.07]
-    # Empty => resolved from installed cefiro_description share directory.
-    model_yaml: ''
+    model_yaml: ""
     update_rate_hz: 50.0
 
-    # Joint-space model follows the URDF chain yaw -> pitch -> roll -> drone.
-    # The last ring's hinge is almost body +Y because gyro_to_frame has yaw=1.571.
-    # A body-frame ROLL PID would therefore actuate the wrong hinge.
     swingup_duration_s: 11.0
     swingup_timeout_s: 36.0
     braking_timeout_s: 12.0
@@ -54,7 +49,6 @@ cefiro_balance:
     max_joint_ik_condition: 15.0
     max_joint_ik_residual_deg: 2.0
 
-    # Provisional CEFIRO actuator coefficients (consistent with actuators.yaml).
     nominal_rpm: 4700.0
     max_rpm: 5400.0
     rpm_slew_per_s: 10000.0
@@ -71,12 +65,14 @@ cefiro_balance:
     mag_timeout_s: 0.60
     actuator_timeout_s: 0.45
     reference_timeout_s: 0.9
-    # Conservative initial SIM reference envelope: [BODY roll,pitch,yaw] deg.
-    # Must match GUI visible limits; these are TEST LIMITS, not proven capability.
-    reference_limits_deg: [5.0, 5.0, 10.0]
+
+    # Candidate ceilings; cefiro_balance reduces these by CAD/actuator
+    # static-feasibility analysis and publishes the chosen limits to the GUI.
+    reference_limits_deg: [30.0, 30.0, 180.0]
+    # Joint order: yaw, pitch, roll. 5 deg margin below local escape=35 deg.
+    reference_joint_limits_deg: [180.5, 30.0, 30.0]
     reference_slew_deg_s: [6.0, 6.0, 8.0]
     reference_accel_deg_s2: [18.0, 18.0, 24.0]
-    # Anti-windup residual trim, active ONLY in CAPTURED (URDF joint yaw,pitch,roll)
     reference_integral_gain_nm_rad_s: [0.12, 0.45, 0.45]
     reference_integral_limit_nm: [0.055, 0.12, 0.12]
     reference_integral_leak_per_s: 0.015

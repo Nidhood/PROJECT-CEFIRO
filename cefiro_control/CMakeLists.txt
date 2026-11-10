@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 
 project(cefiro_control
-    VERSION 1.0.0
+    VERSION 1.1.0
     DESCRIPTION "CEFIRO's package for controllers logic"
     LANGUAGES CXX
 )
@@ -81,10 +81,10 @@ install(DIRECTORY config launch urdf
     DESTINATION share/${PROJECT_NAME}
 )
 
-
 # Independent simulation-only ROS 2 controller (GUI -> capture -> actuators).
 install(PROGRAMS scripts/cefiro_balance_node.py
     DESTINATION lib/${PROJECT_NAME})
-install(FILES scripts/cefiro_multibody.py
+install(FILES scripts/cefiro_multibody.py scripts/reference_envelope.py
     DESTINATION lib/${PROJECT_NAME})
+
 ament_package()

@@ -27,9 +27,7 @@ ament_target_dependencies(cefiro_actuators_node rclcpp std_msgs geometry_msgs ce
 install(TARGETS cefiro_actuators_node DESTINATION lib/${PROJECT_NAME})
 install(TARGETS cefiro_motor_model ARCHIVE DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY config launch docs DESTINATION share/${PROJECT_NAME})
-install(PROGRAMS scripts/step_test.py scripts/fit_propeller_coefficients.py DESTINATION lib/${PROJECT_NAME})
-
+install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 
 ament_export_include_directories(include)
 ament_export_libraries(cefiro_motor_model)

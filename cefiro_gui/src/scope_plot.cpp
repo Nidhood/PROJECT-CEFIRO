@@ -11,9 +11,11 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLegend>
+#include <QtCharts/QLegendMarker>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QPainter>
+#include <QSignalBlocker>
 #include <QTimer>
 #include <QToolButton>
 #include <QToolTip>
@@ -29,13 +31,23 @@ ScopePlot::ScopePlot(const QString& title,const QString& units,const QStringList
     auto* name=new QLabel(title,this);name->setObjectName("chartTitle");header->addWidget(name);header->addStretch();
     auto make=[&](const QString& label,const QString& help){auto* b=new QToolButton(this);b->setObjectName("chartToolButton");b->setText(label);b->setToolTip(help);b->setFixedHeight(22);header->addWidget(b);return b;};
     auto* t_minus=make("T−","Zoom time in");time_label_=new QLabel("15 s",this);time_label_->setObjectName("chartWindowLabel");header->addWidget(time_label_);
-    auto* t_plus=make("T+","Zoom time out");auto* y_minus=make("Y−","Zoom vertically in");auto* y_plus=make("Y+","Zoom vertically out");auto* fit=make("FIT","Fit visible values");
+    auto* t_plus=make("T+","Zoom time out");
+    auto* y_minus=make("Y−","Zoom vertically in");
+    auto* y_plus=make("Y+","Zoom vertically out");
+    auto* fit=make("FIT","Fit the visible data once without changing auto-fit mode");
+    auto_fit_button_=make("AUTO Y: OFF","Follow the visible samples with automatic vertical scaling (independent for this plot)");
+    auto_fit_button_->setObjectName("chartAutoFitButton");
+    auto_fit_button_->setCheckable(true);
+    auto_fit_button_->setChecked(false);
+    auto_fit_button_->setMinimumWidth(91);
     root->addLayout(header);
     chart_=new QChart;chart_->setAnimationOptions(QChart::NoAnimation);chart_->setMargins(QMargins(0,0,0,0));
     chart_->legend()->setVisible(series.size()>1);chart_->legend()->setAlignment(Qt::AlignTop);
     x_=new QValueAxis(chart_);y_=new QValueAxis(chart_);
     x_->setTitleText("t [s]");x_->setLabelFormat("%.1f");x_->setTickCount(5);
-    y_->setTitleText(units);y_->setLabelFormat("%.3g");y_->setTickCount(5);
+    y_->setTitleText(units);
+    y_->setLabelFormat(units == "hPa" ? "%.2f" : units == "DShot" ? "%.0f" : "%.2f");
+    y_->setTickCount(5);
     chart_->addAxis(x_,Qt::AlignBottom);chart_->addAxis(y_,Qt::AlignLeft);
     for(const auto& text:series){auto* line=new QLineSeries(chart_);line->setName(text);chart_->addSeries(line);line->attachAxis(x_);line->attachAxis(y_);data_.push_back({{},line,false});}
     view_=new QChartView(chart_,this);view_->setObjectName("scopeChartView");view_->setRenderHint(QPainter::Antialiasing,false);
@@ -75,10 +87,15 @@ ScopePlot::ScopePlot(const QString& title,const QString& units,const QStringList
     connect(t_plus,&QToolButton::clicked,this,[this]{zoomTime(4.0/3.0);});
     connect(y_minus,&QToolButton::clicked,this,[this]{zoomY(.8);});
     connect(y_plus,&QToolButton::clicked,this,[this]{zoomY(1.25);});
+    // FIT is a one-shot operation; it must not silently re-enable AUTO Y.
     connect(fit,&QToolButton::clicked,this,[this]{fitY();});
+    connect(auto_fit_button_,&QToolButton::toggled,this,[this](bool checked){
+        setAutoFitY(checked,minimum_y_span_);
+    });
     refresh_timer_=new QTimer(this);refresh_timer_->setInterval(50);refresh_timer_->setTimerType(Qt::CoarseTimer);
     connect(refresh_timer_,&QTimer::timeout,this,[this]{refresh();});refresh_timer_->start();
     setYRange(-30,30);x_->setRange(0,window_s_);
+    syncSeriesVisibility();
     reTheme(QColor("#e8eef4"),QColor("#070a0f"),QColor("#213549"),{QColor("#FF5468"),QColor("#69B5F0"),QColor("#00D8C6"),QColor("#F8B869")});
 }
 ScopePlot::~ScopePlot(){
@@ -93,40 +110,189 @@ ScopePlot::~ScopePlot(){
         }
     }
 }
-void ScopePlot::append(int i,double t,double v){
-    if(i<0||i>=int(data_.size())||!std::isfinite(t)||!std::isfinite(v))return;
-    auto& pts=data_[size_t(i)].points;pts.emplace_back(t,v);
-    while (!pts.empty() && (pts.front().x() < t - retention_s_ || pts.size() > 5000)) {
-        pts.pop_front();
+void ScopePlot::append(int index,double t,double value){
+    if(index<0 || index>=static_cast<int>(data_.size()) ||
+       !std::isfinite(t) || !std::isfinite(value)) return;
+    auto& points=data_[static_cast<std::size_t>(index)].points;
+    points.emplace_back(t,value);
+    while(!points.empty() &&
+          (points.front().x()<t-retention_s_ || points.size()>20000)) {
+        points.pop_front();
     }
-    dirty_ = true;
+    dirty_=true;
 }
-void ScopePlot::setSeriesData(int i,const QList<QPointF>& pts){
-    if(i<0||i>=int(data_.size()))return;
-    auto& p=data_[size_t(i)].points;p.clear();for(const auto& v:pts)if(std::isfinite(v.x())&&std::isfinite(v.y()))p.push_back(v);dirty_=true;
+void ScopePlot::setSeriesData(int index,const QList<QPointF>& points){
+    if(index<0 || index>=static_cast<int>(data_.size())) return;
+    auto& buffer=data_[static_cast<std::size_t>(index)].points;
+    buffer.clear();
+    for(const auto& point:points){
+        if(std::isfinite(point.x()) && std::isfinite(point.y())){
+            buffer.push_back(point);
+        }
+    }
+    syncSeriesVisibility();
+    dirty_=true;
 }
-void ScopePlot::clear(){hideCursor();for(auto& s:data_){s.points.clear();s.line->clear();}x_->setRange(0,window_s_);dirty_=false;}
-void ScopePlot::setWindowSeconds(double s){window_s_=std::clamp(s,1.0,60.0);labelTime();dirty_=true;}
-void ScopePlot::labelTime(){time_label_->setText(QString::number(window_s_,'f',window_s_<10?1:0)+" s");}
-void ScopePlot::setYRange(double lo,double hi){if(hi<=lo)return;y_lo_=lo;y_hi_=hi;auto_y_=false;y_->setRange(lo,hi);}
-void ScopePlot::fitY(){double lo=std::numeric_limits<double>::infinity(),hi=-lo;const double left=x_->min(),right=x_->max();
- for(const auto& s:data_)for(const auto& p:s.points)if(p.x()>=left&&p.x()<=right){lo=std::min(lo,p.y());hi=std::max(hi,p.y());}
-    if (!std::isfinite(lo)) {
+void ScopePlot::clear(){
+    hideCursor();
+    for(auto& series:data_){
+        series.points.clear();
+        series.line->clear();
+    }
+    syncSeriesVisibility();
+    x_->setRange(0,window_s_);
+    dirty_=true;
+}
+void ScopePlot::clearSeries(int index){
+    if(index<0 || index>=static_cast<int>(data_.size())) return;
+    auto& series=data_[static_cast<std::size_t>(index)];
+    series.points.clear();
+    series.line->clear();
+    hideCursor();
+    syncSeriesVisibility();
+    dirty_=true;
+}
+void ScopePlot::setWindowSeconds(double seconds){
+    window_s_=std::clamp(seconds,1.0,60.0);
+    labelTime();
+    dirty_=true;
+}
+void ScopePlot::labelTime(){
+    time_label_->setText(QString::number(window_s_,'f',window_s_<10?1:0)+" s");
+}
+void ScopePlot::setYRange(double lo,double hi){
+    if(!std::isfinite(lo) || !std::isfinite(hi) || hi<=lo) return;
+    y_lo_=lo;
+    y_hi_=hi;
+    y_->setRange(lo,hi);
+    // A manual axis range disables auto-fitting for THIS plot only.
+    setAutoFitY(false,minimum_y_span_);
+}
+void ScopePlot::setAutoFitY(bool enabled,double minimumSpan){
+    if(std::isfinite(minimumSpan) && minimumSpan>0.0){
+        minimum_y_span_=minimumSpan;
+    }
+    auto_y_=enabled;
+    if(auto_fit_button_){
+        // API calls (e.g. initial dashboard configuration) must update the
+        // visible toggle without emitting another toggled() callback.
+        const QSignalBlocker block(auto_fit_button_);
+        auto_fit_button_->setChecked(enabled);
+        auto_fit_button_->setText(enabled?"AUTO Y: ON":"AUTO Y: OFF");
+        auto_fit_button_->setToolTip(enabled
+            ? "AUTO FIT ON: vertical scale follows live data. Y−/Y+ switches to manual."
+            : "AUTO FIT OFF: vertical scale is fixed. FIT adjusts once; AUTO Y turns tracking on.");
+    }
+    dirty_=true;
+}
+void ScopePlot::fitY(){
+    // Only online series with visible samples are allowed to affect the range.
+    const double left=x_->min();
+    const double right=x_->max();
+    double low=std::numeric_limits<double>::infinity();
+    double high=-std::numeric_limits<double>::infinity();
+    for(const auto& series:data_){
+        if(!series.line->isVisible()) continue;
+        for(const auto& point:series.points){
+            if(point.x()<left || point.x()>right) continue;
+            low=std::min(low,point.y());
+            high=std::max(high,point.y());
+        }
+    }
+    if(!std::isfinite(low) || !std::isfinite(high)) return;
+    const double span=std::max(high-low,minimum_y_span_);
+    const double center=low+0.5*(high-low);
+    const double pad=span*0.12;
+    const double new_lo=center-0.5*span-pad;
+    const double new_hi=center+0.5*span+pad;
+    // Avoid constant axis recreation when the values change only in rounding.
+    const double epsilon=std::max(1.e-8,span*0.005);
+    if(std::abs(new_lo-y_lo_)>epsilon || std::abs(new_hi-y_hi_)>epsilon){
+        y_lo_=new_lo;
+        y_hi_=new_hi;
+        y_->setRange(new_lo,new_hi);
+    }
+}
+void ScopePlot::setDashed(int index,bool enabled){
+    if(index>=0 && index<static_cast<int>(data_.size())){
+        data_[static_cast<std::size_t>(index)].dashed=enabled;
+        reTheme(fg_,bg_,grid_,colors_);
+    }
+}
+void ScopePlot::setActive(bool enabled){
+    active_=enabled;
+    if(enabled){
+        dirty_=true;
+        refresh_timer_->start();
+    }else{
+        refresh_timer_->stop();
+        hideCursor();
+    }
+}
+void ScopePlot::zoomTime(double factor){
+    setWindowSeconds(window_s_*factor);
+}
+void ScopePlot::zoomY(double factor){
+    const double mid=(y_lo_+y_hi_)*0.5;
+    const double half=(y_hi_-y_lo_)*factor*0.5;
+    setYRange(mid-half,mid+half); // Manual zoom disables automatic Y fit.
+}
+void ScopePlot::syncSeriesVisibility(){
+    int visible_count=0;
+    for(auto& series:data_){
+        const bool has_samples=!series.points.empty();
+        if(series.rendered!=has_samples){
+            series.rendered=has_samples;
+            series.line->setVisible(has_samples);
+            // Qt Charts retains legend markers for invisible series.
+            // Toggle markers only on connectivity / data-state transitions.
+            for(auto* marker:chart_->legend()->markers(series.line)){
+                marker->setVisible(has_samples);
+            }
+        }
+        if(has_samples) ++visible_count;
+    }
+    if(chart_->legend()->isVisible()!=(visible_count>0)){
+        chart_->legend()->setVisible(visible_count>0);
+    }
+}
+void ScopePlot::refresh(){
+    if(!dirty_ || !active_)return;
+    dirty_=false;
+    syncSeriesVisibility();
+    double latest=0.0;
+    bool has_samples=false;
+    for(const auto& series:data_){
+        if(!series.line->isVisible()) continue;
+        if(!series.points.empty()){
+            has_samples=true;
+            latest=std::max(latest,series.points.back().x());
+        }
+    }
+    if(!has_samples){
+        x_->setRange(0.0,window_s_);
+        hideCursor();
         return;
     }
-    const double pad = std::max(1.0, (hi - lo) * .12);
-    setYRange(lo - pad, hi + pad);
-}
-void ScopePlot::setDashed(int i,bool b){if(i>=0&&i<int(data_.size())){data_[size_t(i)].dashed=b;reTheme(fg_,bg_,grid_,colors_);}}
-void ScopePlot::setActive(bool b){active_=b;if(b){dirty_=true;refresh_timer_->start();}else{refresh_timer_->stop();hideCursor();}}
-void ScopePlot::zoomTime(double f){setWindowSeconds(window_s_*f);}
-void ScopePlot::zoomY(double f){const double m=(y_lo_+y_hi_)*.5,d=(y_hi_-y_lo_)*f*.5;setYRange(m-d,m+d);}
-void ScopePlot::refresh(){if(!dirty_||!active_)return;dirty_=false;
- double max_t=0.0;bool any=false;for(const auto& s:data_)if(!s.points.empty()){any=true;max_t=std::max(max_t,s.points.back().x());}if(!any)return;
- x_->setRange(std::max(0.0,max_t-window_s_),std::max(window_s_,max_t));
- for(auto& s:data_){QList<QPointF> pts;pts.reserve(int(s.points.size()));for(const auto& p:s.points)if(p.x()>=x_->min()-1.0)pts.push_back(p);s.line->replace(pts);}
- if(auto_y_)fitY();
- if(hovering_)updateCursor(hover_position_);
+    const double left=std::max(0.0,latest-window_s_);
+    const double right=std::max(window_s_,latest);
+    x_->setRange(left,right);
+    for(auto& series:data_){
+        if(!series.line->isVisible())continue;
+        QList<QPointF> points;
+        points.reserve(static_cast<int>(series.points.size()));
+        for(const auto& point:series.points){
+            if(point.x()>=x_->min()-1.0)points.push_back(point);
+        }
+        series.line->replace(points);
+        // A single topic publication should still be visibly marked.
+        const bool single_point=points.size()==1;
+        if(series.line->pointsVisible()!=single_point){
+            series.line->setPointsVisible(single_point);
+        }
+    }
+    if(auto_y_)fitY();
+    if(hovering_)updateCursor(hover_position_);
 }
 void ScopePlot::reTheme(const QColor& fg,const QColor& bg,const QColor& grid,const QList<QColor>& colors){
  fg_=fg;bg_=bg;grid_=grid;colors_=colors;chart_->setBackgroundBrush(bg);chart_->setPlotAreaBackgroundBrush(bg);chart_->setPlotAreaBackgroundVisible(true);
@@ -173,6 +339,7 @@ void ScopePlot::updateCursor(const QPoint& pos) {
     for (std::size_t i = 0; i < data_.size(); ++i) {
         auto* marker = cursor_points_[i];
         const auto& points = data_[i].points;
+        if(!data_[i].line->isVisible()) { marker->hide(); continue; }
         if (points.empty() || t < points.front().x() || t > points.back().x()) {
             marker->hide();
             continue;

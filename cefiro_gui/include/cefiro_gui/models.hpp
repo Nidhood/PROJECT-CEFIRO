@@ -35,7 +35,11 @@ struct Quaternion {
                 std::atan2(2.0*(w*z+x*y), 1.0-2.0*(y*y+z*z))*rad2deg};
     }
 };
+enum class SampleKind { Imu = 0, Magnetometer = 1, Barometer = 2 };
+
 struct Telemetry {
+    SampleKind kind{SampleKind::Imu};
+ bool from_real{false};
     double ros_time_s{0.0};
     std::int64_t sequence{0};
     Quaternion orientation{};

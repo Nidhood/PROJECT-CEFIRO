@@ -43,9 +43,6 @@ def generate_launch_description():
         pkg_gz, 'launch', 'gz_bridge.launch.py'
     ])
 
-  
-    # Start Gazebo and independent ROS nodes immediately. Scenery begins
-    # only when the local world creation service becomes available.
     world = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(gazebo_launch),
         launch_arguments={'use_sim_time': use_sim_time}.items()
@@ -60,8 +57,6 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(bridge_launch)
     )
 
-    # Dedicated simulation-only controller. Do not spawn the legacy
-    # ros2_control plugin, which is not wired to the standalone actuator node.
     balance = Node(
         package='cefiro_control',
         executable='cefiro_balance_node.py',
@@ -72,8 +67,6 @@ def generate_launch_description():
         output='screen',
     )
 
-    # spawn_models creates desk -> lamp -> robot, each triggered only when
-    # the preceding local ros_gz_sim/create command finishes successfully.
     scenery_then_robot = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(models_launch),
         launch_arguments={
@@ -108,7 +101,6 @@ def generate_launch_description():
             scenery_then_robot,
         ]
 
-    # Gazebo system plugin from the compiled local cefiro_gz install/lib.
     rotor_plugin_path = SetEnvironmentVariable(
         'GZ_SIM_SYSTEM_PLUGIN_PATH', [
             PathJoinSubstitution([FindPackagePrefix('cefiro_gz'), 'lib']),

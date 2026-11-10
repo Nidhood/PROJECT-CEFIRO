@@ -11,13 +11,11 @@ cefiro:
     spin_reference: viewed_from_positive_drone_z
 
   sensors:
-    # Meshless FMU sensor frames on the top rectangular deck of frame.stl.
     fmu_mount:
       parent: drone_body_link
       origin_mm: [49.0, 35.5, 54.101]
       origin_rpy: [0.0, 0.0, 0.0]
 
-    # Relative chip XY placement is provisional until PCB component positions are known.
     imu_icm42670p:
       offset_mm: [0.0, 0.0, 0.3]
       rpy: [0.0, 0.0, 0.0]

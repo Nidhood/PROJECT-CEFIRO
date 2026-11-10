@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Spawn local scenery in order, then spawn CEFIRO after successful acknowledgements."""
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -119,7 +118,7 @@ def generate_launch_description():
             choices=['true', 'false'],
             description='Spawn CEFIRO after successfully creating both local models',
         ),
-        # Register handlers before launching the first creation process.
+        
         RegisterEventHandler(OnProcessExit(
             target_action=spawn_desk,
             on_exit=on_desk_exit,

@@ -1,3 +1,22 @@
+# CEFIRO GUI v2.2 — Dynamic SIM reference envelope
+
+The reference gimbal queries `/cefiro/control/reference_envelope_deg` from the
+updated `cefiro_control` node. Roll and pitch are limited to the computed
+static-feasibility envelope (not a validated dynamic stability boundary).
+Yaw spans 360° of possible headings when the model permits +/-180°;
+it follows the shortest angular path, not a multi-revolution command.
+Hardware-REAL automatic reference limits stay at the original pilot values
+until the physical controller has been separately characterized.
+
+**Install BOTH `cefiro_gui` and `cefiro_control` from this release.**
+See `../INSTRUCCIONES_REFERENCIAS.md` in the ZIP.
+
+---
+
+# CEFIRO GUI v2.0 — RPM and DShot message synchronization
+
+**CEFIRO GUI v2.0 — Motor monitoring with independent SIM/REAL telemetry, independent disconnection cleanup, connection badges and control destination selector.** See [REAL_SIM_GUI_UPGRADE.md](REAL_SIM_GUI_UPGRADE.md) and [MOTOR_TELEMETRY_V2.md](MOTOR_TELEMETRY_V2.md).
+
 # CEFIRO GUI v1.3.0 — Verified Interface Deployment
 
 **Important:** Screenshots displaying `REFERENCE COMMAND` and a standalone
@@ -50,11 +69,11 @@ ros2 launch cefiro_gz start_gz.launch.py
 
 | Page | Instruments |
 | --- | --- |
-| Dashboard | Roll, pitch, yaw (reference vs measured); body angular rate p/q/r; acceleration ax/ay/az; magnetic vector Bx/By/Bz |
+| Dashboard | Roll, pitch, yaw (reference vs measured); body angular rate p/q/r; acceleration ax/ay/az; magnetometer and barometer; DShot commands; **RPM reference and measured RPM** (separate scopes) |
 | Signal Generator | Strategy selection; MANUAL / AUTOMATIC; nine waveforms, parameters and preview; control topology, live monitored axis and drone orientation; PID / LQR gain panels; test and recording controls |
 | System | ROS sensor freshness; controller acknowledgment; frames and ROS topic contract; sensor values including pressure-derived relative height |
 
-Each scope uses the same conventional presentation as the QUBE HMI: time and vertical zoom (`T−`, `T+`, `Y−`, `Y+`), visible-data `FIT`, **crosshair cursor, color-coded per-series markers and interpolated on-hover values**, live window, measured/reference traces and dashed reference styling. The Dashboard retains spacious chart panels (minimum 360 px of plot height, 430 px overall per panel), inside a scrollable two-column layout. Traces retained for approximately 70 seconds, with 5,000 points per series maximum. Plot redraw at 20 Hz, Qt UI refresh at ~30 Hz; ROS sensor callbacks run on a separate executor thread. The CSV recorder processes all buffered IMU samples, not only the samples rendered.
+Each scope uses the same conventional presentation as the QUBE HMI: time and vertical zoom (`T−`, `T+`, `Y−`, `Y+`), visible-data `FIT`, **crosshair cursor, color-coded per-series markers and interpolated on-hover values**, live window, measured/reference traces and dashed reference styling. The Dashboard retains spacious chart panels (minimum 360 px of plot height, 430 px overall per panel), inside a scrollable two-column layout. Traces retained for up to 600 seconds / 20,000 points per series, subject to the current scope configuration. Plot redraw at 20 Hz, Qt UI refresh at ~30 Hz; ROS sensor callbacks run on a separate executor thread. The CSV recorder processes all buffered IMU samples, not only the samples rendered.
 
 Six themes: **Tron Ares** (default), MATLAB / Lab, Light, Dark, Tron Evolution and Cyberpunk Neon.
 
@@ -83,7 +102,7 @@ ROS topics can be changed using `config/gui_config.yaml`. ROS 2 `use_sim_time` i
 | Publish | `/cefiro/control/lqr_gain` | `std_msgs/msg/Float64MultiArray` | eighteen values, **3×6 row-major**, rows torque axes, columns φ θ ψ p q r |
 | Subscribe | `/cefiro/control/status` | `std_msgs/msg/String` | Text feedback from external controller (e.g. `ACTIVE:PID` / `INACTIVE` / `FAULT`) |
 
-**Safety:** `SAFE STOP` disables output and requests a zero reference; `EMERGENCY ZERO` additionally publishes the emergency stop signal. These are *software requests* and are **not guaranteed to stop any external actuators** unless the controller is implemented to honor them. The external controller must own watchdogs, saturation limits, arming logic, emergency stop and actuator safety independently of the GUI. No actuation is implemented here; the GUI never sends motor commands directly.
+**Safety:** `SAFE STOP` disables output and requests a zero reference; `EMERGENCY ZERO` additionally publishes the emergency stop signal. These are *software requests* and are **not guaranteed to stop any external actuators** unless the controller is implemented to honor them. The external controller must own watchdogs, saturation limits, arming logic, emergency stop and actuator safety independently of the GUI. The GUI can request motor RPM through ROS 2; actual actuation and safety enforcement remain the responsibility of the external actuator/hardware nodes.
 
 ## Recording and analysis
 
@@ -151,3 +170,21 @@ The ROS package structure, Python launch, existing waveform/quaternion tests, an
 - Hover cursor uses full viewport repaint to avoid persistent guide lines.
 - Recorder offers selectable data groups, time readout units, and a progress bar for time-window, waveform-period, and peak-count captures. Continuous captures remain indeterminate.
 - The build requires the existing `cefiro_msgs` package.
+
+
+### Dashboard v1.9: uniform scope layout
+
+Ten individual plots use a two-column by five-row layout. Pressure (hPa) and relative altitude (m) have independent panels of the same size as roll, pitch, yaw, gyroscope, accelerometer, magnetic-field components, magnetic-field magnitude and host-requested DShot. Simulation and real-source traces remain separate, with per-source disconnection behavior and dynamic legends unchanged.
+
+### Vertical auto-fit per scope (v2.1)
+
+Every graph now has its own `AUTO Y: ON/OFF` toggle (on the graph toolbar).
+- **AUTO Y: ON** automatically fits the visible Y samples. Disconnected or missing series are excluded from the scale.
+- **AUTO Y: OFF** freezes the current Y range; new data still appear whenever they fall within the selected range.
+- **Y− / Y+** manually zoom the Y axis and automatically switch that scope to `AUTO Y: OFF`.
+- **FIT** performs a single fit to visible samples, *without* turning automatic mode back on.
+- **T− / T+** retain their time-axis behavior and do not change the Y-mode.
+- Each plot's setting persists while navigating between tabs and changing monitored axes, without affecting other charts.
+- Dashboard and RPM plots default to auto-fit ON. The reference preview starts manual with the original ±190° range; AUTO Y can be toggled on.
+
+The toggle changes only visualization; it does not change ROS topics, commands, feedback, or telemetry retention.

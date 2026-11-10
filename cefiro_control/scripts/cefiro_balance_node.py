@@ -21,9 +21,11 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu, MagneticField, FluidPressure
 from geometry_msgs.msg import Vector3Stamped
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, String, Float64MultiArray
+from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from cefiro_msgs.msg import MotorRpm, MotorTelemetry
 from cefiro_multibody import CefiroMultibody, wrap_delta, fifth_order, lqr_gains, allocate_motors
+from reference_envelope import estimate_reference_envelope
 
 
 
@@ -92,9 +94,12 @@ class BalanceNode(Node):
         declare('mag_timeout_s',0.60)
         declare('actuator_timeout_s',0.45)
         declare('reference_timeout_s',0.9)
-        # Small, provisional SIM-only attitude reference envelope [BODY roll, pitch, yaw].
-        # No physical achievable-angle claim until reference-step trials in Gazebo.
-        declare('reference_limits_deg',[5.0,5.0,10.0])
+        # Requested design-space ceilings [BODY roll, pitch, yaw]. The actual
+        # limits are REDUCED at startup by CAD kinematics + static motor authority.
+        # Yaw +/-180 covers 360 degrees of headings, not a full-turn trajectory.
+        # No physical stability claim until reference steps are validated in Gazebo.
+        declare('reference_limits_deg',[30.0,30.0,180.0])
+        declare('reference_joint_limits_deg',[180.5,30.0,30.0])
         declare('reference_slew_deg_s',[6.0,6.0,8.0])
         declare('reference_accel_deg_s2',[18.0,18.0,24.0])
         # SIM-only residual-trim loop; enabled ONLY in CAPTURED.
@@ -129,6 +134,29 @@ class BalanceNode(Node):
         D=float(self.param('prop_diameter_m'))
         self.kf=float(self.param('prop_ct'))*rho*D**4/3600.
         self.km=float(self.param('prop_cq'))*rho*D**5/3600.
+        # Evaluate achievable STATIC attitude targets using the same URDF CAD
+        # kinematics, gravity feedforward and bounded RPM^2 allocation as the
+        # active controller. Do not claim global nonlinear stability from this.
+        nominal_rotation=self.model.kinematics(np.zeros(3))[0]['drone_body_link'][0]
+        try:
+            self.reference_envelope_deg, envelope_report = estimate_reference_envelope(
+                self.model, nominal_rotation,
+                self.param('reference_limits_deg'),
+                self.param('reference_joint_limits_deg'),
+                self.param('nominal_rpm'), self.param('max_rpm'),
+                [min(self.param('max_generalized_torque_nm')[0],
+                     self.param('yaw_align_torque_nm'))] +
+                list(self.param('max_generalized_torque_nm')[1:]),
+                self.param('max_allocation_residual_nm'), self.kf, self.km)
+            if not envelope_report.get('valid'):
+                self.get_logger().error('STATIC ENVELOPE INVALID: '+str(envelope_report))
+        except Exception as error:  # Never leave the GUI assuming unsupported limits.
+            self.reference_envelope_deg=np.array([5.,5.,10.])
+            self.get_logger().error('Static envelope analysis failed; using pilot limits: '+str(error))
+        self.get_logger().warn(
+            'SIM-only MODEL ESTIMATE (NOT stability tested): R=+/-%.1f, P=+/-%.1f, Y=+/-%.1f deg. '
+            'Yaw selects heading by shortest path; test in Gazebo before relying on large angles.'
+            % tuple(self.reference_envelope_deg))
         self.enabled=False;self.estop=False;self.fault=None;self.state='DISABLED'
         self.mode='';self.strategy='';self.active_strategy=None
         # References sent by the GUI are body-frame RPY deviations from the
@@ -159,6 +187,12 @@ class BalanceNode(Node):
         self.arm_pub=self.create_publisher(Bool,'/cefiro_actuators/armed',10)
         self.status_pub=self.create_publisher(String,'/cefiro/control/status',10)
         self.diag_pub=self.create_publisher(String,'/cefiro/control/diagnostics',10)
+        reference_qos=QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.reference_envelope_pub=self.create_publisher(
+            Float64MultiArray,'/cefiro/control/reference_envelope_deg',reference_qos)
+        self.create_timer(1.0,self.publish_reference_envelope)
+        self.publish_reference_envelope()
         self.create_subscription(Imu,'/imu/data',self.on_imu,qos_profile_sensor_data)
         self.create_subscription(MagneticField,'/magnetometer/data',self.on_mag,qos_profile_sensor_data)
         self.create_subscription(FluidPressure,'/bmp581/air_pressure',lambda m:None,qos_profile_sensor_data)
@@ -198,12 +232,17 @@ class BalanceNode(Node):
         if rpms.shape==(4,) and np.all(np.isfinite(rpms)):
             self.measured_rpm=rpms
 
+    def publish_reference_envelope(self):
+        msg=Float64MultiArray()
+        msg.data=[float(x) for x in self.reference_envelope_deg]
+        self.reference_envelope_pub.publish(msg)
+
     def on_ref(self,msg):
         a=np.array([msg.vector.x,msg.vector.y,msg.vector.z],float)
         if not np.all(np.isfinite(a)):
             return
         # Defend against alternate ROS publishers bypassing the GUI limits.
-        limits=np.radians(np.asarray(self.param('reference_limits_deg'),float))
+        limits=np.radians(self.reference_envelope_deg)
         if limits.shape!=(3,) or np.any(limits<=0.):
             self.abort('INVALID_REFERENCE_LIMITS_CONFIG')
             return
@@ -224,9 +263,15 @@ class BalanceNode(Node):
         if not np.all(np.isfinite(qgoal)) or res>math.radians(0.3) or cond>10.:
             self.abort('REFERENCE_IK_INVALID')
             return None
-        # Never select the distant IK branch for an attitude tracking request.
+        # Select the shortest angular branch; yaw is a continuous heading
+        # over +/-180 deg. The two horizontal joints retain a conservative
+        # margin below the 35 deg local-escape threshold.
         qgoal=wrap_delta(qgoal)
-        if np.any(np.abs(np.degrees(qgoal))>np.array([16.,11.,11.])):
+        joint_limits=np.asarray(self.param('reference_joint_limits_deg'),float)
+        if joint_limits.shape!=(3,) or not np.all(np.isfinite(joint_limits)):
+            self.abort('INVALID_REFERENCE_JOINT_LIMITS')
+            return None
+        if np.any(np.abs(np.degrees(qgoal))>joint_limits+1.e-3):
             self.abort('REFERENCE_JOINT_ENVELOPE')
             return None
         self.last_requested_q_ref=qgoal.copy()
@@ -236,7 +281,7 @@ class BalanceNode(Node):
         amax=np.radians(np.asarray(self.param('reference_accel_deg_s2'),float)[ordered])
         error=wrap_delta(qgoal-self.filtered_q_ref)
         # Continuously accelerate/decelerate the internal target, and brake
-        # early enough to avoid overshooting the requested small-angle target.
+        # early enough to avoid overshooting a larger heading/tilt request.
         desired_speed=np.sign(error)*np.minimum(vmax,np.sqrt(2.*amax*np.abs(error)))
         previous_velocity=self.filtered_q_ref_velocity.copy()
         dv=np.clip(desired_speed-self.filtered_q_ref_velocity,-amax*dt,amax*dt)

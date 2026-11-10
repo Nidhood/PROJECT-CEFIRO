@@ -30,7 +30,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'model',
-            default_value=PathJoinSubstitution([pkg, 'urdf', 'cefiro-gyro.urdf.xacro']),
+            default_value=PathJoinSubstitution([pkg, 'urdf', 'cefiro-drone.urdf.xacro']),
             description='Absolute path to the root Xacro',
         ),
         DeclareLaunchArgument(

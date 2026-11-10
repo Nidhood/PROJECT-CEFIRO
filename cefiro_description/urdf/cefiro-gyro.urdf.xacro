@@ -15,19 +15,14 @@
 
   <xacro:cefiro_gimbal config="${P}"/>
   <xacro:cefiro_airframe config="${P}" mount_to_gimbal="true"/>
-  <!-- Keep the airframe link as its own Gazebo physics link. Without this,
-       URDF->SDF fixed-joint reduction merges it into nenya_ring and the
-       motor wrench application cannot find drone_body_link. -->
+
   <gazebo reference="gyro_to_frame">
     <preserveFixedJoint>true</preserveFixedJoint>
   </gazebo>
 
-  <!-- Four physical rotor loads and visual angular velocities.
-       Gazebo loads this only for the spawned robot; RViz ignores it. -->
   <gazebo>
     <plugin filename="libcefiro_rotor_system.so"
             name="cefiro::gz_plugins::RotorSystem">
-      <!-- The motor positions are read from the SAME YAML as the joints. -->
       <xacro:property name="joint_cfg" value="${P['joints']}"/>
       <xacro:property name="mm" value="${0.001}"/>
       <xacro:property name="m1" value="${joint_cfg['motor_1']['origin_mm']}"/>
@@ -43,9 +38,9 @@
     </plugin>
   </gazebo>
 
-  <!-- Mount the IMU, magnetometer and barometer on the last FMU deck. -->
   <xacro:if value="$(arg enable_sensors)">
     <xacro:include filename="$(find cefiro_sensors)/urdf/cefiro_fmu_sensors.xacro"/>
     <xacro:cefiro_fmu_sensors config="${P['sensors']}"/>
   </xacro:if>
+  
 </robot>

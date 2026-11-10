@@ -5,8 +5,7 @@
   <xacro:property name="mm_to_m" value="${0.001}"/>
   <xacro:property name="g_mm2_to_kg_m2" value="${1.0e-9}"/>
 
-  <!-- Collision primitives are independent from visual STL meshes.
-       A recursive macro emits one URDF <collision> per YAML entry. -->
+  <!-- Collision primitives -->
   <xacro:macro name="cefiro_collision_parts" params="link_name parts index:=0">
     <xacro:if value="${index &lt; len(parts)}">
       <xacro:property name="part" value="${parts[index]}"/>
@@ -26,9 +25,7 @@
     </xacro:if>
   </xacro:macro>
 
-  <!-- Geometry is kept in its original CAD reference frame.
-       mesh_origin_mm translates each STL from CAD coordinates to its link frame.
-       Collision geometry is a separate set of editable primitives. -->
+  <!-- Link primitives -->
   <xacro:macro name="cefiro_link" params="link_name config">
     <link name="${link_name}">
       <xacro:property name="mass_kg" value="${config['mass_g'] * g_to_kg}"/>
@@ -73,7 +70,7 @@
     </link>
   </xacro:macro>
 
-  <!-- Parent-child transforms: CAD pivots expressed in each parent link frame. -->
+  <!-- Parent-child transforms -->
   <xacro:macro name="cefiro_joint" params="joint_name config">
     <joint name="${joint_name}" type="${config['type']}">
       <parent link="${config['parent']}"/>

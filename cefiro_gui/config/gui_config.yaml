@@ -1,10 +1,12 @@
 cefiro_hmi:
   ros__parameters:
     use_sim_time: true
-    # Show simulation attitude relative to the nominal URDF gimbal pose.
-    # Disable for hardware GUI configurations.
     display_relative_attitude: true
     equilibrium_world_yaw_deg: 151.318
+    real_imu_topic: /real/imu/data
+    real_magnetometer_topic: /real/magnetometer/data
+    real_barometer_topic: /real/bmp581/air_pressure
+    real_status_topic: /real/cefiro/control/status
     imu_topic: /imu/data
     magnetometer_topic: /magnetometer/data
     barometer_topic: /bmp581/air_pressure
@@ -14,6 +16,18 @@ cefiro_hmi:
     mode_topic: /cefiro/control/mode
     strategy_topic: /cefiro/control/strategy
     status_topic: /cefiro/control/status
-    hardware_status_topic: /real/cefiro/hardware/status # host-confirmed DShot settings and command requests
+    hardware_status_topic: /real/cefiro/hardware/status
+    sim_target_rpm_topic: /cefiro_actuators/target_rpm
+    real_target_rpm_topic: /real/cefiro_actuators/target_rpm
+    sim_direct_dshot_topic: /cefiro_actuators/dshot_throttle
+    real_direct_dshot_topic: /real/cefiro_actuators/dshot_throttle
+    sim_measured_rpm_topic: /cefiro_actuators/measured_rpm
+    real_measured_rpm_topic: /real/cefiro_actuators/measured_rpm
+    sim_motor_telemetry_topic: /cefiro_actuators/telemetry
+    real_motor_telemetry_topic: /real/cefiro_actuators/telemetry
+    real_host_commanded_dshot_topic: /real/cefiro/hardware/commanded_dshot
     pid_gains_topic: /cefiro/control/pid_gains
     lqr_gain_topic: /cefiro/control/lqr_gain
+
+    # SIM controller publishes the CAD/actuator model-estimated reference bounds.
+    sim_reference_envelope_topic: /cefiro/control/reference_envelope_deg

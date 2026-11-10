@@ -59,7 +59,6 @@ const std::array<Theme,6> kTheme{{
  {"#141b2e","#e2e8f0","#334155","#60a5fa","#34d399","#a78bfa"},
  {"#000f1a","#d0f0ff","#135071","#00e6ff","#b084ff","#00ff99"},
  {"#0b0b18","#eaf2ff","#26325b","#ff2bd6","#00f5ff","#ccff00"}}};
-constexpr std::array<double,3> kReferenceLimitsDeg = {5.0,5.0,10.0};
 QString f(double v,int places=2){return QString::number(std::abs(v)<1.e-7?0.:v,'f',places);}
 QFrame* hline(QWidget* p){auto* l=new QFrame(p);l->setFrameShape(QFrame::HLine);l->setObjectName("hudSeparator");return l;}
 }
@@ -72,7 +71,7 @@ QWidget* MainWindow::titledPanel(const QString& title,QVBoxLayout*& inner,QWidge
  auto* panel=new QFrame(parent);panel->setObjectName("panel");inner=new QVBoxLayout(panel);inner->setContentsMargins(11,9,11,10);inner->setSpacing(7);inner->addWidget(label(title,"panelTitle"));return panel;
 }
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
- setWindowTitle("CEFIRO GUI v1.5.3 | FULL-CIRCLE REFERENCE | SIM");setMinimumSize(1180,700);resize(1600,930);
+ setWindowTitle("CEFIRO GUI v2.2 | MODEL-BASED REFERENCE ENVELOPE");setMinimumSize(1180,700);resize(1600,930);
  clock_.start();publish_clock_.start();
  stack_=new QStackedWidget(this);setCentralWidget(stack_);
  buildToolbar();buildDashboard();buildControl();buildSystem();
@@ -82,6 +81,9 @@ MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
  nav_->setCurrentIndex(0);
  stack_->setCurrentIndex(0);
  for (auto* plot : dash_) if (plot) plot->setActive(true);
+ if(altitude_plot_) altitude_plot_->setActive(true);
+ if(rpm_target_plot_)rpm_target_plot_->setActive(true);
+ if(rpm_feedback_plot_)rpm_feedback_plot_->setActive(true);
  if (preview_) preview_->setActive(false);
  if (live_) live_->setActive(false);
  bridge_.start();refresh_=new QTimer(this);refresh_->setInterval(33);refresh_->setTimerType(Qt::CoarseTimer);
@@ -96,6 +98,14 @@ MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
  manual_publish_timer_->start();
  statusBar()->setSizeGripEnabled(false);
  status_ros_=label("ROS: WAITING");status_rec_=label("REC: IDLE");status_control_=label("CONTROL: DISABLED");status_samples_=label("SAMPLES: 0");
+ status_sim_connection_=label("", "connectionBadge");
+ status_real_connection_=label("", "connectionBadge");
+ status_sim_connection_->setMinimumWidth(158);
+ status_real_connection_->setMinimumWidth(162);
+ statusBar()->addWidget(status_sim_connection_);
+ statusBar()->addWidget(status_real_connection_);
+ setConnectionBadge(status_sim_connection_,"SIM",false);
+ setConnectionBadge(status_real_connection_,"REAL",false);
  for(auto* l:{status_ros_,status_rec_,status_control_,status_samples_}){statusBar()->addPermanentWidget(l);statusBar()->addPermanentWidget(label(" | "));}
 }
 MainWindow::~MainWindow(){shutdown();}
@@ -132,8 +142,29 @@ void MainWindow::buildToolbar(){
    if (live_) {
        live_->setActive(i == 1);
    }
+    if (altitude_plot_) altitude_plot_->setActive(i == 0);
+    if (rpm_target_plot_) rpm_target_plot_->setActive(i == 0);
+    if (rpm_feedback_plot_) rpm_feedback_plot_->setActive(i == 0);
  });
- bar->addWidget(nav_);auto* spacer=new QWidget(bar);spacer->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);bar->addWidget(spacer);
+ bar->addWidget(nav_);
+ auto* spacer=new QWidget(bar);
+ spacer->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
+ bar->addWidget(spacer);
+ bar->addWidget(label("CONTROL TARGET  ","eyebrow"));
+ plant_selector_=new QComboBox(bar);
+ plant_selector_->setObjectName("plantSelector");
+ plant_selector_->addItem("SIMULATION",false);
+ plant_selector_->addItem("REAL HARDWARE",true);
+ plant_selector_->setMinimumWidth(180);
+ plant_selector_->setToolTip("Select the command destination. Both plants are monitored independently. Stop commands before switching.");
+ bar->addWidget(plant_selector_);
+ connect(plant_selector_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int index){
+     if(command_active_)return;
+     bridge_.selectReal(index==1);
+     resetSelectedFeedback();
+     refreshReferenceLimits();
+     setTheme(theme_index_);
+ });
  bar->addWidget(label("THEME  ","eyebrow"));theme_combo_=new QComboBox(bar);theme_combo_->addItems(kThemes);theme_combo_->setMinimumWidth(160);bar->addWidget(theme_combo_);
  connect(theme_combo_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int i){setTheme(i);});addToolBar(Qt::TopToolBarArea,bar);
 }
@@ -144,21 +175,104 @@ void MainWindow::buildDashboard(){
  body->addWidget(label("Attitude, angular rates and FMU measurements  ·  cursor hover / zoom controls on each scope","pageSubtitle"));
  auto* scroll=new QScrollArea(page);scroll->setWidgetResizable(true);scroll->setFrameShape(QFrame::NoFrame);body->addWidget(scroll,1);
  auto* container=new QWidget(scroll);scroll->setWidget(container);auto* grid=new QGridLayout(container);grid->setSpacing(8);grid->setContentsMargins(0,2,0,2);
- const QStringList titles={"ROLL / φ","PITCH / θ","YAW / ψ","ANGULAR RATES / p q r","LINEAR ACCELERATION / axyz","MAGNETIC FIELD / Bxyz"};
- const QStringList units={"deg","deg","deg","deg/s","m/s²","µT"};
- for(int i=0;i<6;++i){QVBoxLayout* inner=nullptr;auto* panel=titledPanel(titles[i],inner,page);
-    auto* metric=label(i<3?"-- deg":"--","metricValue");if(i<3)attitude_values_[size_t(i)]=metric;else if(i==3)rate_values_[0]=metric;else if(i==4)rate_values_[1]=metric;else rate_values_[2]=metric;
+ const QStringList titles={"ROLL / φ","PITCH / θ","YAW / ψ","ANGULAR RATES / p q r","LINEAR ACCELERATION / axyz","MAGNETIC FIELD / Bxyz","BAROMETER / PRESSURE","MAGNETOMETER / MAGNITUDE","DSHOT / HOST REQUEST"};
+ const QStringList units={"deg","deg","deg","deg/s","m/s²","µT","hPa","µT","DShot"};
+ for(int i=0;i<9;++i){QVBoxLayout* inner=nullptr;auto* panel=titledPanel(titles[i],inner,page);
+    auto* metric=label(i<3?"-- deg":"--","metricValue");
+    if(i<3)attitude_values_[size_t(i)]=metric;
+    else if(i==3)rate_values_[0]=metric;
+    else if(i==4)rate_values_[1]=metric;
+    else if(i==5)rate_values_[2]=metric;
+    else if(i==6)pressure_value_=metric;
+    else if(i==7)magnitude_value_=metric;
+    else if(i==8)dshot_value_=metric;
     inner->addWidget(metric);
-    QStringList keys=i<3?QStringList{"Reference","Measured"}:i==3?QStringList{"p","q","r"}:i==4?QStringList{"ax","ay","az"}:QStringList{"Bx","By","Bz"};
+    QStringList keys=i<3?QStringList{"SIM REF","SIM","REAL REF","REAL"}:
+       i==3?QStringList{"SIM p","SIM q","SIM r","REAL p","REAL q","REAL r"}:
+       i==4?QStringList{"SIM ax","SIM ay","SIM az","REAL ax","REAL ay","REAL az"}:
+       i==5?QStringList{"SIM Bx","SIM By","SIM Bz","REAL Bx","REAL By","REAL Bz"}:
+       i==6?QStringList{"SIM hPa","REAL hPa"}:
+       i==7?QStringList{"SIM |B|","REAL |B|"}:
+       QStringList{"SIM M1","SIM M2","SIM M3","SIM M4",
+                   "REAL M1","REAL M2","REAL M3","REAL M4"};
     dash_[size_t(i)]=new ScopePlot("",units[i],keys,panel);dash_[size_t(i)]->setMinimumHeight(360);
-    if(i<3){dash_[size_t(i)]->setDashed(0);dash_[size_t(i)]->setYRange(i==1?-95:-185,i==1?95:185);}
+    if(i<3){
+       dash_[size_t(i)]->setDashed(0);
+       dash_[size_t(i)]->setDashed(2);
+       dash_[size_t(i)]->setYRange(i==1?-95:-185,i==1?95:185);
+     }
     if(i==3)dash_[size_t(i)]->setYRange(-30,30);
     if(i==4)dash_[size_t(i)]->setYRange(-15,15);
     if(i==5)dash_[size_t(i)]->setYRange(-80,80);
-    inner->addWidget(dash_[size_t(i)],1);panel->setMinimumHeight(430);grid->addWidget(panel,i/2,i%2);
+     if(i==6)dash_[size_t(i)]->setYRange(700,1100);
+     if(i==7)dash_[size_t(i)]->setYRange(0,120);
+     if(i==3||i==4||i==5)for(int j=3;j<6;++j)dash_[size_t(i)]->setDashed(j);
+ if(i==8){
+     dash_[size_t(i)]->setYRange(0,2047);
+     for(int motor=4;motor<8;++motor)dash_[size_t(i)]->setDashed(motor);
  }
+    // Every dashboard scope follows only the series that actually have data.
+    // Minimum spans prevent a single stable sensor from collapsing the Y axis.
+    const double minimum_span[]={4.0,4.0,5.0,8.0,3.0,5.0,2.0,3.0,100.0};
+    dash_[size_t(i)]->setAutoFitY(true,minimum_span[i]);
+    inner->addWidget(dash_[size_t(i)],1);
+    panel->setMinimumHeight(430);
+    // Each dashboard panel occupies exactly one cell in a 2-column grid.
+    // Pressure and altitude are independent panels with the same height.
+    // The last two panels move to row 5 after the altitude insertion.
+    const int row=i<=6 ? i/2 : 4;
+    const int column=i<=6 ? i%2 : i-7;
+    grid->addWidget(panel,row,column);
+ }
+ // Same structure as all other scopes: panel title, live metric and one plot.
+ QVBoxLayout* altitude_inner=nullptr;
+ auto* altitude_panel=titledPanel("RELATIVE ALTITUDE",altitude_inner,container);
+ altitude_value_=label("-- m","metricValue");
+ altitude_inner->addWidget(altitude_value_);
+ altitude_plot_=new ScopePlot("","m",QStringList{"SIM altitude","REAL altitude"},altitude_panel);
+ altitude_plot_->setMinimumHeight(360);
+ altitude_plot_->setYRange(-20,20);
+ altitude_plot_->setAutoFitY(true,2.0);
+ altitude_plot_->setDashed(1);
+ altitude_inner->addWidget(altitude_plot_,1);
+ altitude_panel->setMinimumHeight(430);
+ grid->addWidget(altitude_panel,3,1);
+ // Requested RPM and measured RPM are separate scopes: never imply a DShot
+ // request is measured rotational speed on physical hardware.
+ const QStringList motor_keys={"SIM M1","SIM M2","SIM M3","SIM M4",
+                               "REAL M1","REAL M2","REAL M3","REAL M4"};
+ auto add_rpm_panel=[&](const QString& title,ScopePlot*& plot,QLabel*& metric,int column){
+     QVBoxLayout* inner=nullptr;
+     auto* panel=titledPanel(title,inner,container);
+     metric=label("-- RPM","metricValue");
+     inner->addWidget(metric);
+     plot=new ScopePlot("","RPM",motor_keys,panel);
+     plot->setMinimumHeight(360);
+     plot->setYRange(0,12000);
+     plot->setAutoFitY(true,300.0);
+     for(int motor=4;motor<8;++motor)plot->setDashed(motor);
+     inner->addWidget(plot,1);
+     panel->setMinimumHeight(430);
+     grid->addWidget(panel,5,column);
+ };
+ add_rpm_panel("RPM / REQUESTED REFERENCE",rpm_target_plot_,rpm_target_value_,0);
+ add_rpm_panel("RPM / MEASURED FEEDBACK",rpm_feedback_plot_,rpm_feedback_value_,1);
  grid->setColumnStretch(0,1);grid->setColumnStretch(1,1);
- connect(clear_btn_,&QPushButton::clicked,this,[this]{for(auto* p:dash_)p->clear();if(live_)live_->clear();stats_.reset();});
+ connect(clear_btn_,&QPushButton::clicked,this,[this]{
+    for(auto* p:dash_)p->clear();
+    if(altitude_plot_)altitude_plot_->clear();
+    if(rpm_target_plot_)rpm_target_plot_->clear();
+    if(rpm_feedback_plot_)rpm_feedback_plot_->clear();
+    for(auto& source:last_motor_group_s_)source.fill(-1.0);
+    last_motor_telemetry_s_.fill(-1.0);
+    if(dshot_value_)dshot_value_->setText("-- DShot");
+    if(rpm_target_value_)rpm_target_value_->setText("-- RPM");
+    if(rpm_feedback_value_)rpm_feedback_value_->setText("-- RPM");
+    if(live_)live_->clear();
+    for(auto& source:live_refs_)for(auto& axis:source)axis.clear();
+    for(auto& source:live_meas_)for(auto& axis:source)axis.clear();
+    stats_.reset();
+ });
 }
 void MainWindow::buildControl() {
     QVBoxLayout* body = nullptr;
@@ -172,7 +286,7 @@ void MainWindow::buildControl() {
     title->setSpacing(0);
     title->addWidget(label("CEFIRO / ATTITUDE OPERATIONS", "eyebrow"));
     title->addWidget(label("ATTITUDE CONTROL & EXPERIMENTS", "pageTitle"));
-    title->addWidget(label("CEFIRO GUI v1.5.3 BALANCED REFERENCES  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
+    title->addWidget(label("CEFIRO GUI v1.9 BALANCED REFERENCES  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
     header->addLayout(title);
     header->addStretch();
     record_btn_ = new QPushButton("DATA RECORDER", page);
@@ -269,7 +383,7 @@ void MainWindow::buildControl() {
     auto_fields->setHorizontalSpacing(4);
     auto_fields->setVerticalSpacing(2);
     for (int i=0; i<3; ++i) {
-        const double limit = kReferenceLimitsDeg[std::size_t(i)];
+        const double limit = reference_limits_deg_[std::size_t(i)];
         auto_fields->addWidget(label(kAxisNames[i], "eyebrow"), 0, i);
         manual_[std::size_t(i)] = spin(-limit, limit, 0., 1., 2);
         auto_fields->addWidget(manual_[std::size_t(i)], 1, i);
@@ -277,7 +391,7 @@ void MainWindow::buildControl() {
         auto_fields->addWidget(manual_labels_[std::size_t(i)], 2, i);
     }
     gimbal_layout->addLayout(auto_fields);
-    gimbal_layout->addWidget(label("360° dial: top=0, right=+half range, left=-half range, bottom=+/-limit · 1° wheel", "hint"));
+    gimbal_layout->addWidget(label("MODEL-LIMITED SIM REFERENCES · yaw +/-180° spans 360° of headings (shortest turn) · 1° wheel", "hint"));
     auto_command_tabs_->addTab(gimbal_tab, "Reference gimbal");
 
     auto* trajectory_tab = new QWidget(auto_command_tabs_);
@@ -418,6 +532,9 @@ void MainWindow::buildControl() {
     pv->setContentsMargins(4, 4, 4, 3);
     preview_ = new ScopePlot("REFERENCE PREVIEW", "deg", {"Reference"}, preview_tab);
     preview_->setMinimumHeight(115);
+    // Preview starts with the original full attitude range, but its AUTO Y
+    // toggle can be enabled by the user at any time and remains independent.
+    preview_->setYRange(-190,190);
     pv->addWidget(preview_, 1);
     pv->addWidget(label("Preview matches the published generator waveform.", "hint"));
     ref_tabs_->addTab(preview_tab, "Preview");
@@ -541,6 +658,7 @@ void MainWindow::buildControl() {
     live_->setMinimumHeight(125);
     live_->setDashed(0);
     live_->setYRange(-60,60);
+    live_->setAutoFitY(true,4.0);
     liveinner->addWidget(live_,1);
     right->addWidget(livepanel,4);
 }
@@ -575,8 +693,8 @@ void MainWindow::connectUi(){
  connect(automatic_btn_,&QPushButton::clicked,this,[this]{setManual(false);});
  command_pad_->setOnEdited([this](int axis, double value) {
      if (axis < 0 || axis > 2 || manual_mode_ || !reference_pad_unlocked_) return;
-     value = std::clamp(value,-kReferenceLimitsDeg[std::size_t(axis)],
-                         kReferenceLimitsDeg[std::size_t(axis)]);
+     value = std::clamp(value,-reference_limits_deg_[std::size_t(axis)],
+                         reference_limits_deg_[std::size_t(axis)]);
      {
          QSignalBlocker block(manual_[std::size_t(axis)]);
          manual_[std::size_t(axis)]->setValue(value);
@@ -590,8 +708,8 @@ void MainWindow::connectUi(){
    manual_labels_[size_t(i)]->setText(f(value)+"°");
    command_pad_->setAngles({manual_[0]->value(), manual_[1]->value(), manual_[2]->value()});
    if (!manual_mode_ && reference_pad_unlocked_) {
-       command_deg_[size_t(i)] = std::clamp(value,-kReferenceLimitsDeg[size_t(i)],
-                                          kReferenceLimitsDeg[size_t(i)]);
+       command_deg_[size_t(i)] = std::clamp(value,-reference_limits_deg_[size_t(i)],
+                                          reference_limits_deg_[size_t(i)]);
        manual_dirty_ = true;
        if (command_active_ && publish_clock_.elapsed() > 45) publishCommand();
    }
@@ -712,7 +830,9 @@ WaveformConfig MainWindow::waveformConfig()const{
 }
 void MainWindow::previewWaveform(){if(!preview_)return;const auto c=waveformConfig();QList<QPointF> points;points.reserve(501);
  const double total=std::max(1.0,c.delay_s+c.duration_s);for(int i=0;i<=500;++i){const double t=total*double(i)/500.0;const double v=clampFinite(waveformValue(c,t),-180,180);points.push_back({t,v});}
- preview_->setSeriesData(0,points);preview_->setWindowSeconds(std::clamp(total,1.0,60.0));preview_->setYRange(-190,190);
+ preview_->setSeriesData(0,points);
+ preview_->setWindowSeconds(std::clamp(total,1.0,60.0));
+ // Never override the plot's user-selected manual/auto vertical scale.
 }
 void MainWindow::setManual(bool yes){
  if (command_active_ && manual_mode_ != yes) stopOutput(false);
@@ -740,8 +860,8 @@ void MainWindow::setManual(bool yes){
  }
  if(wave_running_){waveform_timer_->stop();wave_running_=false;}
  if(!yes) for(int i=0;i<3;++i) command_deg_[size_t(i)] =
-    std::clamp(manual_[size_t(i)]->value(),-kReferenceLimitsDeg[size_t(i)],
-               kReferenceLimitsDeg[size_t(i)]);
+    std::clamp(manual_[size_t(i)]->value(),-reference_limits_deg_[size_t(i)],
+               reference_limits_deg_[size_t(i)]);
  updateReferenceGate();
  if(command_active_){ if(manual_mode_) publishMotorCommand(); else publishCommand(); }
 }
@@ -759,6 +879,39 @@ void MainWindow::resetEquilibriumReference(){
         command_pad_->setEnabledForEditing(false);
     }
     manual_dirty_ = false;
+}
+void MainWindow::applyReferenceLimits(const Vec3& requested){
+    Vec3 limits{};
+    for (std::size_t i=0; i<3; ++i) {
+        const double cap = i==2 ? 180.0 : 30.0;
+        limits[i] = std::clamp(requested[i], 0.5, cap);
+    }
+    bool changed=false;
+    for (std::size_t i=0; i<3; ++i)
+        changed |= std::abs(reference_limits_deg_[i]-limits[i])>0.01;
+    if(!changed)return;
+    reference_limits_deg_=limits;
+    if(command_pad_)command_pad_->setLimits(limits);
+    for (std::size_t i=0; i<3; ++i) {
+        if(manual_[i]) {
+            QSignalBlocker hold(manual_[i]);
+            manual_[i]->setRange(-limits[i],limits[i]);
+            manual_[i]->setValue(std::clamp(manual_[i]->value(),-limits[i],limits[i]));
+            if(manual_labels_[i])manual_labels_[i]->setText(f(manual_[i]->value())+"°");
+        }
+        command_deg_[i]=std::clamp(command_deg_[i],-limits[i],limits[i]);
+    }
+    if(command_pad_)command_pad_->setAngles({manual_[0]->value(),manual_[1]->value(),manual_[2]->value()});
+    if(reference_pad_unlocked_ && command_active_)publishCommand();
+}
+void MainWindow::refreshReferenceLimits(){
+    if(bridge_.isReal()){
+        // No nonlinear LQR/actuator certification for the physical plant.
+        applyReferenceLimits({5.0,5.0,10.0});
+        return;
+    }
+    Vec3 limits{};
+    if(bridge_.simReferenceEnvelope(limits))applyReferenceLimits(limits);
 }
 void MainWindow::updateReferenceGate(){
     const bool is_lqr = controller_ && controller_->currentText().contains("LQR");
@@ -782,12 +935,19 @@ void MainWindow::updateReferenceGate(){
     } else if(auto_command_tabs_)auto_command_tabs_->setTabEnabled(1,!manual_mode_);
     if(reference_gate_label_){
         if(ready) reference_gate_label_->setText(
-            "UNLOCKED · BALANCE: CAPTURED · R +/-5°, P +/-5°, Y +/-10° (SIM pilot limits)");
+            QString("UNLOCKED · BALANCE: CAPTURED · R +/- %1°, P +/- %2°, Y +/- %3° · SIM model estimate/fallback")
+                .arg(f(reference_limits_deg_[0],1),f(reference_limits_deg_[1],1),f(reference_limits_deg_[2],1)));
         else reference_gate_label_->setText(
-            "LOCKED · Wait for BALANCE: CAPTURED and valid IMU · pilot inputs disabled");
+            QString("LOCKED · Wait for BALANCE: CAPTURED and valid IMU · Model/pilot limits: R +/- %1°, P +/- %2°, Y +/- %3°")
+                .arg(f(reference_limits_deg_[0],1),f(reference_limits_deg_[1],1),f(reference_limits_deg_[2],1)));
     }
 }
 void MainWindow::startOutput(){
+ if(bridge_.isReal() && !manual_mode_ && controller_->currentText().contains("SWING-UP")){
+   QMessageBox::critical(this,"Simulation-only controller",
+       "SWING-UP + LQR has not been validated on real motors. Select SIMULATION to run it.");
+   return;
+ }
  if(!output_enabled_->isChecked()){
   QMessageBox::information(this,"Output inhibited","Enable 'Output enabled' before sending controller commands.");return;
  }
@@ -824,7 +984,9 @@ void MainWindow::startOutput(){
  // Avoid stale ATTITUDE/LQR mode causing dual publishers on the same motors.
  if (manual_mode_) bridge_.publishReference({0.0,0.0,0.0},"MANUAL","OPEN LOOP");
  resetEquilibriumReference();
- e_stop_=false;command_active_=true;bridge_.setEnabled(true);
+ e_stop_=false;command_active_=true;
+ if(plant_selector_)plant_selector_->setEnabled(false);
+ bridge_.setEnabled(true);
  updateReferenceGate();
  if (manual_mode_) bridge_.setMotorArmed(true);
  activate_btn_->setText("COMMANDS ENABLED");
@@ -855,6 +1017,7 @@ void MainWindow::stopOutput(bool emergency){
     }
     wave_running_ = false;
     command_active_ = false;
+    if(plant_selector_)plant_selector_->setEnabled(true);
     e_stop_ = emergency;
     resetEquilibriumReference();
     bridge_.publishReference(command_deg_,"ATTITUDE",controller_->currentText().toStdString());
@@ -879,7 +1042,7 @@ void MainWindow::publishCommand(){
  if(!manual_mode_ && controller_->currentText().contains("LQR")) {
     if (!reference_pad_unlocked_) command_deg_={0.0,0.0,0.0};
     else for(std::size_t i=0;i<3;++i)command_deg_[i]=
-       std::clamp(command_deg_[i],-kReferenceLimitsDeg[i],kReferenceLimitsDeg[i]);
+       std::clamp(command_deg_[i],-reference_limits_deg_[i],reference_limits_deg_[i]);
  }
  publish_clock_.restart();
  if (have_sample_ && last_sample_.orientation_valid && !manual_mode_) {
@@ -916,8 +1079,16 @@ void MainWindow::publishMotorCommand(){
  command_value_->setText("Motors: " + summary.join(" · "));
  applied_value_->setText("Nominal motor commands published (open-loop DShot); hardware phases determine direction");
 }
-void MainWindow::setMonitorAxis(int idx){if(idx<0||idx>2)return;monitor_axis_=idx;live_->clear();live_->setYRange(idx==1?-95.0:-185.0,idx==1?95.0:185.0);}
+void MainWindow::setMonitorAxis(int idx){
+    if(idx<0||idx>2)return;
+    monitor_axis_=idx;
+    const auto source=bridge_.isReal()?1u:0u;
+    live_->setSeriesData(0,live_refs_[source][size_t(idx)]);
+    live_->setSeriesData(1,live_meas_[source][size_t(idx)]);
+    // Keep the operator's AUTO Y preference when changing monitor axes.
+}
 void MainWindow::tick(){
+ refreshReferenceLimits();
  updateReferenceGate();
  // A fresh reference is a GUI heartbeat for the simulation-only balance node.
  if(command_active_ && !manual_mode_ && controller_->currentText().contains("LQR") &&
@@ -963,16 +1134,31 @@ void MainWindow::tick(){
          .arg(f(motor_command_rpm_[size_t(i)],0)));
    }
  }
- for(size_t i=0;i<items.size();++i){const auto& s=items[i];++collected_;stats_.add(s);
-    if (s.orientation_valid) {
+ // One fresh render per sensor and plant per UI frame, regardless of which
+ // ROS callback arrived last. Prevents REAL suppressing SIM or vice versa.
+ std::array<std::array<std::size_t,3>,2> last_event{};
+ for (auto& source:last_event)source.fill(items.size());
+ for(std::size_t i=0;i<items.size();++i){
+     const auto& s=items[i];
+     last_event[s.from_real ? 1 : 0][static_cast<std::size_t>(s.kind)]=i;
+ }
+ for(std::size_t i=0;i<items.size();++i){
+    const auto& s=items[i];
+    ++collected_;
+    const bool selected=s.from_real==bridge_.isReal();
+    if(selected && s.kind==SampleKind::Imu)stats_.add(s);
+    if(selected && s.kind==SampleKind::Imu && s.orientation_valid) {
         for (int axis = 0; axis < 3; ++axis) {
             response_analyzers_[std::size_t(axis)].add(
                 s.ros_time_s, s.attitude_deg[std::size_t(axis)]);
         }
     }
-    if(recorder_active_)saveRecord(s);
-    onSample(s,i+1==items.size());
+    if(selected && s.kind==SampleKind::Imu && recorder_active_)saveRecord(s);
+    const bool last_in_source=last_event[s.from_real ? 1 : 0]
+                                    [static_cast<std::size_t>(s.kind)]==i;
+    onSample(s,last_in_source);
  }
+ updateSourceConnections();
  if (recorder_active_ && recording_end_s_ > 0.0 &&
      recording_clock_.elapsed() / 1000.0 >= recording_end_s_) {
      recording_should_stop_ = true;
@@ -1001,6 +1187,43 @@ void MainWindow::tick(){
          elapsed_s,
          recording_events_, recording_path_, progress_fraction, estimate_text);
  }
+ // Motor monitoring is independent of the IMU and of the selected control plant.
+ // Plot actual transport/plant messages, not the GUI slider value as feedback.
+ const auto motor_events=bridge_.drainMotor();
+ std::array<std::array<std::size_t,5>,2> latest_motor{};
+ for(auto& source:latest_motor)source.fill(motor_events.size());
+ for(std::size_t i=0;i<motor_events.size();++i){
+     const auto& event=motor_events[i];
+     latest_motor[event.from_real?1:0][static_cast<std::size_t>(event.kind)]=i;
+ }
+ const double motor_time=clock_.elapsed()/1000.0;
+ for(std::size_t i=0;i<motor_events.size();++i){
+     const auto& event=motor_events[i];
+     if(latest_motor[event.from_real?1:0][static_cast<std::size_t>(event.kind)]!=i)continue;
+     onMotorEvent(event,motor_time);
+ }
+ // The hardware status JSON is a fallback only when the dedicated host
+ // commanded-DShot topic is absent. It is never RPM feedback.
+ if(bridge_.hardwareStatusFresh()){
+     const auto json=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus()));
+     if(json.isObject() && json.object().value("serial_connected").toBool(false) &&
+        (last_motor_group_s_[1][2]<0.0 || motor_time-last_motor_group_s_[1][2]>0.6)){
+         const auto codes=json.object().value("last_commanded_dshot").toArray();
+         if(codes.size()==4 && motor_time-last_dshot_time_>=0.05){
+             MotorEvent fallback;
+             fallback.from_real=true;
+             fallback.kind=MotorEventKind::HostCommandedDshot;
+             bool valid=true;
+             for(int motor=0;motor<4;++motor){
+                 const int code=codes.at(motor).toInt(-1);
+                 if(code!=0 && (code<48 || code>2047)){valid=false;break;}
+                 fallback.dshot[size_t(motor)]=static_cast<std::uint16_t>(code);
+             }
+             if(valid){onMotorEvent(fallback,motor_time);last_dshot_time_=motor_time;}
+         }
+     }
+ }
+ expireMotorGroups(motor_time);
  status_samples_->setText(QString("SAMPLES: %1").arg(collected_));
  if(have_sample_){for(int i=0;i<3;++i){
    rmse_values_[size_t(i)]->setText(QString("%1° / RMSE %2°").arg(f(last_sample_.attitude_deg[i],1)).arg(f(stats_.rmse(i),2)));}
@@ -1013,21 +1236,248 @@ void MainWindow::tick(){
    }
  }
 }
-void MainWindow::onSample(const Telemetry& s,bool draw){
- last_sample_=s;have_sample_=true;
- if(!draw)return;
- const double t=clock_.elapsed()/1000.0;
- for(int i=0;i<3;++i){
-   if(s.orientation_valid){dash_[size_t(i)]->append(0,t,s.setpoint_deg[i]);dash_[size_t(i)]->append(1,t,s.attitude_deg[i]);}
- }
- for(int i=0;i<3;++i){dash_[3]->append(i,t,s.angular_rate_deg_s[i]);dash_[4]->append(i,t,s.accel_m_s2[i]);if(s.magnetometer_valid)dash_[5]->append(i,t,s.mag_uT[i]);}
- for(int i=0;i<3;++i)attitude_values_[size_t(i)]->setText(s.orientation_valid?f(s.attitude_deg[i],2)+" deg":"NO ORIENTATION");
- rate_values_[0]->setText(QString("p %1   q %2   r %3 deg/s").arg(f(s.angular_rate_deg_s[0]),f(s.angular_rate_deg_s[1]),f(s.angular_rate_deg_s[2])));
- rate_values_[1]->setText(QString("ax %1   ay %2   az %3 m/s²").arg(f(s.accel_m_s2[0]),f(s.accel_m_s2[1]),f(s.accel_m_s2[2])));
- rate_values_[2]->setText(QString("Bx %1   By %2   Bz %3 µT").arg(f(s.mag_uT[0]),f(s.mag_uT[1]),f(s.mag_uT[2])));
- view_->setAttitude(s.orientation,s.orientation_valid);
- if(s.orientation_valid){live_->append(0,t,s.setpoint_deg[monitor_axis_]);live_->append(1,t,s.attitude_deg[monitor_axis_]);}
+void MainWindow::clearMotorGroup(bool real,int group){
+    const int source=real?1:0;
+    ScopePlot* plot=(group==0)?rpm_target_plot_:(group==1?rpm_feedback_plot_:dash_[8]);
+    if(plot)for(int motor=0;motor<4;++motor)plot->clearSeries(source*4+motor);
+    last_motor_group_s_[size_t(source)][size_t(group)]=-1.0;
+    if(real==bridge_.isReal()){
+        auto* metric=(group==0)?rpm_target_value_:(group==1?rpm_feedback_value_:dshot_value_);
+        if(metric)metric->setText(group==2?"-- DShot":"-- RPM");
+    }
 }
+void MainWindow::expireMotorGroups(double time_s){
+    constexpr double timeout_s=2.0;
+    for(int source=0;source<2;++source){
+        for(int group=0;group<3;++group){
+            const double last=last_motor_group_s_[size_t(source)][size_t(group)];
+            if(last>=0.0 && time_s-last>timeout_s)clearMotorGroup(source==1,group);
+        }
+    }
+}
+void MainWindow::onMotorEvent(const MotorEvent& event,double time_s){
+    const int source=event.from_real?1:0;
+    const bool selected=bridge_.isReal()==event.from_real;
+    const int first=source*4;
+    const auto format_motors=[](const auto& values,const QString& suffix){
+        return QString("M1 %1 · M2 %2 · M3 %3 · M4 %4 %5")
+            .arg(f(values[0],0)).arg(f(values[1],0))
+            .arg(f(values[2],0)).arg(f(values[3],0)).arg(suffix);
+    };
+    const auto append_requested=[&](const std::array<double,4>& values){
+        if(rpm_target_plot_){
+            for(int m=0;m<4;++m)rpm_target_plot_->append(first+m,time_s,values[size_t(m)]);
+        }
+        last_motor_group_s_[size_t(source)][0]=time_s;
+        if(selected && rpm_target_value_)rpm_target_value_->setText(format_motors(values,"RPM requested"));
+    };
+    const auto append_measured=[&](const std::array<double,4>& values){
+        if(rpm_feedback_plot_){
+            for(int m=0;m<4;++m)rpm_feedback_plot_->append(first+m,time_s,values[size_t(m)]);
+        }
+        last_motor_group_s_[size_t(source)][1]=time_s;
+        if(selected && rpm_feedback_value_)rpm_feedback_value_->setText(format_motors(values,"RPM measured"));
+    };
+    const auto append_dshot=[&](const std::array<std::uint16_t,4>& codes,const QString& origin){
+        for(int m=0;m<4;++m)dash_[8]->append(first+m,time_s,codes[size_t(m)]);
+        last_motor_group_s_[size_t(source)][2]=time_s;
+        if(selected && dshot_value_)dshot_value_->setText(format_motors(codes,origin));
+    };
+    switch(event.kind){
+        case MotorEventKind::TargetRpm:
+            append_requested(event.requested_rpm);
+            break;
+        case MotorEventKind::DirectDshot:
+            // For raw DShot commands there is NO RPM reference; do not invent one.
+            if(last_motor_group_s_[size_t(source)][0]>=0.0)
+                clearMotorGroup(event.from_real,0);
+            // Only show raw input in the absence of recent backend-applied DShot.
+            if(last_motor_group_s_[size_t(source)][2]<0.0 ||
+               time_s-last_motor_group_s_[size_t(source)][2]>0.6)
+                append_dshot(event.dshot,"DShot input (unconfirmed)");
+            break;
+        case MotorEventKind::MeasuredRpm:
+            // MotorTelemetry contains the same feedback with richer provenance.
+            if(last_motor_telemetry_s_[size_t(source)]<0.0 ||
+               time_s-last_motor_telemetry_s_[size_t(source)]>0.6)
+                append_measured(event.measured_rpm);
+            break;
+        case MotorEventKind::Telemetry:
+            last_motor_telemetry_s_[size_t(source)]=time_s;
+            if(event.command_source==1)
+                append_requested(event.requested_rpm);
+            else if(event.command_source==2 && last_motor_group_s_[size_t(source)][0]>=0.0)
+                clearMotorGroup(event.from_real,0);
+            append_measured(event.measured_rpm);
+            append_dshot(event.dshot,"DShot applied / telemetry");
+            break;
+        case MotorEventKind::HostCommandedDshot:
+            append_dshot(event.dshot,"host DShot request");
+            break;
+    }
+}
+void MainWindow::onSample(const Telemetry& s,bool draw){
+    const bool selected=s.from_real==bridge_.isReal();
+    // Only IMU updates should drive the controller performance/status UI.
+    if(selected && s.kind==SampleKind::Imu){
+        last_sample_=s;
+        have_sample_=true;
+    }
+    if(!draw)return;
+    const double t=clock_.elapsed()/1000.0;
+    const int src=s.from_real?1:0;
+    if(s.kind==SampleKind::Imu){
+        if(s.orientation_valid){
+            for(int axis=0;axis<3;++axis){
+                dash_[size_t(axis)]->append(src?2:0,t,s.setpoint_deg[axis]);
+                dash_[size_t(axis)]->append(src?3:1,t,s.attitude_deg[axis]);
+            }
+        }
+        for(int axis=0;axis<3;++axis){
+            dash_[3]->append(src*3+axis,t,s.angular_rate_deg_s[axis]);
+            dash_[4]->append(src*3+axis,t,s.accel_m_s2[axis]);
+        }
+        if(!selected)return;
+        for(int axis=0;axis<3;++axis){
+            attitude_values_[size_t(axis)]->setText(
+                s.orientation_valid ? f(s.attitude_deg[axis],2)+" deg":"NO ORIENTATION");
+        }
+        rate_values_[0]->setText(QString("p %1   q %2   r %3 deg/s")
+            .arg(f(s.angular_rate_deg_s[0]),f(s.angular_rate_deg_s[1]),f(s.angular_rate_deg_s[2])));
+        rate_values_[1]->setText(QString("ax %1   ay %2   az %3 m/s²")
+            .arg(f(s.accel_m_s2[0]),f(s.accel_m_s2[1]),f(s.accel_m_s2[2])));
+        view_->setAttitude(s.orientation,s.orientation_valid);
+        if(s.orientation_valid){
+            for(int axis=0;axis<3;++axis){
+                auto& ref=live_refs_[size_t(src)][size_t(axis)];
+                auto& measured=live_meas_[size_t(src)][size_t(axis)];
+                ref.append(QPointF(t,s.setpoint_deg[axis]));
+                measured.append(QPointF(t,s.attitude_deg[axis]));
+                while(ref.size()>20000 || (!ref.isEmpty() && ref.first().x()<t-600.0))ref.removeFirst();
+                while(measured.size()>20000 || (!measured.isEmpty() && measured.first().x()<t-600.0))measured.removeFirst();
+            }
+            live_->append(0,t,s.setpoint_deg[monitor_axis_]);
+            live_->append(1,t,s.attitude_deg[monitor_axis_]);
+        }
+    }else if(s.kind==SampleKind::Magnetometer && s.magnetometer_valid){
+        double magnitude_sq=0.0;
+        for(int axis=0;axis<3;++axis){
+            const double component=s.mag_uT[size_t(axis)];
+            dash_[5]->append(src*3+axis,t,component); // Tesla -> microtesla in RosBridge.
+            magnitude_sq+=component*component;
+        }
+        const double field_magnitude=std::sqrt(magnitude_sq);
+        dash_[7]->append(src,t,field_magnitude);
+        if(selected && magnitude_value_)
+            magnitude_value_->setText(f(field_magnitude,2)+" µT");
+        if(selected){
+            rate_values_[2]->setText(QString("Bx %1   By %2   Bz %3 µT")
+                .arg(f(s.mag_uT[0]),f(s.mag_uT[1]),f(s.mag_uT[2])));
+        }
+    }else if(s.kind==SampleKind::Barometer && s.barometer_valid){
+        dash_[6]->append(src,t,s.pressure_hPa);
+        if(altitude_plot_)altitude_plot_->append(src,t,s.relative_alt_m);
+        if(selected){
+            if(pressure_value_)pressure_value_->setText(f(s.pressure_hPa,2)+" hPa");
+            if(altitude_value_)altitude_value_->setText(f(s.relative_alt_m,2)+" m");
+        }
+    }
+}
+
+void MainWindow::setConnectionBadge(QLabel* badge,const QString& name,bool connected){
+    if(!badge)return;
+    badge->setText(QString("● %1  %2").arg(name,connected?"CONNECTED":"DISCONNECTED"));
+    badge->setStyleSheet(connected
+        ? "QLabel { color: #36df91; font-weight: 700; padding: 2px 7px; }"
+        : "QLabel { color: #ff6576; font-weight: 700; padding: 2px 7px; }");
+}
+
+void MainWindow::clearSensorHistory(bool real,SampleKind sensor){
+    const int source=real?1:0;
+    if(sensor==SampleKind::Imu){
+        for(int axis=0;axis<3;++axis){
+            dash_[size_t(axis)]->clearSeries(source?2:0);
+            dash_[size_t(axis)]->clearSeries(source?3:1);
+        }
+        for(int axis=0;axis<3;++axis){
+            dash_[3]->clearSeries(source*3+axis);
+            dash_[4]->clearSeries(source*3+axis);
+            live_refs_[size_t(source)][size_t(axis)].clear();
+            live_meas_[size_t(source)][size_t(axis)].clear();
+        }
+        if(real==bridge_.isReal())resetSelectedFeedback();
+    }else if(sensor==SampleKind::Magnetometer){
+        for(int axis=0;axis<3;++axis)dash_[5]->clearSeries(source*3+axis);
+        dash_[7]->clearSeries(source);
+        if(real==bridge_.isReal()){
+            rate_values_[2]->setText("MAG: DISCONNECTED");
+            if(magnitude_value_)magnitude_value_->setText("-- µT");
+        }
+    }else if(sensor==SampleKind::Barometer){
+        dash_[6]->clearSeries(source);
+        if(altitude_plot_)altitude_plot_->clearSeries(source);
+        if(real==bridge_.isReal()){
+            if(pressure_value_)pressure_value_->setText("-- hPa");
+            if(altitude_value_)altitude_value_->setText("-- m");
+        }
+    }
+}
+
+void MainWindow::clearSourceHistory(bool real){
+    clearSensorHistory(real,SampleKind::Imu);
+    clearSensorHistory(real,SampleKind::Magnetometer);
+    clearSensorHistory(real,SampleKind::Barometer);
+    for(int group=0;group<3;++group)clearMotorGroup(real,group);
+    last_motor_telemetry_s_[real?1u:0u]=-1.0;
+    if(real)last_dshot_time_=-1.0;
+    bridge_.resetTelemetry(real);
+}
+
+void MainWindow::resetSelectedFeedback(){
+    have_sample_=false;
+    stats_.reset();
+    last_sample_=Telemetry{};
+    for(auto& analyzer:response_analyzers_)analyzer=StepResponseAnalyzer{};
+    for(auto* l:attitude_values_)if(l)l->setText("-- deg");
+    for(auto* l:rate_values_)if(l)l->setText("--");
+    if(pressure_value_)pressure_value_->setText("-- hPa");
+    if(altitude_value_)altitude_value_->setText("-- m");
+    if(magnitude_value_)magnitude_value_->setText("-- µT");
+    if(metric_value_)metric_value_->setText("RMSE --  |  MAE --  |  PEAK --");
+    if(view_)view_->setAttitude(Quaternion{},false);
+    if(live_)setMonitorAxis(monitor_axis_);
+    for(auto* l:rmse_values_)if(l)l->setText("--");
+}
+
+void MainWindow::updateSourceConnections(){
+    for(int index=0;index<2;++index){
+        const bool real=index==1;
+        const bool imu=bridge_.imuFreshFor(real);
+        const bool mag=bridge_.magFreshFor(real);
+        const bool baro=bridge_.baroFreshFor(real);
+        bool host_serial_connected=false;
+        if(real && bridge_.hardwareStatusFresh()){
+            const auto status=QJsonDocument::fromJson(
+                QByteArray::fromStdString(bridge_.hardwareStatus()));
+            host_serial_connected=status.isObject() &&
+                status.object().value("serial_connected").toBool(false);
+        }
+        const bool connected=imu||mag||baro||host_serial_connected||bridge_.motorFreshFor(real);
+        if(imu_online_[size_t(index)] && !imu)clearSensorHistory(real,SampleKind::Imu);
+        if(mag_online_[size_t(index)] && !mag)clearSensorHistory(real,SampleKind::Magnetometer);
+        if(baro_online_[size_t(index)] && !baro)clearSensorHistory(real,SampleKind::Barometer);
+        if(source_online_[size_t(index)] && !connected)clearSourceHistory(real);
+        if(source_online_[size_t(index)]!=connected){
+            setConnectionBadge(real?status_real_connection_:status_sim_connection_,
+                               real?"REAL":"SIM",connected);
+        }
+        source_online_[size_t(index)]=connected;
+        imu_online_[size_t(index)]=imu;
+        mag_online_[size_t(index)]=mag;
+        baro_online_[size_t(index)]=baro;
+    }
+}
+
 void MainWindow::updateSystem(const Telemetry& s){
  system_imu_->setText(QString("IMU  %1").arg(bridge_.imuFresh()?"ONLINE":"STALE"));
  system_mag_->setText(QString("MAG  %1").arg(bridge_.magFresh()?"ONLINE":"STALE"));
@@ -1037,9 +1487,15 @@ void MainWindow::updateSystem(const Telemetry& s){
   .arg(QString::fromStdString(s.imu_frame),QString::fromStdString(s.mag_frame),QString::fromStdString(s.baro_frame)));
  system_angular_->setText(QString("Gyro: [%1, %2, %3] deg/s").arg(f(s.angular_rate_deg_s[0]),f(s.angular_rate_deg_s[1]),f(s.angular_rate_deg_s[2])));
  system_accel_->setText(QString("Accel: [%1, %2, %3] m/s²").arg(f(s.accel_m_s2[0]),f(s.accel_m_s2[1]),f(s.accel_m_s2[2])));
- system_mag_value_->setText(QString("Mag: [%1, %2, %3] µT").arg(f(s.mag_uT[0]),f(s.mag_uT[1]),f(s.mag_uT[2])));
- system_pressure_->setText(QString("Pressure: %1 hPa").arg(f(s.pressure_hPa,3)));
- system_altitude_->setText(QString("Z relative: %1 m (pressure-derived)").arg(f(s.relative_alt_m,3)));
+ system_mag_value_->setText(bridge_.magFresh()
+  ? QString("Mag: [%1, %2, %3] µT").arg(f(s.mag_uT[0]),f(s.mag_uT[1]),f(s.mag_uT[2]))
+  : "Mag: -- µT (STALE)");
+ system_pressure_->setText(bridge_.baroFresh()
+  ? QString("Pressure: %1 hPa").arg(f(s.pressure_hPa,3))
+  : "Pressure: -- hPa (STALE)");
+ system_altitude_->setText(bridge_.baroFresh()
+  ? QString("Z relative: %1 m (pressure-derived)").arg(f(s.relative_alt_m,3))
+  : "Z relative: -- m (STALE)");
 }
 void MainWindow::setTheme(int index){
     if (index < 0 || index >= int(kThemes.size())) {
@@ -1051,9 +1507,21 @@ void MainWindow::setTheme(int index){
  const auto& t=kTheme[size_t(index)];
  const QList<QColor> colors={QColor(t.red),QColor(t.blue),QColor(t.teal),QColor("#f8b869")};
  for(auto* plot:dash_)if(plot)plot->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
+  if(altitude_plot_)altitude_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
+  if(rpm_target_plot_)rpm_target_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
+  if(rpm_feedback_plot_)rpm_feedback_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(preview_)preview_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(live_)live_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(view_)view_->setTheme(QColor(t.bg),QColor(t.fg),QColor(t.red),QColor(t.blue));
+ if(plant_selector_){
+     const QString accent=bridge_.isReal()?QString("#f0b865"):t.teal;
+     plant_selector_->setStyleSheet(QString(
+         "QComboBox#plantSelector { background:%1; color:%2; border:1px solid %2; "
+         "border-radius:8px; padding:7px 12px; font-weight:800; min-height:19px; } "
+         "QComboBox#plantSelector:hover { border:2px solid %2; } "
+         "QComboBox#plantSelector:disabled { color:%3; border-color:%3; }")
+         .arg(t.bg,accent,t.grid));
+ }
 }
 void MainWindow::showRecordingDialog() {
     if (!recording_dialog_) return;
