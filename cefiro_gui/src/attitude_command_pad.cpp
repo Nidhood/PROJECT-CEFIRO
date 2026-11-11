@@ -24,6 +24,10 @@ AttitudeCommandPad::AttitudeCommandPad(QWidget* parent) : QWidget(parent) {
                "Yaw +/-180 deg covers all headings; this is not a 360 deg spin command. "
                "Wheel: 1 deg; double-click: zero. Enabled only after BALANCE: CAPTURED.");
 }
+void AttitudeCommandPad::setAresTheme(bool enabled) {
+    ares_theme_=enabled;
+    update();
+}
 void AttitudeCommandPad::setAngles(const Vec3& angles) { angles_ = angles; update(); }
 void AttitudeCommandPad::setLimits(const Vec3& limits) {
     for (std::size_t i=0; i<3; ++i) {
@@ -126,20 +130,20 @@ void AttitudeCommandPad::paintEvent(QPaintEvent*) {
     const QPointF c = center();
     const double step = radiusStep();
     const double alpha = editing_enabled_ ? 1.0 : 0.42;
-    p.setPen(QPen(QColor("#46586a"),1,Qt::DashLine));
+    p.setPen(QPen(QColor(ares_theme_?"#60202a":"#46586a"),1,Qt::DashLine));
     p.drawLine(QPointF(c.x(),c.y()-step*3.45),QPointF(c.x(),c.y()+step*3.45));
     p.drawLine(QPointF(c.x()-step*3.45,c.y()),QPointF(c.x()+step*3.45,c.y()));
     const std::array<double,3> a = {angles_[0], angles_[1], angles_[2]};
     for(int i=0;i<3;++i) {
-        const QColor color(kColors[std::size_t(i)]);
+        const QColor color(ares_theme_ ? std::array<const char*,3>{"#ff304c","#ff9e79","#ffddc6"}[std::size_t(i)] : kColors[std::size_t(i)]);
         const double r = step*(3-i);
         p.setOpacity(alpha);
         p.setBrush(Qt::NoBrush);
         // A recessed rim and highlight give the concentric controller the
         // depth cues of a three-gimbal instrument without altering its hit zones.
-        p.setPen(QPen(QColor("#121c2b"), 7));
+        p.setPen(QPen(QColor(ares_theme_?"#280711":"#121c2b"), 7));
         p.drawEllipse(c + QPointF(1.5, 2.0), r, r);
-        p.setPen(QPen(QColor("#43556a"), 3));
+        p.setPen(QPen(QColor(ares_theme_?"#60232d":"#43556a"), 3));
         p.drawEllipse(c, r, r);
         p.setPen(QPen(color,3,Qt::SolidLine,Qt::RoundCap));
         const QRectF arc(c.x()-r,c.y()-r,2*r,2*r);
@@ -175,7 +179,7 @@ void AttitudeCommandPad::paintEvent(QPaintEvent*) {
     const int x=std::max(2,width()-89);
     const int h=std::min(27,std::max(17,height()/5));
     for(int i=0;i<3;++i){
-        p.setPen(QColor(kColors[std::size_t(i)]));
+        p.setPen(QColor(ares_theme_?std::array<const char*,3>{"#ff304c","#ff9e79","#ffddc6"}[std::size_t(i)]:kColors[std::size_t(i)]));
         p.drawText(QRect(x, int(c.y())+(i-1)*h-10, 87,22),
                    Qt::AlignLeft|Qt::AlignVCenter,
                    QString("%1 %2°").arg(kNames[std::size_t(i)])

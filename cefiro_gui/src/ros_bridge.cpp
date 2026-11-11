@@ -1,5 +1,8 @@
 #include "cefiro_gui/ros_bridge.hpp"
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
+#include <cctype>
+#include <charconv>
+#include <system_error>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -31,16 +34,41 @@ RosBridge::RosBridge() {
         } else if (yaw_parameter.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
             equilibrium_world_yaw_deg_ = static_cast<double>(yaw_parameter.as_int());
         } else if (yaw_parameter.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
-            const std::string raw = yaw_parameter.as_string();
-            std::size_t parsed = 0;
-            const double value = std::stod(raw, &parsed);
-            if (raw.find_first_not_of(" \t\r\n", parsed) != std::string::npos) {
-                throw std::invalid_argument("trailing characters in yaw parameter");
+            // When ROS launch supplies an angle as a string, reject unknown
+            // units rather than silently accepting an invalid configuration.
+            // The YAML shipped with the GUI uses an unquoted numeric value.
+            // std::stod follows the process C locale, which may use a comma
+            // decimal separator. Under es_CO it can parse "151.318" as 151
+            // and incorrectly report ".318" as a unit suffix.
+            // from_chars is independent of the process locale.
+            std::string raw = yaw_parameter.as_string();
+            const auto is_space = [](unsigned char ch) { return std::isspace(ch) != 0; };
+            raw.erase(raw.begin(),
+                std::find_if_not(raw.begin(), raw.end(), is_space));
+            const char* begin = raw.data();
+            const char* end = begin + raw.size();
+            double value = 0.0;
+            const auto parsed = std::from_chars(begin, end, value,
+                                                std::chars_format::general);
+            if(parsed.ec != std::errc{} || parsed.ptr == begin) {
+                throw std::invalid_argument("invalid numeric yaw parameter");
+            }
+            std::string suffix(parsed.ptr, end);
+            suffix.erase(suffix.begin(),
+                std::find_if_not(suffix.begin(), suffix.end(), is_space));
+            suffix.erase(std::find_if_not(suffix.rbegin(), suffix.rend(), is_space).base(),
+                suffix.end());
+            if (suffix == "rad" || suffix == "radian" || suffix == "radians") {
+                value *= rad2deg;
+            } else if (!suffix.empty() && suffix != "deg" && suffix != "degree" &&
+                       suffix != "degrees" && suffix != "°") {
+                throw std::invalid_argument("unknown suffix in yaw parameter: '" +
+                                            suffix + "'");
             }
             equilibrium_world_yaw_deg_ = value;
-            RCLCPP_WARN(node_->get_logger(),
-                "equilibrium_world_yaw_deg arrived as STRING. Parsed %.3f deg; "
-                "prefer an unquoted YAML number.", equilibrium_world_yaw_deg_);
+            RCLCPP_INFO(node_->get_logger(),
+                "equilibrium_world_yaw_deg = %.3f deg (string override)",
+                equilibrium_world_yaw_deg_);
         } else {
             RCLCPP_WARN(node_->get_logger(),
                 "equilibrium_world_yaw_deg has unsupported type; using 151.318 deg.");
@@ -52,7 +80,8 @@ RosBridge::RosBridge() {
         }
     } catch (const std::exception & e) {
         RCLCPP_WARN(node_->get_logger(),
-            "Invalid equilibrium_world_yaw_deg: %s; using 151.318 deg.", e.what());
+            "Invalid equilibrium_world_yaw_deg override: %s; using 151.318 deg. "
+            "Check other --params-file entries and launch overrides.", e.what());
         equilibrium_world_yaw_deg_ = 151.318;
     }
     imu_topic_=node_->declare_parameter<std::string>("imu_topic","/imu/data");

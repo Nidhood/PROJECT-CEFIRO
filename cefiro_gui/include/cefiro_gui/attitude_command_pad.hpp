@@ -16,6 +16,7 @@ class AttitudeCommandPad final : public QWidget {
 public:
     explicit AttitudeCommandPad(QWidget* parent = nullptr);
     void setAngles(const Vec3& angles);
+    void setAresTheme(bool enabled);
     void setLimits(const Vec3& limits);
     void setEnabledForEditing(bool enabled);
     void setOnEdited(std::function<void(int, double)> callback);
@@ -35,6 +36,7 @@ private:
     QPointF center() const;
     Vec3 angles_{};
     Vec3 limits_{{5.0,5.0,10.0}};
+    bool ares_theme_{false};
     bool editing_enabled_{false};
     bool dragging_{false};
     int active_axis_{-1};

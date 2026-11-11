@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cefiro_gui VERSION 2.2.0 LANGUAGES CXX)
+project(cefiro_gui VERSION 2.3.3 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -20,6 +20,7 @@ qt6_add_resources(GUI_RESOURCES resources/resources.qrc)
 add_executable(cefiro_gui_node
   src/main.cpp
   src/main_window.cpp
+  src/ares_chrome.cpp
   src/ros_bridge.cpp
   src/scope_plot.cpp
   src/attitude_view.cpp

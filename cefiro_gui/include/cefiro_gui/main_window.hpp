@@ -8,11 +8,16 @@
 #include <QFile>
 #include <QList>
 #include <QPointF>
+#include <QVector>
 #include <QTextStream>
 #include <array>
 #include <memory>
 #include <vector>
 class QCheckBox;
+class QEvent;
+class QGridLayout;
+class QResizeEvent;
+class QWidget;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -34,7 +39,19 @@ public:
     explicit MainWindow(QWidget* parent=nullptr);
     ~MainWindow() override;
     void shutdown();
+protected:
+    bool eventFilter(QObject* watched,QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 private:
+    void scheduleResponsiveLayout();
+    void applyResponsiveLayout();
+    void reflowDashboard(int available_width);
+    void reflowControl(int available_width);
+    void reflowSystem(int available_width);
+    void updateCompactChrome(int available_width);
+    void reflowMotorControls(int available_width);
+    void reflowMasterControl(int available_width);
+    void reflowTrajectoryFields(int available_width);
     void buildToolbar();
     void buildDashboard();
     void buildControl();
@@ -81,6 +98,37 @@ private:
     Vec3 reference_limits_deg_{{5.0,5.0,10.0}};
     QStackedWidget* stack_{nullptr};
     QTabBar* nav_{nullptr};
+    QLabel* control_target_label_{nullptr};
+    QLabel* theme_label_{nullptr};
+    QLabel* brand_label_{nullptr};
+    QTimer* responsive_timer_{nullptr};
+    bool ui_ready_{false};
+    bool reflow_in_progress_{false};
+    QScrollArea* dashboard_scroll_{nullptr};
+    QGridLayout* dashboard_grid_{nullptr};
+    QVector<QWidget*> dashboard_panels_;
+    int dashboard_columns_{0};
+    QScrollArea* control_scroll_{nullptr};
+    QGridLayout* control_columns_{nullptr};
+    QWidget* control_left_{nullptr};
+    QWidget* control_right_{nullptr};
+    int control_columns_mode_{0};
+    QGridLayout* motor_panels_grid_{nullptr};
+    QVector<QWidget*> motor_panels_;
+    int motor_columns_mode_{0};
+    QGridLayout* master_control_grid_{nullptr};
+    QLabel* master_title_{nullptr};
+    QLabel* master_rpm_label_{nullptr};
+    int master_columns_mode_{0};
+    QGridLayout* trajectory_fields_grid_{nullptr};
+    QVector<QWidget*> trajectory_labels_;
+    QVector<QWidget*> trajectory_edits_;
+    int trajectory_columns_mode_{0};
+    QScrollArea* system_scroll_{nullptr};
+    QGridLayout* system_grid_{nullptr};
+    QWidget* system_sensor_panel_{nullptr};
+    QWidget* system_ros_panel_{nullptr};
+    int system_columns_mode_{0};
     QLabel* status_ros_{nullptr};
     QLabel* status_rec_{nullptr};
     QLabel* status_control_{nullptr};
@@ -148,6 +196,11 @@ private:
     QCheckBox* auto_record_{nullptr};
     QCheckBox* output_enabled_{nullptr};
     QCheckBox* link_all_motors_{nullptr};
+    std::array<QCheckBox*,4> motor_master_select_{};
+    QWidget* master_select_widget_{nullptr};
+    QPushButton* master_select_all_btn_{nullptr};
+    QPushButton* master_select_none_btn_{nullptr};
+    QLabel* master_select_label_{nullptr};
     std::array<QDoubleSpinBox*,3> manual_{};
     QDoubleSpinBox *amplitude_{nullptr},*offset_{nullptr},*frequency_{nullptr},*end_frequency_{nullptr},*phase_{nullptr},*delay_{nullptr},*duration_{nullptr},*initial_{nullptr},*final_{nullptr},*rise_{nullptr},*pulse_{nullptr},*duty_{nullptr},*tau_{nullptr};
     QTableWidget* pid_gains_{nullptr};

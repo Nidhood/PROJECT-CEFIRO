@@ -14,13 +14,13 @@ assert 'grid->addWidget(panel,5,column);' in layout
 assert 'RPM / REQUESTED REFERENCE' in layout
 assert 'RPM / MEASURED FEEDBACK' in layout
 assert 'titledPanel("RELATIVE ALTITUDE",altitude_inner,container)' in layout
-assert 'altitude_plot_->setMinimumHeight(360);' in layout
-assert 'altitude_panel->setMinimumHeight(430);' in layout
-assert 'panel->setMinimumHeight(430);' in layout
+assert 'altitude_plot_->setMinimumHeight(235);' in layout
+assert 'altitude_panel->setMinimumHeight(308);' in layout
+assert 'panel->setMinimumHeight(308);' in layout
 assert 'setMinimumHeight(650)' not in layout
 assert 'setMinimumHeight(205)' not in layout
 assert 'altitude_inner->addWidget(altitude_plot_,1);' in layout
 assert 'altitude_value_->setText(f(s.relative_alt_m,2)+" m")' in main
 assert 'pressure_value_->setText(f(s.pressure_hPa,2)+" hPa")' in main
 assert 'magnitude_value_->setText(f(field_magnitude,2)+" µT")' in main
-print('Uniform 2-column / 6-row dashboard checks passed')
+print('Uniform 12-panel responsive dashboard checks passed')

@@ -7,7 +7,7 @@ bridge = (root/'src/ros_bridge.cpp').read_text()
 plot = (root/'src/scope_plot.cpp').read_text()
 config = (root/'config/gui_config.yaml').read_text()
 body = main[main.index('void MainWindow::buildControl()'):main.index('void MainWindow::buildSystem()')]
-assert 'CEFIRO GUI v2.2' in main
+assert 'CEFIRO GUI v2.3' in main
 assert 'ATTITUDE COMMAND & ANALYSIS' in body
 assert 'new AttitudeCommandPad(gimbal_tab)' in body
 assert 'publishMotorCommand' in main
@@ -36,6 +36,6 @@ assert 'live_->clear();live_->setYRange' not in main
 for param in ('real_imu_topic', 'real_magnetometer_topic',
               'real_barometer_topic', 'real_status_topic'):
     assert param in config
-assert 'VERSION 2.2.0' in (root/'CMakeLists.txt').read_text()
-assert '<version>2.2.0</version>' in (root/'package.xml').read_text()
+assert 'VERSION 2.3.3' in (root/'CMakeLists.txt').read_text()
+assert '<version>2.3.3</version>' in (root/'package.xml').read_text()
 print('CEFIRO v1.8 DUAL SOURCE / UI STATIC CHECKS PASSED')

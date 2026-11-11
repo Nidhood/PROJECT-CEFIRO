@@ -2,6 +2,7 @@
 #include "cefiro_gui/scope_plot.hpp"
 #include "cefiro_gui/attitude_view.hpp"
 #include "cefiro_gui/attitude_command_pad.hpp"
+#include "cefiro_gui/ares_chrome.hpp"
 #include <QSignalBlocker>
 #include "cefiro_gui/recording_dialog.hpp"
 #include <QAction>
@@ -13,9 +14,13 @@
 #include <QDialog>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QEvent>
+#include <QtGlobal>
+#include <QGridLayout>
+#include <QGraphicsDropShadowEffect>
+#include <cstdio>
 #include <QFormLayout>
 #include <QFrame>
-#include <QGridLayout>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -53,31 +58,75 @@ const QStringList kTypes={"CONSTANT","STEP","RAMP","PULSE","SQUARE","TRIANGLE","
 const QStringList kThemes={"Tron Ares","MATLAB / Lab","Light","Dark","Tron Evolution","Cyberpunk Neon"};
 struct Theme {QString bg,fg,grid,red,blue,teal;};
 const std::array<Theme,6> kTheme{{
- {"#070a0f","#e8eef4","#213549","#ff5468","#69b5f0","#00d8c6"},
+ {"#080307","#fbe4e2","#48151f","#ff304c","#ff9e79","#ffd0bd"},
  {"#fafafa","#1a242e","#c7d1dd","#0072bd","#d95319","#77ac30"},
  {"#ffffff","#0f172a","#cbd5e1","#3b82f6","#10b981","#8b5cf6"},
  {"#141b2e","#e2e8f0","#334155","#60a5fa","#34d399","#a78bfa"},
  {"#000f1a","#d0f0ff","#135071","#00e6ff","#b084ff","#00ff99"},
  {"#0b0b18","#eaf2ff","#26325b","#ff2bd6","#00f5ff","#ccff00"}}};
 QString f(double v,int places=2){return QString::number(std::abs(v)<1.e-7?0.:v,'f',places);}
+void startupTrace(const char* phase) {
+    if(qEnvironmentVariableIsSet("CEFIRO_GUI_TRACE_STARTUP")) {
+        std::fprintf(stderr,"[CEFIRO startup] %s\n",phase);
+        std::fflush(stderr);
+    }
+}
 QFrame* hline(QWidget* p){auto* l=new QFrame(p);l->setFrameShape(QFrame::HLine);l->setObjectName("hudSeparator");return l;}
 }
 QDoubleSpinBox* MainWindow::spin(double min,double max,double value,double step,int decimals){auto* s=new QDoubleSpinBox;s->setRange(min,max);s->setDecimals(decimals);s->setSingleStep(step);s->setValue(value);s->setKeyboardTracking(false);return s;}
-QLabel* MainWindow::label(const QString& text,const QString& id){auto* l=new QLabel(text);if(!id.isEmpty())l->setObjectName(id);return l;}
+QLabel* MainWindow::label(const QString& text,const QString& id){
+ auto* l=new QLabel(text);
+ if(!id.isEmpty())l->setObjectName(id);
+ if(id=="hint"||id=="pageSubtitle"||id=="metricValue"||id=="panelTitle"){
+     l->setWordWrap(true);
+     l->setMinimumWidth(0);
+ }
+ return l;
+}
 QWidget* MainWindow::contentPage(QVBoxLayout*& layout,QWidget* parent){
- auto* w=new QWidget(parent);layout=new QVBoxLayout(w);layout->setContentsMargins(12,9,12,12);layout->setSpacing(8);return w;
+ auto* w=new AresPage(parent);w->setObjectName("aresPage");layout=new QVBoxLayout(w);layout->setContentsMargins(12,9,12,12);layout->setSpacing(8);return w;
 }
 QWidget* MainWindow::titledPanel(const QString& title,QVBoxLayout*& inner,QWidget* parent){
- auto* panel=new QFrame(parent);panel->setObjectName("panel");inner=new QVBoxLayout(panel);inner->setContentsMargins(11,9,11,10);inner->setSpacing(7);inner->addWidget(label(title,"panelTitle"));return panel;
+ auto* panel=new AresPanel(parent);
+ panel->setObjectName("panel");
+ inner=new QVBoxLayout(panel);
+ inner->setContentsMargins(13,12,13,12);
+ inner->setSpacing(7);
+ auto* heading=new QHBoxLayout;
+ heading->setContentsMargins(0,0,0,0);
+ heading->setSpacing(8);
+ heading->addWidget(label("▰","panelGlyph"));
+ heading->addWidget(label(title,"panelTitle"),1);
+ heading->addWidget(label("// CEFIRO","panelTag"));
+ inner->addLayout(heading);
+ return panel;
 }
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
- setWindowTitle("CEFIRO GUI v2.2 | MODEL-BASED REFERENCE ENVELOPE");setMinimumSize(1180,700);resize(1600,930);
+ setWindowTitle("CEFIRO GUI v2.4 | TRON ARES CONTROL");
+ startupTrace("MainWindow constructor entered");
+ setMinimumSize(610,480);
+ resize(1530,910);
  clock_.start();publish_clock_.start();
  stack_=new QStackedWidget(this);setCentralWidget(stack_);
- buildToolbar();buildDashboard();buildControl();buildSystem();
+ buildToolbar();startupTrace("Toolbar built");
+ buildDashboard();startupTrace("Dashboard built");
+ buildControl();startupTrace("Control page built");
+ buildSystem();startupTrace("System page built");
  recording_dialog_ = new RecordingDialog(this);
  recording_config_ = recording_dialog_->configuration();
- connectUi();setTheme(0);
+ startupTrace("Recorder built");
+ connectUi();startupTrace("UI signals connected");
+ setTheme(0);startupTrace("Theme applied");
+ updateCompactChrome(width());
+ // Never move QGridLayout items from a synchronous Resize event (Qt can re-enter
+ // geometry negotiation while the layout is still being modified).
+ responsive_timer_=new QTimer(this);
+ responsive_timer_->setSingleShot(true);
+ responsive_timer_->setInterval(35);
+ connect(responsive_timer_,&QTimer::timeout,this,[this]{applyResponsiveLayout();});
+ ui_ready_=true;
+ scheduleResponsiveLayout();
+ startupTrace("Responsive scheduler initialized");
  nav_->setCurrentIndex(0);
  stack_->setCurrentIndex(0);
  for (auto* plot : dash_) if (plot) plot->setActive(true);
@@ -86,6 +135,7 @@ MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
  if(rpm_feedback_plot_)rpm_feedback_plot_->setActive(true);
  if (preview_) preview_->setActive(false);
  if (live_) live_->setActive(false);
+ startupTrace("Starting ROS executor");
  bridge_.start();refresh_=new QTimer(this);refresh_->setInterval(33);refresh_->setTimerType(Qt::CoarseTimer);
  connect(refresh_,&QTimer::timeout,this,[this]{tick();});refresh_->start();
  waveform_timer_=new QTimer(this);waveform_timer_->setInterval(20);waveform_timer_->setTimerType(Qt::PreciseTimer);
@@ -100,16 +150,19 @@ MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
  status_ros_=label("ROS: WAITING");status_rec_=label("REC: IDLE");status_control_=label("CONTROL: DISABLED");status_samples_=label("SAMPLES: 0");
  status_sim_connection_=label("", "connectionBadge");
  status_real_connection_=label("", "connectionBadge");
- status_sim_connection_->setMinimumWidth(158);
- status_real_connection_->setMinimumWidth(162);
+ status_sim_connection_->setMinimumWidth(98);
+ status_real_connection_->setMinimumWidth(104);
  statusBar()->addWidget(status_sim_connection_);
  statusBar()->addWidget(status_real_connection_);
  setConnectionBadge(status_sim_connection_,"SIM",false);
  setConnectionBadge(status_real_connection_,"REAL",false);
- for(auto* l:{status_ros_,status_rec_,status_control_,status_samples_}){statusBar()->addPermanentWidget(l);statusBar()->addPermanentWidget(label(" | "));}
+ for(auto* l:{status_ros_,status_rec_,status_control_,status_samples_}){statusBar()->addPermanentWidget(l);statusBar()->addPermanentWidget(label(" | ","statusDivider"));}
+ startupTrace("MainWindow constructor completed");
 }
 MainWindow::~MainWindow(){shutdown();}
 void MainWindow::shutdown(){if(shutting_down_)return;shutting_down_=true;
+    ui_ready_=false;
+    if(responsive_timer_)responsive_timer_->stop();
     if (refresh_) {
         refresh_->stop();
     }
@@ -128,7 +181,16 @@ void MainWindow::shutdown(){if(shutting_down_)return;shutting_down_=true;
 }
 void MainWindow::buildToolbar(){
  auto* bar=new QToolBar(this);bar->setObjectName("topbar");bar->setMovable(false);bar->setFloatable(false);
+ bar->setIconSize(QSize(16,16));
+ bar->setMinimumHeight(48);
+ bar->setMaximumHeight(48);
+ brand_label_=label("▣ CEFIRO  //  ARES","aresBrand");
+ brand_label_->setMinimumHeight(28);
+ brand_label_->setMaximumHeight(28);
+ bar->addWidget(brand_label_);
  nav_=new QTabBar(bar);nav_->setObjectName("topTabs");nav_->setExpanding(false);nav_->setDrawBase(false);
+ nav_->setMinimumHeight(32);
+ nav_->setMaximumHeight(32);
  for(const QString& name:QStringList{"Dashboard","Signal Generator","System"})nav_->addTab(name);
  connect(nav_,&QTabBar::currentChanged,this,[this](int i){stack_->setCurrentIndex(i);control_tab_active_=(i==1);
    for (auto* p : dash_) {
@@ -150,12 +212,15 @@ void MainWindow::buildToolbar(){
  auto* spacer=new QWidget(bar);
  spacer->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
  bar->addWidget(spacer);
- bar->addWidget(label("CONTROL TARGET  ","eyebrow"));
+ control_target_label_=label("CONTROL TARGET  ","eyebrow");
+ bar->addWidget(control_target_label_);
  plant_selector_=new QComboBox(bar);
  plant_selector_->setObjectName("plantSelector");
  plant_selector_->addItem("SIMULATION",false);
  plant_selector_->addItem("REAL HARDWARE",true);
- plant_selector_->setMinimumWidth(180);
+ plant_selector_->setMinimumWidth(130);
+ plant_selector_->setFixedHeight(30);
+ plant_selector_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
  plant_selector_->setToolTip("Select the command destination. Both plants are monitored independently. Stop commands before switching.");
  bar->addWidget(plant_selector_);
  connect(plant_selector_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int index){
@@ -165,7 +230,8 @@ void MainWindow::buildToolbar(){
      refreshReferenceLimits();
      setTheme(theme_index_);
  });
- bar->addWidget(label("THEME  ","eyebrow"));theme_combo_=new QComboBox(bar);theme_combo_->addItems(kThemes);theme_combo_->setMinimumWidth(160);bar->addWidget(theme_combo_);
+ theme_label_=label("THEME  ","eyebrow");bar->addWidget(theme_label_);
+ theme_combo_=new QComboBox(bar);theme_combo_->addItems(kThemes);theme_combo_->setMinimumWidth(120);theme_combo_->setFixedHeight(30);theme_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);bar->addWidget(theme_combo_);
  connect(theme_combo_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int i){setTheme(i);});addToolBar(Qt::TopToolBarArea,bar);
 }
 void MainWindow::buildDashboard(){
@@ -173,8 +239,20 @@ void MainWindow::buildDashboard(){
  auto* head=new QHBoxLayout;head->addWidget(label("CEFIRO / LIVE TELEMETRY","pageTitle"));head->addStretch();
  clear_btn_=new QPushButton("CLEAR CHARTS");clear_btn_->setObjectName("secondary");head->addWidget(clear_btn_);body->addLayout(head);
  body->addWidget(label("Attitude, angular rates and FMU measurements  ·  cursor hover / zoom controls on each scope","pageSubtitle"));
- auto* scroll=new QScrollArea(page);scroll->setWidgetResizable(true);scroll->setFrameShape(QFrame::NoFrame);body->addWidget(scroll,1);
- auto* container=new QWidget(scroll);scroll->setWidget(container);auto* grid=new QGridLayout(container);grid->setSpacing(8);grid->setContentsMargins(0,2,0,2);
+ dashboard_scroll_=new QScrollArea(page);
+ dashboard_scroll_->setObjectName("dashboardScroll");
+ dashboard_scroll_->setWidgetResizable(true);
+ dashboard_scroll_->setFrameShape(QFrame::NoFrame);
+ dashboard_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+ body->addWidget(dashboard_scroll_,1);
+ auto* container=new QWidget(dashboard_scroll_);
+ container->setObjectName("dashboardCanvas");
+ dashboard_grid_=new QGridLayout(container);
+ dashboard_grid_->setSpacing(12);
+ dashboard_grid_->setContentsMargins(2,4,2,6);
+ auto* grid=dashboard_grid_;
+ dashboard_scroll_->setWidget(container);
+ dashboard_scroll_->viewport()->installEventFilter(this);
  const QStringList titles={"ROLL / φ","PITCH / θ","YAW / ψ","ANGULAR RATES / p q r","LINEAR ACCELERATION / axyz","MAGNETIC FIELD / Bxyz","BAROMETER / PRESSURE","MAGNETOMETER / MAGNITUDE","DSHOT / HOST REQUEST"};
  const QStringList units={"deg","deg","deg","deg/s","m/s²","µT","hPa","µT","DShot"};
  for(int i=0;i<9;++i){QVBoxLayout* inner=nullptr;auto* panel=titledPanel(titles[i],inner,page);
@@ -195,7 +273,7 @@ void MainWindow::buildDashboard(){
        i==7?QStringList{"SIM |B|","REAL |B|"}:
        QStringList{"SIM M1","SIM M2","SIM M3","SIM M4",
                    "REAL M1","REAL M2","REAL M3","REAL M4"};
-    dash_[size_t(i)]=new ScopePlot("",units[i],keys,panel);dash_[size_t(i)]->setMinimumHeight(360);
+    dash_[size_t(i)]=new ScopePlot("",units[i],keys,panel);dash_[size_t(i)]->setMinimumHeight(235);
     if(i<3){
        dash_[size_t(i)]->setDashed(0);
        dash_[size_t(i)]->setDashed(2);
@@ -216,13 +294,14 @@ void MainWindow::buildDashboard(){
     const double minimum_span[]={4.0,4.0,5.0,8.0,3.0,5.0,2.0,3.0,100.0};
     dash_[size_t(i)]->setAutoFitY(true,minimum_span[i]);
     inner->addWidget(dash_[size_t(i)],1);
-    panel->setMinimumHeight(430);
+    panel->setMinimumHeight(308);
     // Each dashboard panel occupies exactly one cell in a 2-column grid.
     // Pressure and altitude are independent panels with the same height.
     // The last two panels move to row 5 after the altitude insertion.
     const int row=i<=6 ? i/2 : 4;
     const int column=i<=6 ? i%2 : i-7;
     grid->addWidget(panel,row,column);
+    dashboard_panels_.append(panel);
  }
  // Same structure as all other scopes: panel title, live metric and one plot.
  QVBoxLayout* altitude_inner=nullptr;
@@ -230,13 +309,14 @@ void MainWindow::buildDashboard(){
  altitude_value_=label("-- m","metricValue");
  altitude_inner->addWidget(altitude_value_);
  altitude_plot_=new ScopePlot("","m",QStringList{"SIM altitude","REAL altitude"},altitude_panel);
- altitude_plot_->setMinimumHeight(360);
+ altitude_plot_->setMinimumHeight(235);
  altitude_plot_->setYRange(-20,20);
  altitude_plot_->setAutoFitY(true,2.0);
  altitude_plot_->setDashed(1);
  altitude_inner->addWidget(altitude_plot_,1);
- altitude_panel->setMinimumHeight(430);
+ altitude_panel->setMinimumHeight(308);
  grid->addWidget(altitude_panel,3,1);
+ dashboard_panels_.append(altitude_panel);
  // Requested RPM and measured RPM are separate scopes: never imply a DShot
  // request is measured rotational speed on physical hardware.
  const QStringList motor_keys={"SIM M1","SIM M2","SIM M3","SIM M4",
@@ -247,17 +327,25 @@ void MainWindow::buildDashboard(){
      metric=label("-- RPM","metricValue");
      inner->addWidget(metric);
      plot=new ScopePlot("","RPM",motor_keys,panel);
-     plot->setMinimumHeight(360);
+     plot->setMinimumHeight(235);
      plot->setYRange(0,12000);
      plot->setAutoFitY(true,300.0);
      for(int motor=4;motor<8;++motor)plot->setDashed(motor);
      inner->addWidget(plot,1);
-     panel->setMinimumHeight(430);
+     panel->setMinimumHeight(308);
      grid->addWidget(panel,5,column);
+     dashboard_panels_.append(panel);
  };
  add_rpm_panel("RPM / REQUESTED REFERENCE",rpm_target_plot_,rpm_target_value_,0);
  add_rpm_panel("RPM / MEASURED FEEDBACK",rpm_feedback_plot_,rpm_feedback_value_,1);
- grid->setColumnStretch(0,1);grid->setColumnStretch(1,1);
+ // Reading order stays consistent as the panel grid changes its columns.
+ // Pressure is immediately followed by relative altitude.
+ if(dashboard_panels_.size()==12){
+   const QVector<int> order{0,1,2,3,4,5,6,9,7,8,10,11};
+   const auto original=dashboard_panels_;
+   for(int i=0;i<order.size();++i)dashboard_panels_[i]=original[order[i]];
+ }
+ // Initial placement is valid; defer responsive relayout until after show().
  connect(clear_btn_,&QPushButton::clicked,this,[this]{
     for(auto* p:dash_)p->clear();
     if(altitude_plot_)altitude_plot_->clear();
@@ -275,18 +363,30 @@ void MainWindow::buildDashboard(){
  });
 }
 void MainWindow::buildControl() {
-    QVBoxLayout* body = nullptr;
-    auto* page = contentPage(body, stack_);
+    QVBoxLayout* page_layout=nullptr;
+    auto* page=contentPage(page_layout,stack_);
     stack_->addWidget(page);
-    body->setContentsMargins(9, 5, 9, 6);
-    body->setSpacing(5);
+    page_layout->setContentsMargins(0,0,0,0);
+    control_scroll_=new QScrollArea(page);
+    control_scroll_->setObjectName("controlScroll");
+    control_scroll_->setWidgetResizable(true);
+    control_scroll_->setFrameShape(QFrame::NoFrame);
+    control_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    page_layout->addWidget(control_scroll_,1);
+    auto* control_content=new QWidget(control_scroll_);
+    control_content->setObjectName("controlCanvas");
+    auto* body=new QVBoxLayout(control_content);
+    body->setContentsMargins(10,9,10,10);
+    body->setSpacing(7);
+    control_scroll_->setWidget(control_content);
+    control_scroll_->viewport()->installEventFilter(this);
 
     auto* header = new QHBoxLayout;
     auto* title = new QVBoxLayout;
     title->setSpacing(0);
     title->addWidget(label("CEFIRO / ATTITUDE OPERATIONS", "eyebrow"));
     title->addWidget(label("ATTITUDE CONTROL & EXPERIMENTS", "pageTitle"));
-    title->addWidget(label("CEFIRO GUI v1.9 BALANCED REFERENCES  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
+    title->addWidget(label("CEFIRO GUI v2.4  //  RESPONSIVE TRON ARES CONSOLE  ·  ATTITUDE COMMAND & ANALYSIS", "pageSubtitle"));
     header->addLayout(title);
     header->addStretch();
     record_btn_ = new QPushButton("DATA RECORDER", page);
@@ -296,21 +396,29 @@ void MainWindow::buildControl() {
 
     // Independent columns: the attitude view and response scope get 64% width,
     // and the reference panel never forces a third full-height grid row.
-    auto* columns = new QHBoxLayout;
-    columns->setSpacing(8);
-    body->addLayout(columns, 1);
+    control_columns_=new QGridLayout;
+    auto* columns=control_columns_;
+    columns->setSpacing(10);
+    body->addLayout(columns,1);
     auto* left_widget = new QWidget(page);
     auto* left = new QVBoxLayout(left_widget);
     left->setContentsMargins(0, 0, 0, 0);
     left->setSpacing(7);
-    left_widget->setMinimumWidth(385);
+    left_widget->setMinimumWidth(0);
+    left_widget->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
+    left_widget->installEventFilter(this);
     auto* right_widget = new QWidget(page);
     auto* right = new QVBoxLayout(right_widget);
     right->setContentsMargins(0, 0, 0, 0);
     right->setSpacing(7);
-    right_widget->setMinimumWidth(510);
-    columns->addWidget(left_widget, 36);
-    columns->addWidget(right_widget, 64);
+    right_widget->setMinimumWidth(0);
+    right_widget->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
+    control_left_=left_widget;
+    control_right_=right_widget;
+    columns->addWidget(left_widget,0,0);
+    columns->addWidget(right_widget,0,1);
+    columns->setColumnStretch(0,38);
+    columns->setColumnStretch(1,62);
 
     QVBoxLayout* arch = nullptr;
     auto* architecture = titledPanel("CONTROL ARCHITECTURE", arch, left_widget);
@@ -377,7 +485,7 @@ void MainWindow::buildControl() {
     reference_gate_label_->setWordWrap(true);
     gimbal_layout->addWidget(reference_gate_label_);
     command_pad_ = new AttitudeCommandPad(gimbal_tab);
-    command_pad_->setMinimumHeight(210);
+    command_pad_->setMinimumHeight(175);
     gimbal_layout->addWidget(command_pad_, 1);
     auto* auto_fields = new QGridLayout;
     auto_fields->setHorizontalSpacing(4);
@@ -409,7 +517,8 @@ void MainWindow::buildControl() {
     waveform_->addItems(kTypes);
     signal_select->addWidget(waveform_, 2);
     trajectory_layout->addLayout(signal_select);
-    auto* wavefields = new QGridLayout;
+    trajectory_fields_grid_=new QGridLayout;
+    auto* wavefields=trajectory_fields_grid_;
     wavefields->setHorizontalSpacing(8);
     wavefields->setVerticalSpacing(3);
     const QStringList fieldnames={"Amplitude [deg]","Offset [deg]","Frequency [Hz]",
@@ -430,8 +539,11 @@ void MainWindow::buildControl() {
                                      i==2||i==3 ? .05 : .5, 3);
         const int row = i / 2;
         const int col = (i % 2) * 2;
-        wavefields->addWidget(label(fieldnames[i],"eyebrow"),row,col);
+        auto* field_label=label(fieldnames[i],"eyebrow");
+        wavefields->addWidget(field_label,row,col);
         wavefields->addWidget(*ptrs[std::size_t(i)],row,col+1);
+        trajectory_labels_.append(field_label);
+        trajectory_edits_.append(*ptrs[std::size_t(i)]);
     }
     wavefields->setColumnStretch(1, 1);
     wavefields->setColumnStretch(3, 1);
@@ -444,42 +556,64 @@ void MainWindow::buildControl() {
     auto* manual_page = new QWidget(command_source_stack_);
     auto* manual_layout = new QVBoxLayout(manual_page);
     manual_layout->setContentsMargins(2, 0, 2, 0);
-    manual_layout->setSpacing(4);
-    manual_layout->addWidget(label("DIRECT MOTOR COMMAND  /  TEST EACH ROTOR INDEPENDENTLY", "eyebrow"));
-    auto* motor_hint = label("NOMINAL RPM REQUESTS mapped open-loop to DShot, NOT measured RPM. The Raspberry configures the DShot cap (300 by default; protocol max 2047). MASTER links all four requests; disable link to trim each motor. Direction is determined by physical phases.", "hint");
+    manual_layout->setSpacing(3);
+    manual_layout->addWidget(label("DIRECT MOTOR COMMAND  /  FLEXIBLE MOTOR GROUP CONTROL", "eyebrow"));
+    auto* motor_hint = label("NOMINAL RPM REQUESTS are mapped open-loop to DShot, NOT measured RPM. Apply the master command only to the motors you select below (2, 3 or 4 at a time), or leave it disabled to trim each motor independently. Direction is determined by physical phases.", "hint");
     motor_hint->setWordWrap(true);
     manual_layout->addWidget(motor_hint);
 
     auto* master_panel = new QFrame(manual_page);
     master_panel->setObjectName("panel");
-    auto* master_layout = new QGridLayout(master_panel);
-    master_layout->setContentsMargins(8, 8, 8, 8);
-    master_layout->setHorizontalSpacing(8);
-    master_layout->setVerticalSpacing(4);
-    master_layout->addWidget(label("MASTER COMMAND  /  APPLY SAME REQUEST TO ALL MOTORS", "eyebrow"), 0, 0, 1, 5);
-    link_all_motors_ = new QCheckBox("Link all motors to master", master_panel);
+    master_control_grid_=new QGridLayout(master_panel);
+    auto* master_layout=master_control_grid_;
+    master_layout->setContentsMargins(7, 7, 7, 7);
+    master_layout->setHorizontalSpacing(6);
+    master_layout->setVerticalSpacing(3);
+    master_title_=label("MASTER COMMAND / SELECTED MOTORS","eyebrow");
+    master_layout->addWidget(master_title_,0,0,1,5);
+    link_all_motors_ = new QCheckBox("Apply master to selected motors", master_panel);
+    link_all_motors_->setChecked(true);
     master_layout->addWidget(link_all_motors_, 1, 0, 1, 2);
-    master_layout->addWidget(label("MASTER NOMINAL RPM", "eyebrow"), 1, 2);
+    master_rpm_label_=label("MASTER NOMINAL RPM", "eyebrow");
+    master_layout->addWidget(master_rpm_label_,1,2);
     master_motor_speed_ = spin(0.0, 12000.0, 0.0, 50.0, 0);
     master_layout->addWidget(master_motor_speed_, 1, 3);
     master_motor_direction_ = new QComboBox(master_panel);
-    master_motor_direction_->addItems({"Direction: hardware phases"});
+    master_motor_direction_->addItems({"PHASES FIXED"});
+    master_motor_direction_->setToolTip("Direction determined by physical motor phases.");
     master_motor_direction_->setEnabled(false);
     master_layout->addWidget(master_motor_direction_, 1, 4);
+    master_select_widget_=new QWidget(master_panel);
+    auto* select_row=new QHBoxLayout(master_select_widget_);
+    select_row->setContentsMargins(0,0,0,0);
+    select_row->setSpacing(5);
+    master_select_label_=label("SYNC TARGETS", "eyebrow");
+    select_row->addWidget(master_select_label_);
+    for(int i=0;i<4;++i){
+        motor_master_select_[size_t(i)]=new QCheckBox(QString("M%1").arg(i+1), master_select_widget_);
+        motor_master_select_[size_t(i)]->setChecked(true);
+        select_row->addWidget(motor_master_select_[size_t(i)]);
+    }
+    select_row->addStretch(1);
+    master_select_all_btn_=new QPushButton("ALL", master_select_widget_);
+    master_select_none_btn_=new QPushButton("NONE", master_select_widget_);
+    master_select_all_btn_->setObjectName("secondary");
+    master_select_none_btn_->setObjectName("secondary");
+    master_select_all_btn_->setMaximumWidth(54);
+    master_select_none_btn_->setMaximumWidth(62);
+    select_row->addWidget(master_select_all_btn_);
+    select_row->addWidget(master_select_none_btn_);
+    master_layout->addWidget(master_select_widget_, 2, 0, 1, 5);
     master_motor_slider_ = new QSlider(Qt::Horizontal, master_panel);
     master_motor_slider_->setRange(0, 12000);
     master_motor_slider_->setTickPosition(QSlider::TicksBelow);
     master_motor_slider_->setTickInterval(1000);
     master_motor_slider_->setValue(0);
-    master_motor_slider_->setStyleSheet(
-        "QSlider::groove:horizontal { background:#162431; border:1px solid #213549; height:16px; border-radius:8px; }"
-        "QSlider::sub-page:horizontal { background:#69b5f0; border-radius:8px; }"
-        "QSlider::add-page:horizontal { background:#0d1620; border-radius:8px; }"
-        "QSlider::handle:horizontal { background:#ff5468; border:1px solid #070a0f; width:22px; margin:-4px 0; border-radius:11px; }");
-    master_layout->addWidget(master_motor_slider_, 2, 0, 1, 5);
+    master_motor_slider_->setObjectName("masterMotorSlider");
+    master_layout->addWidget(master_motor_slider_, 3, 0, 1, 5);
     master_motor_label_ = label("0 nominal RPM · DShot cap: awaiting bridge", "hint");
     master_motor_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    master_layout->addWidget(master_motor_label_, 3, 0, 1, 5);
+    master_layout->addWidget(master_motor_label_, 4, 0, 1, 5);
     master_layout->setColumnStretch(0, 1);
     master_layout->setColumnStretch(1, 1);
     master_layout->setColumnStretch(2, 0);
@@ -487,14 +621,15 @@ void MainWindow::buildControl() {
     master_layout->setColumnStretch(4, 0);
     manual_layout->addWidget(master_panel);
 
-    auto* motors = new QHBoxLayout;
-    motors->setSpacing(8);
+    motor_panels_grid_=new QGridLayout;
+    auto* motors=motor_panels_grid_;
+    motors->setSpacing(6);
     for (int i=0; i<4; ++i) {
         auto* motor_panel = new QFrame(manual_page);
         motor_panel->setObjectName("chartFrame");
         auto* mv = new QVBoxLayout(motor_panel);
-        mv->setContentsMargins(8,6,8,6);
-        mv->setSpacing(4);
+        mv->setContentsMargins(6,4,6,4);
+        mv->setSpacing(3);
         auto* name = label(QString("MOTOR %1").arg(i+1), "panelTitle");
         name->setAlignment(Qt::AlignCenter);
         mv->addWidget(name);
@@ -503,27 +638,28 @@ void MainWindow::buildControl() {
         motor_sliders_[std::size_t(i)]->setTickPosition(QSlider::TicksLeft);
         motor_sliders_[std::size_t(i)]->setTickInterval(1000);
         motor_sliders_[std::size_t(i)]->setValue(0);
-        motor_sliders_[std::size_t(i)]->setFixedHeight(250);
-        motor_sliders_[std::size_t(i)]->setFixedWidth(46);
-        motor_sliders_[std::size_t(i)]->setStyleSheet(
-            "QSlider::groove:vertical { background:#162431; border:1px solid #213549; width:20px; border-radius:10px; }"
-            "QSlider::sub-page:vertical { background:#69b5f0; border-radius:10px; }"
-            "QSlider::add-page:vertical { background:#0d1620; border-radius:10px; }"
-            "QSlider::handle:vertical { background:#ff5468; border:1px solid #070a0f; height:24px; margin:0 -6px; border-radius:12px; }");
+        motor_sliders_[std::size_t(i)]->setFixedHeight(175);
+        motor_sliders_[std::size_t(i)]->setFixedWidth(34);
+        motor_sliders_[std::size_t(i)]->setObjectName("motorAxisSlider");
         mv->addWidget(motor_sliders_[std::size_t(i)], 1, Qt::AlignHCenter);
         motor_speed_[std::size_t(i)] = spin(0.0, 12000.0, 0.0, 50.0, 0);
         mv->addWidget(motor_speed_[std::size_t(i)]);
         motor_direction_[std::size_t(i)] = new QComboBox(motor_panel);
-        motor_direction_[std::size_t(i)]->addItems({"Direction: hardware phases"});
+        motor_direction_[std::size_t(i)]->addItems({"PHASES FIXED"});
+        motor_direction_[std::size_t(i)]->setToolTip("Direction determined by physical motor phases.");
         motor_direction_[std::size_t(i)]->setEnabled(false);
         mv->addWidget(motor_direction_[std::size_t(i)]);
         motor_labels_[std::size_t(i)] = label("0 nominal RPM · DShot TX 0", "hint");
         motor_labels_[std::size_t(i)]->setAlignment(Qt::AlignCenter);
         mv->addWidget(motor_labels_[std::size_t(i)]);
-        motors->addWidget(motor_panel, 1);
+        motors->addWidget(motor_panel,i/2,i%2);
+        motor_panels_.append(motor_panel);
     }
-    manual_layout->addLayout(motors, 1);
-    manual_layout->addWidget(label("Bench use: keep the cap at 300 initially, remove propellers, secure the drone and measure current/temperature. After validation use hardware launch argument dshot_max:=2047. No RPM feedback or physical direction control is provided by DShot here.", "hint"));
+    manual_layout->addLayout(motors,1);
+    // Initial placement is valid; defer responsive relayout until after show().
+    // Initial placement is valid; defer responsive relayout until after show().
+    // Initial placement is valid; defer responsive relayout until after show().
+    manual_layout->addWidget(label("Bench use: keep the cap low at first, remove propellers and secure the drone. DShot here carries open-loop requests only; physical direction control and guaranteed RPM feedback depend on the backend.", "hint"));
     command_source_stack_->addWidget(manual_page);
     ref_tabs_->addTab(reference_tab, "Command");
 
@@ -661,20 +797,41 @@ void MainWindow::buildControl() {
     live_->setAutoFitY(true,4.0);
     liveinner->addWidget(live_,1);
     right->addWidget(livepanel,4);
+    // Initial placement is valid; defer responsive relayout until after show().
 }
 void MainWindow::buildSystem(){
- QVBoxLayout* root=nullptr;auto* page=contentPage(root,stack_);stack_->addWidget(page);
- root->addWidget(label("CEFIRO / SYSTEM STATUS","pageTitle"));root->addWidget(label("Live ROS 2 connection, IMU orientation, sensor frames and controller feedback","pageSubtitle"));
- auto* g=new QGridLayout;g->setSpacing(9);root->addLayout(g);
+ QVBoxLayout* outer=nullptr;
+ auto* page=contentPage(outer,stack_);
+ stack_->addWidget(page);
+ outer->setContentsMargins(0,0,0,0);
+ system_scroll_=new QScrollArea(page);
+ system_scroll_->setObjectName("systemScroll");
+ system_scroll_->setWidgetResizable(true);
+ system_scroll_->setFrameShape(QFrame::NoFrame);
+ system_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+ outer->addWidget(system_scroll_,1);
+ auto* content=new QWidget(system_scroll_);
+ content->setObjectName("systemCanvas");
+ auto* root=new QVBoxLayout(content);
+ root->setContentsMargins(12,11,12,12);
+ root->setSpacing(10);
+ system_scroll_->setWidget(content);
+ system_scroll_->viewport()->installEventFilter(this);
+ root->addWidget(label("CEFIRO / SYSTEM STATUS","pageTitle"));
+ root->addWidget(label("Live ROS 2 connection, IMU orientation, sensor frames and controller feedback","pageSubtitle"));
+ system_grid_=new QGridLayout;
+ auto* g=system_grid_;
+ g->setSpacing(10);
+ root->addLayout(g);
  QVBoxLayout* sensors=nullptr;auto* sensor_panel=titledPanel("FMU SENSOR LINK",sensors,page);
  system_imu_=label("IMU: WAITING","metricValue");system_mag_=label("MAG: WAITING","metricValue");system_baro_=label("BARO: WAITING","metricValue");
  system_frame_=label("Frames: --","hint");system_angular_=label("Gyro: -- deg/s","metricValue");system_accel_=label("Accel: -- m/s²","metricValue");system_mag_value_=label("Mag: -- µT","metricValue");system_pressure_=label("Pressure: -- hPa","metricValue");system_altitude_=label("Z relative: -- m","metricValue");
  for(QWidget* w : QList<QWidget*>{system_imu_,system_mag_,system_baro_,hline(sensor_panel),system_frame_,system_angular_,system_accel_,system_mag_value_,system_pressure_,system_altitude_})sensors->addWidget(w);
- g->addWidget(sensor_panel,0,0);
+ system_sensor_panel_=sensor_panel;g->addWidget(sensor_panel,0,0);
  QVBoxLayout* ros=nullptr;auto* ros_panel=titledPanel("ROS 2 INTERFACE",ros,page);
  system_controller_=label("Controller: NO FEEDBACK","metricValue");system_topics_=label("Topics initializing...","hint");system_topics_->setTextInteractionFlags(Qt::TextSelectableByMouse);
- ros->addWidget(system_controller_);ros->addWidget(hline(ros_panel));ros->addWidget(system_topics_);ros->addStretch();g->addWidget(ros_panel,0,1);
- g->setColumnStretch(0,1);g->setColumnStretch(1,1);
+ ros->addWidget(system_controller_);ros->addWidget(hline(ros_panel));ros->addWidget(system_topics_);ros->addStretch();system_ros_panel_=ros_panel;g->addWidget(ros_panel,0,1);
+ // Initial placement is valid; defer responsive relayout until after show().
  auto* note=label("LQR = manual capture. SWING-UP + LQR (SIM) = automatic roll inversion and capture in Gazebo ONLY.\n"
  "Select SWING-UP + LQR (SIM), Output enabled and START TEST; monitor BALANCE status and SAFE STOP.","hint");root->addWidget(note);root->addStretch();
  system_topics_->setText(QString("IMU: %1\nMAG: %2\nBARO: %3\nREF: %4\n"
@@ -717,19 +874,22 @@ void MainWindow::connectUi(){
  auto updateMotorLabel = [this](int idx) {
    if (idx < 0 || idx >= 4) return;
    motor_labels_[size_t(idx)]->setText(
-       QString("Nom %1 · dir %2")
+       QString("Req %1 RPM · dir %2")
            .arg(f(motor_command_rpm_[size_t(idx)],0))
            .arg(motor_command_direction_[size_t(idx)] >= 0 ? "+1" : "-1"));
  };
  auto updateMasterLabel = [this]() {
    if (!master_motor_label_) return;
    const int dir = master_motor_direction_ && master_motor_direction_->currentIndex() == 0 ? 1 : -1;
-   master_motor_label_->setText(QString("Nom %1 · dir %2")
+   master_motor_label_->setText(QString("Req %1 RPM · dir %2")
        .arg(f(master_motor_speed_ ? master_motor_speed_->value() : 0.0,0))
        .arg(dir >= 0 ? "+1" : "-1"));
  };
- auto syncAllMotors = [this, updateMotorLabel](double rpm, int direction_index, bool sync_direction) {
+ auto syncSelectedMotors = [this, updateMotorLabel](double rpm, int direction_index, bool sync_direction) {
+   const bool apply_selected = link_all_motors_ && link_all_motors_->isChecked();
    for (int i = 0; i < 4; ++i) {
+     const bool selected = !motor_master_select_[size_t(i)] || motor_master_select_[size_t(i)]->isChecked();
+     if (apply_selected && !selected) continue;
      {
        QSignalBlocker block1(motor_sliders_[size_t(i)]);
        QSignalBlocker block2(motor_speed_[size_t(i)]);
@@ -745,6 +905,21 @@ void MainWindow::connectUi(){
      updateMotorLabel(i);
    }
    if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
+ };
+ auto refreshMotorSelectionUi = [this]() {
+   const bool use_master = link_all_motors_ && link_all_motors_->isChecked();
+   QStringList selected_names;
+   for (int i = 0; i < 4; ++i) {
+     const bool selected = !motor_master_select_[size_t(i)] || motor_master_select_[size_t(i)]->isChecked();
+     if (selected) selected_names << QString("M%1").arg(i + 1);
+     if (motor_sliders_[size_t(i)]) motor_sliders_[size_t(i)]->setEnabled(manual_mode_ && !(use_master && selected));
+     if (motor_speed_[size_t(i)]) motor_speed_[size_t(i)]->setEnabled(manual_mode_ && !(use_master && selected));
+     if (motor_direction_[size_t(i)]) motor_direction_[size_t(i)]->setEnabled(false);
+   }
+   if (master_select_label_) {
+     const QString suffix = selected_names.isEmpty() ? QString("none") : selected_names.join(", ");
+     master_select_label_->setText(QString("SYNC TARGETS  [%1]").arg(suffix));
+   }
  };
  for(int i=0;i<4;++i){
    connect(motor_sliders_[size_t(i)], &QSlider::valueChanged, this, [this,i,updateMotorLabel](int value){
@@ -767,39 +942,55 @@ void MainWindow::connectUi(){
        if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
    });
  }
- connect(master_motor_slider_, &QSlider::valueChanged, this, [this,syncAllMotors,updateMasterLabel](int value){
+ connect(master_motor_slider_, &QSlider::valueChanged, this, [this,syncSelectedMotors,updateMasterLabel](int value){
      QSignalBlocker block(master_motor_speed_);
      master_motor_speed_->setValue(value);
      updateMasterLabel();
      if (link_all_motors_ && link_all_motors_->isChecked()) {
-         syncAllMotors(value, master_motor_direction_->currentIndex(), false);
+         syncSelectedMotors(value, master_motor_direction_->currentIndex(), false);
      }
  });
- connect(master_motor_speed_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,syncAllMotors,updateMasterLabel](double value){
+ connect(master_motor_speed_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,syncSelectedMotors,updateMasterLabel](double value){
      QSignalBlocker block(master_motor_slider_);
      master_motor_slider_->setValue(int(std::round(value)));
      updateMasterLabel();
      if (link_all_motors_ && link_all_motors_->isChecked()) {
-         syncAllMotors(value, master_motor_direction_->currentIndex(), false);
+         syncSelectedMotors(value, master_motor_direction_->currentIndex(), false);
      }
  });
- connect(master_motor_direction_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,syncAllMotors,updateMasterLabel](int idx){
+ connect(master_motor_direction_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,syncSelectedMotors,updateMasterLabel](int idx){
      updateMasterLabel();
      if (link_all_motors_ && link_all_motors_->isChecked()) {
-         syncAllMotors(master_motor_speed_->value(), idx, true);
+         syncSelectedMotors(master_motor_speed_->value(), idx, true);
      }
  });
- connect(link_all_motors_, &QCheckBox::toggled, this, [this,syncAllMotors](bool on){
-     for (int i = 0; i < 4; ++i) {
-         if (motor_sliders_[size_t(i)]) motor_sliders_[size_t(i)]->setEnabled(manual_mode_ && !on);
-         if (motor_speed_[size_t(i)]) motor_speed_[size_t(i)]->setEnabled(manual_mode_ && !on);
-         if (motor_direction_[size_t(i)]) motor_direction_[size_t(i)]->setEnabled(false);
-     }
+ connect(link_all_motors_, &QCheckBox::toggled, this, [this,syncSelectedMotors,refreshMotorSelectionUi](bool on){
+     refreshMotorSelectionUi();
      if (on) {
-         syncAllMotors(master_motor_speed_->value(), master_motor_direction_->currentIndex(), true);
+         syncSelectedMotors(master_motor_speed_->value(), master_motor_direction_->currentIndex(), true);
      }
+ });
+ for (int i = 0; i < 4; ++i) {
+     if (motor_master_select_[size_t(i)]) {
+         connect(motor_master_select_[size_t(i)], &QCheckBox::toggled, this, [this,syncSelectedMotors,refreshMotorSelectionUi](bool){
+             refreshMotorSelectionUi();
+             if (link_all_motors_ && link_all_motors_->isChecked()) {
+                 syncSelectedMotors(master_motor_speed_->value(), master_motor_direction_->currentIndex(), true);
+             }
+         });
+     }
+ }
+ if (master_select_all_btn_) connect(master_select_all_btn_, &QPushButton::clicked, this, [this,refreshMotorSelectionUi,syncSelectedMotors]{
+     for (auto* box : motor_master_select_) if (box) { QSignalBlocker hold(box); box->setChecked(true); }
+     refreshMotorSelectionUi();
+     if (link_all_motors_ && link_all_motors_->isChecked()) syncSelectedMotors(master_motor_speed_->value(), master_motor_direction_->currentIndex(), true);
+ });
+ if (master_select_none_btn_) connect(master_select_none_btn_, &QPushButton::clicked, this, [this,refreshMotorSelectionUi]{
+     for (auto* box : motor_master_select_) if (box) { QSignalBlocker hold(box); box->setChecked(false); }
+     refreshMotorSelectionUi();
  });
  updateMasterLabel();
+ refreshMotorSelectionUi();
  connect(activate_btn_,&QPushButton::clicked,this,[this]{startOutput();});
  connect(deactivate_btn_,&QPushButton::clicked,this,[this]{stopOutput(false);});
  connect(start_btn_,&QPushButton::clicked,this,[this]{startOutput();});
@@ -846,13 +1037,19 @@ void MainWindow::setManual(bool yes){
  for(auto* d:{amplitude_,offset_,frequency_,end_frequency_,phase_,delay_,duration_,initial_,final_,rise_,pulse_,duty_,tau_}) if(d) d->setEnabled(!yes);
  for(auto* m:manual_) if(m) m->setEnabled(!yes);
  const bool linked = link_all_motors_ && link_all_motors_->isChecked();
- for(auto* s:motor_sliders_) if(s) s->setEnabled(yes && !linked);
- for(auto* s:motor_speed_) if(s) s->setEnabled(yes && !linked);
+ for(std::size_t i=0;i<motor_sliders_.size();++i){
+  const bool selected = motor_master_select_[i] && motor_master_select_[i]->isChecked();
+  if(motor_sliders_[i]) motor_sliders_[i]->setEnabled(yes && !(linked && selected));
+  if(motor_speed_[i]) motor_speed_[i]->setEnabled(yes && !(linked && selected));
+ }
  for(auto* d:motor_direction_) if(d) d->setEnabled(false);
  if (master_motor_slider_) master_motor_slider_->setEnabled(yes);
  if (master_motor_speed_) master_motor_speed_->setEnabled(yes);
  if (master_motor_direction_) master_motor_direction_->setEnabled(false);
  if (link_all_motors_) link_all_motors_->setEnabled(yes);
+ for(auto* box:motor_master_select_) if(box) box->setEnabled(yes);
+ if(master_select_all_btn_) master_select_all_btn_->setEnabled(yes);
+ if(master_select_none_btn_) master_select_none_btn_->setEnabled(yes);
  command_source_stack_->setCurrentIndex(yes ? 1 : 0);
  if (command_pad_) {
    command_pad_->setEnabledForEditing(!yes && reference_pad_unlocked_);
@@ -1497,6 +1694,218 @@ void MainWindow::updateSystem(const Telemetry& s){
   ? QString("Z relative: %1 m (pressure-derived)").arg(f(s.relative_alt_m,3))
   : "Z relative: -- m (STALE)");
 }
+bool MainWindow::eventFilter(QObject* watched,QEvent* event){
+    // Qt sends Resize events synchronously during layout negotiation. Altering
+    // that same layout from the event filter can recursively re-enter Qt.
+    if(event->type()==QEvent::Resize && ui_ready_){
+        const bool tracked =
+            (dashboard_scroll_ && watched==dashboard_scroll_->viewport()) ||
+            (control_scroll_ && watched==control_scroll_->viewport()) ||
+            (system_scroll_ && watched==system_scroll_->viewport()) ||
+            (control_left_ && watched==control_left_);
+        if(tracked)scheduleResponsiveLayout();
+    }
+    return QMainWindow::eventFilter(watched,event);
+}
+void MainWindow::resizeEvent(QResizeEvent* event){
+    QMainWindow::resizeEvent(event);
+    if(ui_ready_)scheduleResponsiveLayout();
+}
+void MainWindow::scheduleResponsiveLayout(){
+    // Emergency diagnostic fallback: use the initial static (two-column)
+    // layout without moving QWidget instances at runtime.
+    if(qEnvironmentVariableIsSet("CEFIRO_GUI_DISABLE_REFLOW"))return;
+    if(!ui_ready_ || shutting_down_ || !responsive_timer_)return;
+    // Coalesce multiple QWidget/viewport Resize notifications into one pass.
+    // Do not restart the timer forever while the user drags window borders.
+    if(!responsive_timer_->isActive())responsive_timer_->start();
+}
+void MainWindow::applyResponsiveLayout(){
+    if(!ui_ready_ || shutting_down_ || reflow_in_progress_)return;
+    reflow_in_progress_=true;
+    if(dashboard_scroll_)reflowDashboard(dashboard_scroll_->viewport()->width());
+    if(control_scroll_)reflowControl(control_scroll_->viewport()->width());
+    if(system_scroll_)reflowSystem(system_scroll_->viewport()->width());
+    if(control_left_){
+        const int w=control_left_->width();
+        reflowMotorControls(w);
+        reflowMasterControl(w);
+        reflowTrajectoryFields(w);
+    }
+    updateCompactChrome(width());
+    reflow_in_progress_=false;
+}
+void MainWindow::reflowDashboard(int available_width){
+    if(!dashboard_grid_||dashboard_panels_.isEmpty())return;
+    // Three columns only on genuinely wide desktop monitors.
+    const int cols=dashboard_columns_==3
+        ? (available_width<2040?(available_width<890?1:2):3)
+        : dashboard_columns_==2
+        ? (available_width>=2160?3:(available_width<890?1:2))
+        : (available_width>=2160?3:(available_width>=960?2:1));
+    if(dashboard_columns_==cols)return;
+    dashboard_columns_=cols;
+    for(QWidget* panel:dashboard_panels_)dashboard_grid_->removeWidget(panel);
+    for(int i=0;i<dashboard_panels_.size();++i){
+        QWidget* panel=dashboard_panels_[i];
+        dashboard_grid_->addWidget(panel,i/cols,i%cols);
+        const int width_hint=available_width/cols;
+        const int card_height=width_hint<530?303:width_hint<850?355:395;
+        panel->setMinimumHeight(card_height);
+        // ScopePlot has no Q_OBJECT. Qt's findChildren<ScopePlot*>() would
+        // match *any* QFrame subclass via ScopePlot's inherited metaobject.
+        // Check the C++ runtime type before calling ScopePlot methods.
+        for(QWidget* child:panel->findChildren<QWidget*>()){
+            if(auto* scope=dynamic_cast<ScopePlot*>(child)){
+                scope->setMinimumHeight(std::max(190,card_height-85));
+            }
+        }
+    }
+    for(int c=0;c<3;++c)dashboard_grid_->setColumnStretch(c,c<cols?1:0);
+    for(int r=0;r<dashboard_panels_.size();++r)dashboard_grid_->setRowStretch(r,0);
+    dashboard_grid_->invalidate();
+}
+void MainWindow::reflowControl(int available_width){
+    if(!control_columns_||!control_left_||!control_right_)return;
+    const int mode=control_columns_mode_==2 ? (available_width<1020?1:2) : (available_width>1080?2:1);
+    if(control_columns_mode_==mode)return;
+    control_columns_mode_=mode;
+    control_columns_->removeWidget(control_left_);
+    control_columns_->removeWidget(control_right_);
+    if(mode==1){
+        control_columns_->addWidget(control_left_,0,0);
+        control_columns_->addWidget(control_right_,1,0);
+        control_columns_->setColumnStretch(0,1);
+        control_columns_->setColumnStretch(1,0);
+        control_columns_->setRowStretch(0,0);
+        control_columns_->setRowStretch(1,0);
+    }else{
+        control_columns_->addWidget(control_left_,0,0);
+        control_columns_->addWidget(control_right_,0,1);
+        control_columns_->setColumnStretch(0,38);
+        control_columns_->setColumnStretch(1,62);
+        control_columns_->setRowStretch(1,0);
+    }
+    control_columns_->invalidate();
+}
+void MainWindow::reflowSystem(int available_width){
+    if(!system_grid_||!system_sensor_panel_||!system_ros_panel_)return;
+    const int mode=system_columns_mode_==2 ? (available_width<820?1:2) : (available_width>880?2:1);
+    if(system_columns_mode_==mode)return;
+    system_columns_mode_=mode;
+    system_grid_->removeWidget(system_sensor_panel_);
+    system_grid_->removeWidget(system_ros_panel_);
+    if(mode==1){
+        system_grid_->addWidget(system_sensor_panel_,0,0);
+        system_grid_->addWidget(system_ros_panel_,1,0);
+        system_grid_->setColumnStretch(0,1);
+        system_grid_->setColumnStretch(1,0);
+    }else{
+        system_grid_->addWidget(system_sensor_panel_,0,0);
+        system_grid_->addWidget(system_ros_panel_,0,1);
+        system_grid_->setColumnStretch(0,1);
+        system_grid_->setColumnStretch(1,1);
+    }
+    system_grid_->invalidate();
+}
+void MainWindow::reflowMotorControls(int available_width){
+    if(!motor_panels_grid_||motor_panels_.size()!=4)return;
+    const int cols=motor_columns_mode_==4
+        ? (available_width<760?(available_width<420?1:2):4)
+        : motor_columns_mode_==2
+        ? (available_width>820?4:(available_width<420?1:2))
+        : (available_width>820?4:(available_width>470?2:1));
+    if(motor_columns_mode_==cols)return;
+    motor_columns_mode_=cols;
+    for(QWidget* panel:motor_panels_)motor_panels_grid_->removeWidget(panel);
+    for(int i=0;i<motor_panels_.size();++i){
+        motor_panels_grid_->addWidget(motor_panels_[i],i/cols,i%cols);
+    }
+    for(int c=0;c<4;++c)motor_panels_grid_->setColumnStretch(c,c<cols?1:0);
+    motor_panels_grid_->invalidate();
+}
+void MainWindow::reflowMasterControl(int available_width){
+    if(!master_control_grid_||!master_title_||!master_motor_label_||!master_select_widget_)return;
+    const int mode=master_columns_mode_==2 ? (available_width<545?1:2) : (available_width>590?2:1);
+    if(master_columns_mode_==mode)return;
+    master_columns_mode_=mode;
+    for(QWidget* widget:{static_cast<QWidget*>(master_title_),
+                         static_cast<QWidget*>(link_all_motors_),
+                         static_cast<QWidget*>(master_rpm_label_),
+                         static_cast<QWidget*>(master_motor_speed_),
+                         static_cast<QWidget*>(master_select_widget_),
+                         static_cast<QWidget*>(master_motor_direction_),
+                         static_cast<QWidget*>(master_motor_slider_),
+                         static_cast<QWidget*>(master_motor_label_)}){
+        master_control_grid_->removeWidget(widget);
+    }
+    if(mode==1){
+        master_control_grid_->addWidget(master_title_,0,0,1,2);
+        master_control_grid_->addWidget(link_all_motors_,1,0,1,2);
+        master_control_grid_->addWidget(master_select_widget_,2,0,1,2);
+        master_control_grid_->addWidget(master_rpm_label_,3,0);
+        master_control_grid_->addWidget(master_motor_speed_,3,1);
+        master_control_grid_->addWidget(master_motor_direction_,4,0,1,2);
+        master_control_grid_->addWidget(master_motor_slider_,5,0,1,2);
+        master_control_grid_->addWidget(master_motor_label_,6,0,1,2);
+    }else{
+        master_control_grid_->addWidget(master_title_,0,0,1,4);
+        master_control_grid_->addWidget(link_all_motors_,1,0,1,2);
+        master_control_grid_->addWidget(master_rpm_label_,1,2);
+        master_control_grid_->addWidget(master_motor_speed_,1,3);
+        master_control_grid_->addWidget(master_select_widget_,2,0,1,4);
+        master_control_grid_->addWidget(master_motor_direction_,3,0,1,4);
+        master_control_grid_->addWidget(master_motor_slider_,4,0,1,4);
+        master_control_grid_->addWidget(master_motor_label_,5,0,1,4);
+    }
+    master_control_grid_->invalidate();
+}
+void MainWindow::reflowTrajectoryFields(int available_width){
+    if(!trajectory_fields_grid_||trajectory_edits_.size()!=13||trajectory_labels_.size()!=13)return;
+    const int cols=trajectory_columns_mode_==2 ? (available_width<590?1:2) : (available_width>645?2:1);
+    if(trajectory_columns_mode_==cols)return;
+    trajectory_columns_mode_=cols;
+    for(int i=0;i<13;++i){
+        trajectory_fields_grid_->removeWidget(trajectory_labels_[i]);
+        trajectory_fields_grid_->removeWidget(trajectory_edits_[i]);
+    }
+    for(int i=0;i<13;++i){
+        const int row=i/cols;
+        const int col=(i%cols)*2;
+        trajectory_fields_grid_->addWidget(trajectory_labels_[i],row,col);
+        trajectory_fields_grid_->addWidget(trajectory_edits_[i],row,col+1);
+    }
+    trajectory_fields_grid_->setColumnStretch(1,1);
+    trajectory_fields_grid_->setColumnStretch(3,cols==2?1:0);
+    trajectory_fields_grid_->invalidate();
+}
+void MainWindow::updateCompactChrome(int available_width){
+    const bool compact=available_width<1130;
+    const bool narrow=available_width<790;
+    if(brand_label_)brand_label_->setVisible(theme_index_==0 && available_width>=1350);
+    if(control_target_label_)control_target_label_->setVisible(!compact);
+    if(theme_label_)theme_label_->setVisible(!compact);
+    if(plant_selector_){
+        plant_selector_->setMinimumWidth(narrow?108:130);
+        plant_selector_->setMaximumWidth(narrow?145:210);
+    }
+    if(theme_combo_){
+        theme_combo_->setMinimumWidth(narrow?100:120);
+        theme_combo_->setMaximumWidth(narrow?125:210);
+    }
+    if(nav_){
+        nav_->setTabText(0,narrow?"LIVE":"Dashboard");
+        nav_->setTabText(1,narrow?"CONTROL":"Signal Generator");
+        nav_->setTabText(2,"System");
+    }
+    if(status_sim_connection_)status_sim_connection_->setMinimumWidth(narrow?94:126);
+    if(status_real_connection_)status_real_connection_->setMinimumWidth(narrow?94:126);
+    if(status_rec_)status_rec_->setVisible(!compact);
+    if(status_control_)status_control_->setVisible(!narrow);
+    if(status_samples_)status_samples_->setVisible(!compact);
+    if(status_ros_)status_ros_->setVisible(!narrow);
+    for(auto* sep:statusBar()->findChildren<QLabel*>("statusDivider"))sep->setVisible(!compact);
+}
 void MainWindow::setTheme(int index){
     if (index < 0 || index >= int(kThemes.size())) {
         return;
@@ -1505,7 +1914,40 @@ void MainWindow::setTheme(int index){
  QString file=QString(":/theme/%1.qss").arg(QStringList{"tron_ares","matlab","light","dark","tron_evolution","cyberpunk"}[index]);
  QFile qss(file);if(qss.open(QIODevice::ReadOnly|QIODevice::Text))qApp->setStyleSheet(QString::fromUtf8(qss.readAll()));
  const auto& t=kTheme[size_t(index)];
- const QList<QColor> colors={QColor(t.red),QColor(t.blue),QColor(t.teal),QColor("#f8b869")};
+ startupTrace("Theme palette loaded");
+ const QList<QColor> colors=index==0 ? QList<QColor>{
+     QColor("#ff334d"),QColor("#ff9b77"),QColor("#ffd1bf"),QColor("#eb5676"),
+     QColor("#ffa398"),QColor("#d72b3c"),QColor("#ffe2cb"),QColor("#f16b4c")}
+     : QList<QColor>{QColor(t.red),QColor(t.blue),QColor(t.teal),QColor("#f8b869")};
+ if(brand_label_)brand_label_->setVisible(index==0&&width()>=1350);
+ // AresPanel and AresPage intentionally do not declare Q_OBJECT.
+ // Their inherited Qt metaobjects belong to QFrame/QWidget. In particular,
+ // findChildren<AresPage*>() matches arbitrary QWidgets and then tries to
+ // call AresPage methods on those objects (undefined behavior / SIGSEGV).
+ // dynamic_cast checks the actual C++ type and prevents invalid downcasts.
+ for(QWidget* widget:findChildren<QWidget*>()){
+     if(auto* panel=dynamic_cast<AresPanel*>(widget)){
+         panel->setAresEnabled(index==0);
+     }else if(auto* page=dynamic_cast<AresPage*>(widget)){
+         page->setAresEnabled(index==0);
+     }
+ }
+ // Optional glow uses an offscreen Qt effect buffer. Keep this off on
+ // affected desktop drivers; the red/black QSS remains fully operational.
+ if(qEnvironmentVariableIsSet("CEFIRO_GUI_ENABLE_ARES_FX"))
+ for(auto* title:findChildren<QLabel*>("pageTitle")){
+     if(index==0){
+         if(!title->graphicsEffect()){
+             auto* glow=new QGraphicsDropShadowEffect(title);
+             glow->setBlurRadius(19);
+             glow->setOffset(0,0);
+             glow->setColor(QColor(245,22,48,128));
+             title->setGraphicsEffect(glow);
+         }
+     }else if(title->graphicsEffect())title->setGraphicsEffect(nullptr);
+ }
+ startupTrace("Theme widget types verified");
+ if(command_pad_)command_pad_->setAresTheme(index==0);
  for(auto* plot:dash_)if(plot)plot->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
   if(altitude_plot_)altitude_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
   if(rpm_target_plot_)rpm_target_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
@@ -1513,8 +1955,9 @@ void MainWindow::setTheme(int index){
  if(preview_)preview_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(live_)live_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(view_)view_->setTheme(QColor(t.bg),QColor(t.fg),QColor(t.red),QColor(t.blue));
+ startupTrace("Theme charts and attitude updated");
  if(plant_selector_){
-     const QString accent=bridge_.isReal()?QString("#f0b865"):t.teal;
+     const QString accent=bridge_.isReal()?QString("#ffb57d"):t.red;
      plant_selector_->setStyleSheet(QString(
          "QComboBox#plantSelector { background:%1; color:%2; border:1px solid %2; "
          "border-radius:8px; padding:7px 12px; font-weight:800; min-height:19px; } "

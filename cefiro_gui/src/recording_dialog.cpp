@@ -44,7 +44,7 @@ QString formatTime(double seconds, int unit) {
 RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("CEFIRO / EXPERIMENT DATA ACQUISITION");
     setModal(false);
-    setMinimumSize(760, 620);
+    setMinimumSize(500, 480);
     resize(900, 790);
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(14, 12, 14, 12);
