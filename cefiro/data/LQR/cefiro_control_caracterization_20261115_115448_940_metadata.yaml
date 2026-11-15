@@ -1,8 +1,8 @@
 cefiro_experiment:
-  created_at: "2026-11-06T15:51:18"
-  data_file: "/home/nidhood/cefiro_ws/src/cefiro/data/LQR/cefiro_run_20261106_155118_051.csv"
+  created_at: "2026-11-15T11:54:48"
+  data_file: "/home/nidhood/cefiro_ws/src/cefiro/data/LQR/cefiro_control_caracterization_20261115_115448_940.csv"
   notes: ""
-  strategy: "SWING-UP + LQR (SIM)"
+  strategy: "OPEN LOOP"
   source: "AUTOMATIC"
   capture_mode: "Continuous"
   start_delay_s: 0

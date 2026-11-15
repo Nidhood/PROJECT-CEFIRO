@@ -1,0 +1,16 @@
+# Windows 11 + WSL 2 + WSLg: native Linux windows on Windows desktop.
+# Run commands in your Ubuntu WSL terminal (Docker Desktop WSL integration).
+# First verify /mnt/wslg/.X11-unix/X0 exists in WSL.
+services:
+  sim:
+    command: ["sleep", "infinity"]
+    environment:
+      DISPLAY: "${DISPLAY:-:0}"
+      QT_QPA_PLATFORM: xcb
+      QT_X11_NO_MITSHM: "1"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    volumes:
+      - type: bind
+        source: /mnt/wslg/.X11-unix
+        target: /tmp/.X11-unix
+        read_only: true

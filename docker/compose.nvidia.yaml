@@ -1,0 +1,9 @@
+# Combine with compose.native-linux.yaml, and only after GPU runtime works.
+# Docker Desktop with WSL 2 can also expose CUDA GPUs; desktop OpenGL needs
+# a separate GUI/GLX/WSLg check and is not guaranteed by `gpus: all` alone.
+services:
+  sim:
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: graphics,display,utility,compute

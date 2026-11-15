@@ -1,0 +1,80 @@
+name: cefiro
+
+x-cefiro-environment: &cefiro-environment
+  ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-42}"
+  ROS_LOCALHOST_ONLY: "0"
+  RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+  CYCLONEDDS_URI: file:///etc/cefiro/cyclonedds.xml
+  ROS_LOG_DIR: /cefiro_data/log
+
+services:
+  sim:
+    image: cefiro:jazzy-harmonic
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DEV_UID: "${LOCAL_UID:-1000}"
+        DEV_GID: "${LOCAL_GID:-1000}"
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    shm_size: "1gb"
+    environment:
+      <<: *cefiro-environment
+      DISPLAY: ":99"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      QT_X11_NO_MITSHM: "1"
+    ports:
+      # Localhost only. The browser desktop is not authenticated.
+      - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
+    volumes:
+      - type: bind
+        source: ..
+        target: /cefiro_ws/src/PROJECT-CEFIRO
+      - type: bind
+        source: ../.docker-data/install
+        target: /cefiro_ws/install
+      - type: bind
+        source: ../.docker-data/log
+        target: /cefiro_data/log
+      - type: bind
+        source: ../.docker-data/records
+        target: /cefiro_data/records
+      - type: bind
+        source: ../.docker-data/build
+        target: /cefiro_ws/build
+    networks:
+      cefiro_ros:
+        aliases: [sim]
+
+  observer:
+    image: cefiro:jazzy-harmonic
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    command: ["sleep", "infinity"]
+    environment:
+      <<: *cefiro-environment
+    volumes:
+      - type: bind
+        source: ..
+        target: /cefiro_ws/src/PROJECT-CEFIRO
+        read_only: true
+      - type: bind
+        source: ../.docker-data/install
+        target: /cefiro_ws/install
+        read_only: true
+      - type: bind
+        source: ../.docker-data/log
+        target: /cefiro_data/log
+      - type: bind
+        source: ../.docker-data/records
+        target: /cefiro_data/records
+    networks:
+      cefiro_ros:
+        aliases: [observer]
+    depends_on:
+      - sim
+
+networks:
+  cefiro_ros:
+    driver: bridge
