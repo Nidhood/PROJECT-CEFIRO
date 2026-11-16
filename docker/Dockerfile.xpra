@@ -1,0 +1,24 @@
+# Optional Xpra GUI image for CEFIRO (builds on the existing CEFIRO image).
+# No ROS/Gazebo reinstall: FROM cefiro:jazzy-harmonic.
+# Xpra seamless needs both xpra-server and xpra-x11 subpackages.
+FROM cefiro:jazzy-harmonic
+
+USER root
+
+# Install Xpra Stable v6 from Xpra's official Ubuntu 24.04 (Noble) repository.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates wget xauth \
+ && wget -qO /usr/share/keyrings/xpra.asc https://xpra.org/xpra.asc \
+ && wget -qO /etc/apt/sources.list.d/xpra.sources \
+      https://raw.githubusercontent.com/Xpra-org/xpra/master/packaging/repos/noble/xpra.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends xpra xpra-server xpra-x11 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/start-xpra.sh /usr/local/bin/cefiro-xpra
+RUN sed -i 's/\r$//' /usr/local/bin/cefiro-xpra \
+ && chmod +x /usr/local/bin/cefiro-xpra
+
+USER cefiro
+WORKDIR /cefiro_ws
+CMD ["/usr/local/bin/cefiro-xpra"]

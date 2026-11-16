@@ -1,178 +1,213 @@
-# CEFIRO Docker — local starter (no commits, no push)
+# CEFIRO Docker v4 — Windows + Ubuntu (ROS 2 Jazzy / Gazebo Harmonic / Qt 6)
 
-This is a **starter configuration** prepared against the public `Nidhood/PROJECT-CEFIRO` repository as observed on 2026-11-15. It has been statically checked, **not tested by running Docker/Gazebo on your hardware**. You may need to adjust packages, OpenGL, and CycloneDDS configuration on your machine.
+Esta carpeta contiene un entorno **completo de infraestructura Docker** para agregar a
+una copia local existente de `PROJECT-CEFIRO`: no incluye ni reemplaza los paquetes
+`cefiro_*`, que deben permanecer al nivel superior del repositorio. No requiere
+instalar Ubuntu WSL, ROS 2 ni Gazebo en Windows; Docker Desktop utiliza su propia
+infraestructura Linux. No se realiza ningún push o commit.
 
-## Layout and guarantees
+**Estado de validación:** el usuario ya compiló con éxito la imagen v3 y ejecutó
+`sim` y `observer` en Docker Desktop. Esta versión v4 añade `iputils-ping` en una
+capa pequeña, integra Zenoh opcional para la Raspberry y corrige CRLF en scripts.
+Se ha revisado la estructura de los archivos, pero **no se ha probado la ruta TCP
+real hacia la Raspberry ni una nueva construcción v4 en este entorno**.
 
-Place this entire `docker/` folder at the root of your existing local CEFIRO checkout, next to `cefiro_gz/`, `cefiro_gui/`, and the other ROS packages. Do not put it in your home directory separately. `compose.yaml` uses paths relative to this folder.
-
-- `sim`: ROS 2 Jazzy + Gazebo Harmonic + RViz2 + Qt6 GUI. Browser access at `http://localhost:6080/vnc.html?autoconnect=1`. Software-rendered by default to be portable.
-- `observer`: separate networked ROS 2 CLI/rosbag service, with read-only source and install mounts. It uses the same CycloneDDS discovery configuration and Docker bridge network.
-- `../` (source) is a **bind mount**. Edit files on the host and see changes in the container immediately. Rebuild code after C++ changes. `colcon --symlink-install` helps reflect installed non-compiled assets.
-- `../.docker-data/{build,install,log,records}` are **bind mounts**, preserved on the host after containers are stopped/removed.
-- No real MCU, USB serial ports, host network, elevated privileges, or motor authority are passed to the containers.
-- Browser VNC has **no password**: port 6080 is intentionally bound to `127.0.0.1` only; never publish this service to a LAN or the Internet.
-
-## Windows 11
-
-1. Install/enable WSL 2 + an Ubuntu distribution, Docker Desktop with WSL 2 backend and WSL integration.
-2. Open an **Ubuntu WSL terminal**, not PowerShell, and put the repository in the Linux filesystem (e.g. `~/cefiro_ws/src/PROJECT-CEFIRO`) for significantly better file I/O than `/mnt/c/...`.
-3. Follow the commands below from `.../PROJECT-CEFIRO/docker`. Use the browser desktop for the portable first pass.
-4. Windows NVIDIA GPUs can be exposed through WSL 2 for compute, but real hardware-accelerated OpenGL Gazebo/RViz windows need additional WSLg configuration; browser/Xvfb mode normally uses CPU rendering. Verify before assuming GPU acceleration.
-
-## Ubuntu 24.04
-
-Install Docker Engine + Compose plugin. In a terminal at your local repository root:
-
-```bash
-cd docker
-cp .env.example .env
-sed -i "s/^LOCAL_UID=.*/LOCAL_UID=$(id -u)/; s/^LOCAL_GID=.*/LOCAL_GID=$(id -g)/" .env
-mkdir -p ../.docker-data/{build,install,log,records}
-docker compose build
-docker compose up -d
-```
-
-The same commands work in WSL Ubuntu. Browse to:
+## Estructura
 
 ```text
-http://localhost:6080/vnc.html?autoconnect=1
+PROJECT-CEFIRO/
+  cefiro_gui/          ... código ROS original
+  cefiro_control/      ... código ROS original
+  cefiro_gz/           ... código ROS original
+  docker/
+    Dockerfile
+    compose.yaml
+    compose.native-linux.yaml
+    compose.nvidia.yaml
+    compose.wslg.yaml
+    config/cyclonedds.xml
+    config/zenoh-windows.json5
+    raspberry/zenoh-pi.json5
+    raspberry/install-zenoh.sh
+    scripts/cefiro-run.sh
+    scripts/entrypoint.sh
+    scripts/start-desktop.sh
+    scripts/quick-check.ps1
+    scripts/fix-ros-python-shebangs.ps1
+    .env.example
+    ...
+  .docker-data/          ... build, install, log, records (persistentes)
 ```
 
-### Build the actual CEFIRO packages (first run)
+## Preparación desde Windows PowerShell
 
-The CEFIRO source is mounted as `/cefiro_ws/src/PROJECT-CEFIRO` and contains all ROS packages. First check for missing dependency keys:
+A) Descomprimir este ZIP en la **raíz** de `PROJECT-CEFIRO`. El ZIP tiene la
+carpeta `docker/` y sustituye los archivos Docker v3; **guardar antes una copia de
+tu `docker/.env` y cualquier cambio manual**. No uses `git push`.
 
-```bash
-docker compose exec sim cefiro-run ros2 pkg list
-docker compose exec sim cefiro-run colcon list
+B) Desde `PROJECT-CEFIRO\docker`:
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+@('build','install','log','records') | ForEach-Object {
+   New-Item -ItemType Directory -Force "../.docker-data/$_" | Out-Null
+}
+docker compose config --quiet
+docker compose build
+docker compose up -d sim observer
+docker compose ps
 ```
 
-All main CEFIRO dependencies are preinstalled in the Dockerfile. If an additional package dependency is reported by CMake/colcon, add it to the Dockerfile and rebuild the image. Avoid installing packages manually in a running container, since they vanish on recreation.
+La instalación adicional de ping está en una capa propia y debería conservar
+la caché costosa de ROS 2/Gazebo si el Dockerfile/base no han cambiado.
 
-```bash
-docker compose exec sim cefiro-run colcon build --symlink-install --parallel-workers 2
+**Docker Desktop no instala Ubuntu WSL por separado**. El código compartido está
+en Windows. Para compilaciones `colcon` más rápidas, evitar OneDrive/NTFS si es
+posible, y copiar el repositorio a `C:\dev\PROJECT-CEFIRO`.
+
+## Red: ping e Internet
+
+```powershell
+docker compose exec sim cefiro-run ping -c 3 observer
+docker compose exec sim cefiro-run ping -c 3 8.8.8.8
+docker compose exec sim cefiro-run ping -c 3 192.168.68.59
+docker compose exec sim cefiro-run curl -I --max-time 10 https://www.google.com
 ```
 
-`--parallel-workers 2` is a conservative first build; increase it if RAM permits. The build and install directories persist under `.docker-data` in the host repository.
+`ping` comprueba ICMP, no confirma por sí solo DDS ni la disponibilidad de TCP.
+Si la Raspberry bloquea ICMP, `Test-NetConnection ... -Port 7447` es más útil.
 
-### Run the existing project launch files
+## GUI Qt sin ejecutar Gazebo
 
-Run Gazebo in one terminal:
-
-```bash
-docker compose exec sim cefiro-run ros2 launch cefiro_gz start_gz.launch.py use_sim_time:=true enable_sensors:=true
-```
-
-Open a second terminal and run the project's own Qt interface:
-
-```bash
+```powershell
+docker compose up -d sim
+docker compose exec sim cefiro-run colcon build --packages-up-to cefiro_gui --parallel-workers 2
 docker compose exec sim cefiro-run ros2 launch cefiro_gui cefiro_gui.launch.py
 ```
 
-Optional RViz (third terminal):
+Ver la interfaz desde el navegador:
+`http://127.0.0.1:6080/vnc.html?autoconnect=1`
+La visualización es Xvfb/noVNC (software/OpenGL CPU). Para trabajar con gráficos
+más fluidos, se debe configurar por separado el acceso a OpenGL/WSLg/X11.
 
-```bash
-docker compose exec sim cefiro-run ros2 launch cefiro_description display.launch.py
+Para ejecutar Gazebo explícitamente (en una segunda terminal):
+
+```powershell
+docker compose exec sim cefiro-run ros2 launch cefiro_gz start_gz.launch.py
 ```
 
-Note that `display.launch.py` is a standalone visualization launch: it may duplicate robot_state_publisher and TF nodes if run concurrently with `start_gz.launch.py`. To observe the existing simulation instead, use `docker compose exec sim cefiro-run rviz2` and configure the desired topics and frames.
+**Si `cefiro_balance_node.py` falla con `python3\r`:** Windows convirtió un script
+Python a CRLF. Detén primero la simulación; luego ejecuta de forma voluntaria
+`./scripts/fix-ros-python-shebangs.ps1` desde PowerShell (modifica solo los scripts
+locales de Python con shebang y CRLF). Después recompila los paquetes afectados.
+No cambia nada en GitHub sin tu intervención.
 
-### ROS networking and recording in a different container
+## Raspberry Pi — Zenoh TCP (solo telemetría)
 
-```bash
-docker compose exec observer cefiro-run ros2 topic list
-docker compose exec observer cefiro-run ros2 topic hz /imu/data
-docker compose exec observer cefiro-run ros2 bag record -o /cefiro_data/records/test_01 /imu/data /cefiro/control/status
+Arquitectura:
+
+- Raspberry Pi: IP `192.168.68.59`, ROS 2 DDS dominio **30**.
+- Contenedores en Windows: ROS 2 DDS dominio **42**, red Docker Compose.
+- Dos puentes Zenoh 1.x conectados por TCP en puerto **7447**.
+- La configuración de `allow` envía exclusivamente estos tópicos:
+  `/real/imu/data`, `/real/magnetometer/data`, `/real/bmp581/air_pressure`,
+  `/real/cefiro/hardware/status`, `/real/cefiro/control/status`,
+  `/real/cefiro_actuators/telemetry` y `/real/cefiro_actuators/measured_rpm`.
+- **No se transportan comandos**, servicios ni acciones hacia el hardware.
+  Es un filtro de software, no una frontera de seguridad criptográfica.
+  Mantén parada la actuación física y utiliza una LAN de confianza.
+
+### A. Enviar configuración a la Raspberry (PowerShell)
+
+Desde `PROJECT-CEFIRO\docker`:
+
+```powershell
+scp .\raspberry\zenoh-pi.json5 nidhood@192.168.68.59:~/zenoh-pi.json5
+scp .\raspberry\install-zenoh.sh nidhood@192.168.68.59:~/install-zenoh.sh
 ```
 
-Data appears at `.docker-data/records/test_01/` in the host. CLI/discovery between services uses `cefiro_ros` (bridge network) and explicit CycloneDDS peer names, plus multicast. ROS 2 nodes running **outside** these containers require additional DDS networking/discovery configuration; `network_mode: host` is not a portable substitute on Windows.
+### B. Instalar y arrancar el bridge en la Raspberry
 
-### Resources and performance
-
-```bash
-docker stats
-docker compose exec sim cefiro-run glxinfo -B
-docker compose exec sim cefiro-run bash -lc 'free -h; nproc'
-```
-
-Important: `glxinfo -B` in browser mode will usually report `llvmpipe` (CPU rasterization). This is a design tradeoff for ease of access, and Gazebo may run slowly. A passthrough GPU can be made available via Compose, but graphics acceleration still requires a working GLX/EGL display path.
-
-## Optional: Ubuntu native X11/XWayland GUI (faster OpenGL route)
-
-On the Ubuntu host, install `xauth` if needed, and prepare a per-display X11 cookie:
+Desde su propia terminal (no hace falta Docker allí):
 
 ```bash
-sudo apt install -y xauth
-cd docker
-bash scripts/prepare-xauth.sh
-export XAUTHORITY_FILE=/tmp/cefiro-docker.xauth
-docker compose -f compose.yaml -f compose.native-linux.yaml up -d --force-recreate
+bash ~/install-zenoh.sh
+# Keep this terminal running during the connectivity test.
+ROS_DOMAIN_ID=30 zenoh-bridge-ros2dds -c ~/zenoh-pi.json5
 ```
 
-Native GUI launches Gazebo/RViz/Qt windows on the Ubuntu desktop rather than in a web browser. To check native graphics:
+Si ya tienes Zenoh instalado, omite `install-zenoh.sh`.
+Asegura que el bridge escuche `192.168.68.59:7447`. Si cambia la IP,
+actualiza los dos archivos JSON5 antes de levantar los puentes.
+Si los puentes tienen versiones incompatibles, usa versiones compatibles de
+Zenoh en ambos extremos; el servicio Docker está fijado a `1.10.1`.
 
-```bash
-docker compose -f compose.yaml -f compose.native-linux.yaml exec sim cefiro-run glxinfo -B
+### C. Iniciar Zenoh en Docker/Windows
+
+Desde otra terminal PowerShell, con el bridge de Raspberry encendido:
+
+```powershell
+Test-NetConnection 192.168.68.59 -Port 7447
+docker compose --profile pi up -d sim observer zenoh
+docker compose --profile pi ps
+docker compose --profile pi logs --tail=80 zenoh
+docker compose exec sim cefiro-run ros2 daemon stop
+docker compose exec sim cefiro-run ros2 topic list
+docker compose exec sim cefiro-run ros2 topic echo /real/imu/data --qos-reliability best_effort
 ```
 
-For Intel/AMD direct rendering on Ubuntu, additionally expose `/dev/dri` with a `devices:` mapping if necessary, and ensure the container user can access the `render`/`video` group or pass matching supplemental groups. For NVIDIA on native Ubuntu, install/configure the NVIDIA Container Toolkit and driver, then start with the additional GPU overlay:
+Si `Test-NetConnection` responde `False`, revisa el bridge en Pi, el Wi-Fi,
+aislamiento de clientes o el firewall. Si la conexión TCP responde `True`
+pero no hay topics, revisa `docker compose --profile pi logs zenoh`, el RMW
+de Raspberry y los permisos DDS/Zenoh.
 
-```bash
-docker compose -f compose.yaml -f compose.native-linux.yaml -f compose.nvidia.yaml up -d --force-recreate
+Los puentes **no redirigen todo ROS 2 a Internet**. El canal está limitado
+al destino TCP, dentro de la LAN. Nunca publiques 7447 en el router de Internet.
+
+### D. Apagar solo el bridge (manteniendo la GUI y Gazebo)
+
+```powershell
+docker compose --profile pi stop zenoh
+# GUI and observer remain running.
 ```
 
-`gpus: all` exposes the GPU; it does **not guarantee** that OGRE/Gazebo or RViz will use hardware OpenGL. Confirm using `glxinfo -B` and `nvidia-smi`. The host's X11 authentication and the NVIDIA stack must be compatible.
+Para apagar todo: `docker compose --profile pi down`.
 
-To restore portable browser mode:
+## Persistencia y registro de datos
 
-```bash
-docker compose -f compose.yaml -f compose.native-linux.yaml down
-docker compose up -d
+- Código fuente: bind mount `../` -> `/cefiro_ws/src/PROJECT-CEFIRO`.
+- Compilación: `../.docker-data/build`.
+- Instalación: `../.docker-data/install`.
+- Logs: `../.docker-data/log`.
+- ROS bag/CSV: `../.docker-data/records`.
+
+Ejemplo de grabación solo de telemetría:
+
+```powershell
+docker compose exec observer cefiro-run ros2 bag record `
+  -o /cefiro_data/records/pi_imu_test /real/imu/data
 ```
 
-## Safe cleanup
+Durante las grabaciones revisa espacio con `docker system df` y `docker stats`.
 
-```bash
-docker compose down              # Stop/remove containers and network. Host files remain.
-docker compose up -d             # Start again.
-```
+## Ubuntu nativo (opcional)
 
-Do **not** delete `.docker-data/` unless you intentionally want to discard build outputs, logs, and recorded experiments. Do not run `git add`/`git push` to use Docker: it only reads your local checkout. To keep your Git status clean, add `.docker-data/` (and optionally `docker/` for this local experiment) to your local `.git/info/exclude`; no commit required.
+`compose.native-linux.yaml` permite un servidor X11 nativo, y
+`compose.nvidia.yaml` añade GPU visible al contenedor. No utilices esta
+configuración en Windows PowerShell. Pasar GPU/CUDA no garantiza OpenGL 3D.
+Revisa el script `prepare-xauth.sh` y la documentación histórica de CEFIRO v3.
 
-## Troubleshooting
+## Seguridad y límites
 
-- `Unable to locate package libgz-sim8-dev` / other `libgz-*`: the Dockerfile now adds the official OSRF Gazebo repository **before** installing dependencies. Rebuild using `docker compose build --progress=plain`. If errors persist, check access from your network to `https://packages.osrfoundation.org/gazebo/ubuntu-stable` and whether the repository key was downloaded successfully.
-- `unable to locate package` (other dependencies): verify repository configuration and package names inside the container build.
-- `could not connect to display`: use browser mode first, or inspect XAUTHORITY/DISPLAY for native Linux.
-- `Failed to create swapchain`, `libGL`, `EGL`: run `glxinfo -B`, test CPU/software mode, and validate host/GPU capabilities.
-- No ROS topics in `observer`: check `ROS_DOMAIN_ID`, CycloneDDS config, running ROS nodes, `docker compose logs` and network membership.
-- Empty Gazebo scene or custom plugin not found: make sure `colcon build` completed and the workspace overlay is sourced by `cefiro-run`.
-- Root-owned local files: verify `LOCAL_UID` and `LOCAL_GID` before the first `up` and create `.docker-data` as your Linux user.
+- noVNC está publicado **solo en localhost** (`127.0.0.1:6080`), sin contraseña.
+- No se montan puertos USB ni dispositivos `/dev/ttyUSB*` por defecto.
+- El dominio ROS de Windows (42) es distinto del de Pi (30): evita descubrir
+  de forma nativa a la vez y por puente los mismos topics.
+- El `zenoh` del contenedor se habilita solo con `--profile pi`.
+- `ping` verifica conectividad ICMP, no conexión ROS 2 ni calidad de señal.
 
-## Optional: Windows 11 direct WSLg windows (alternative to browser)
-
-This mode opens separate Gazebo / Qt / RViz Linux windows on the Windows desktop. The starter leaves software rendering on to avoid assuming that GPU-passthrough OpenGL works automatically. In an Ubuntu WSL 2 terminal:
-
-```bash
-ls -l /mnt/wslg/.X11-unix/X0
-docker compose -f compose.yaml -f compose.wslg.yaml up -d --force-recreate
-docker compose -f compose.yaml -f compose.wslg.yaml exec sim cefiro-run glxinfo -B
-```
-
-Then launch `cefiro_gz start_gz.launch.py` as usual, but prepend the two `-f` flags to your `docker compose` commands. Check WSLg direct GPU acceleration separately before changing `LIBGL_ALWAYS_SOFTWARE` to `0`. Microsoft's WSLg container guidance documents `/mnt/wslg`, `/dev/dxg`, and `/usr/lib/wsl` passthrough, but Docker Desktop may impose additional constraints, so this is not enabled in the portable default.
-
-Restore browser GUI:
-
-```bash
-docker compose -f compose.yaml -f compose.wslg.yaml down
-docker compose up -d
-```
-
-
-### Docker build: UID/GID 1000 already exists
-
-The base Ubuntu 24.04 image may already define a user and group with numeric ID
-1000. The Dockerfile handles this by reusing and renaming the existing account
-to `cefiro`, instead of failing with `groupadd: GID '1000' already exists`.
-The bind-mounted source files still retain host ownership by numeric UID/GID.
+Referencias oficiales:
+- https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds
+- https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds/blob/main/DEFAULT_CONFIG.json5
+- https://gazebosim.org/docs/harmonic/install_ubuntu/
+- https://docs.docker.com/desktop/features/wsl/

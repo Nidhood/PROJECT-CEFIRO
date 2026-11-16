@@ -1,0 +1,33 @@
+// CEFIRO Windows/Docker: import Pi telemetry, DO NOT route motor/control commands.
+// This bridge runs in DDS domain 42 locally; Pi's bridge runs in domain 30.
+// Update the connect endpoint if the Pi's IP address changes.
+{
+  mode: "client",
+  connect: { endpoints: ["tcp/192.168.68.59:7447"] },
+  scouting: {
+    multicast: { enabled: false },
+    gossip: { enabled: false }
+  },
+  plugins: {
+    ros2dds: {
+      domain: 42,
+      ros_automatic_discovery_range: "SUBNET",
+      allow: {
+        publishers: [],
+        subscribers: [
+          "^/real/imu/data$",
+          "^/real/magnetometer/data$",
+          "^/real/bmp581/air_pressure$",
+          "^/real/cefiro/hardware/status$",
+          "^/real/cefiro/control/status$",
+          "^/real/cefiro_actuators/telemetry$",
+          "^/real/cefiro_actuators/measured_rpm$"
+        ],
+        service_servers: [],
+        service_clients: [],
+        action_servers: [],
+        action_clients: []
+      }
+    }
+  }
+}

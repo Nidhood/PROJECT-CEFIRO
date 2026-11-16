@@ -2,7 +2,7 @@ name: cefiro
 
 x-cefiro-environment: &cefiro-environment
   ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-42}"
-  ROS_LOCALHOST_ONLY: "0"
+  ROS_AUTOMATIC_DISCOVERY_RANGE: SUBNET
   RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
   CYCLONEDDS_URI: file:///etc/cefiro/cyclonedds.xml
   ROS_LOG_DIR: /cefiro_data/log
@@ -74,6 +74,32 @@ services:
         aliases: [observer]
     depends_on:
       - sim
+
+  # Optional: Windows Docker (domain 42) -> Pi (domain 30) read-only telemetry bridge.
+  # Enable with: docker compose --profile pi up -d sim observer zenoh
+  # The Pi bridge must be started separately on 192.168.68.59:7447.
+  zenoh:
+    profiles: ["pi"]
+    image: eclipse/zenoh-bridge-ros2dds:1.10.1
+    init: true
+    restart: unless-stopped
+    command: ["-c", "/etc/cefiro/zenoh-windows.json5"]
+    environment:
+      ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-42}"
+      ROS_AUTOMATIC_DISCOVERY_RANGE: SUBNET
+      CYCLONEDDS_URI: file:///etc/cefiro/cyclonedds.xml
+    volumes:
+      - type: bind
+        source: ./config/cyclonedds.xml
+        target: /etc/cefiro/cyclonedds.xml
+        read_only: true
+      - type: bind
+        source: ./config/zenoh-windows.json5
+        target: /etc/cefiro/zenoh-windows.json5
+        read_only: true
+    networks:
+      cefiro_ros:
+        aliases: [zenoh]
 
 networks:
   cefiro_ros:

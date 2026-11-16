@@ -35,6 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb x11vnc novnc websockify openbox xterm x11-xserver-utils \
  && rm -rf /var/lib/apt/lists/*
 
+# Separate layer so adding ping does not invalidate the expensive ROS/Gazebo install.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends iputils-ping \
+ && rm -rf /var/lib/apt/lists/*
+
 # Ubuntu 24.04 base images can already contain UID/GID 1000 (e.g. ubuntu).
 # Reuse those numeric IDs by renaming the existing account/group instead of
 # attempting to allocate duplicate IDs. This keeps bind-mount ownership aligned.
@@ -62,8 +67,9 @@ COPY scripts/entrypoint.sh /usr/local/bin/cefiro-entrypoint
 COPY scripts/start-desktop.sh /usr/local/bin/cefiro-desktop
 COPY scripts/cefiro-run.sh /usr/local/bin/cefiro-run
 COPY config/cyclonedds.xml /etc/cefiro/cyclonedds.xml
-RUN chmod +x /usr/local/bin/cefiro-* \
- && rosdep init || true
+RUN sed -i 's/\r$//' /usr/local/bin/cefiro-* \
+ && chmod +x /usr/local/bin/cefiro-* \
+ && if [ ! -e /etc/ros/rosdep/sources.list.d/20-default.list ]; then rosdep init; fi
 
 USER cefiro
 WORKDIR /cefiro_ws
