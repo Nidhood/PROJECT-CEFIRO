@@ -1,0 +1,28 @@
+# CEFIRO ROS 2 Jazzy additional build/runtime dependencies on Ubuntu 24.04.
+# Required by cefiro_control, cefiro_hardware_interface, cefiro_gui, cefiro_gz
+# plus the other local CEFIRO packages. Installed during `docker build sim`.
+# Existing Dockerfile already installs ROS desktop, Gazebo Harmonic, Qt6 base/charts,
+# Python NumPy/SciPy, colcon, Xvfb/noVNC, etc.
+libeigen3-dev
+ros-jazzy-controller-manager
+ros-jazzy-controller-interface
+ros-jazzy-hardware-interface
+ros-jazzy-ros2-controllers
+ros-jazzy-robot-state-publisher
+ros-jazzy-ros-gz
+ros-jazzy-ros2-control
+ros-jazzy-pluginlib
+ros-jazzy-rclcpp-lifecycle
+ros-jazzy-sensor-msgs
+ros-jazzy-geometry-msgs
+ros-jazzy-std-msgs
+ros-jazzy-std-srvs
+ros-jazzy-launch-ros
+ros-jazzy-ament-cmake-gtest
+ros-jazzy-ament-lint-auto
+ros-jazzy-ament-lint-common
+qt6-base-dev
+libqt6charts6-dev
+python3-numpy
+python3-scipy
+python3-yaml

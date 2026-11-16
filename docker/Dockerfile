@@ -71,6 +71,15 @@ RUN sed -i 's/\r$//' /usr/local/bin/cefiro-* \
  && chmod +x /usr/local/bin/cefiro-* \
  && if [ ! -e /etc/ros/rosdep/sources.list.d/20-default.list ]; then rosdep init; fi
 
+# Additional dependencies required by every CEFIRO package manifest and CMake build.
+# Keep the explicit list in requirements.apt.txt for reproducible rebuilds.
+COPY requirements.apt.txt /tmp/cefiro-requirements.apt.txt
+RUN set -eux; \
+    apt-get update; \
+    sed -e 's/#.*//' -e '/^[[:space:]]*$/d' /tmp/cefiro-requirements.apt.txt \
+      | xargs -r apt-get install -y --no-install-recommends; \
+    rm -rf /var/lib/apt/lists/* /tmp/cefiro-requirements.apt.txt
+
 USER cefiro
 WORKDIR /cefiro_ws
 ENV HOME=/home/cefiro \

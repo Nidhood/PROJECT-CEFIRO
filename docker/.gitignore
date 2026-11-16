@@ -1,0 +1,7 @@
+# CEFIRO local secrets; these are never meant to be committed.
+/.env
+/.env.*
+!/.env.example
+
+# Local IDE/shell artifacts
+*.local
