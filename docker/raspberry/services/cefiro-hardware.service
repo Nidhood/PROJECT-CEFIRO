@@ -1,0 +1,19 @@
+[Unit]
+Description=CEFIRO ROS 2 hardware interface (USB hotplug)
+After=systemd-udevd.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@USER@
+SupplementaryGroups=dialout
+EnvironmentFile=/etc/cefiro/pi-services.env
+ExecStart=/usr/local/lib/cefiro/run-hardware.sh
+Restart=always
+RestartSec=3s
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=20s
+
+[Install]
+WantedBy=multi-user.target

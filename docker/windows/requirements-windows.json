@@ -1,9 +1,0 @@
-{
-  "platform": "Windows 10/11 x64 with virtualization enabled",
-  "note": "No separate Ubuntu distribution is required on Windows; ROS/Gazebo/Qt build in Ubuntu Docker images.",
-  "applications": [
-    {"name": "Docker Desktop", "wingetId": "Docker.DockerDesktop", "url": "https://www.docker.com/products/docker-desktop/", "required": true},
-    {"name": "Git for Windows", "wingetId": "Git.Git", "url": "https://git-scm.com/downloads/win", "required": false},
-    {"name": "Xpra Windows Client", "url": "https://xpra.org/stable/windows/Xpra-x86_64_Setup.exe", "required": true, "note": "Needed for separate GUI windows; noVNC is an alternative."}
-  ]
-}
