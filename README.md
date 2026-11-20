@@ -7,14 +7,32 @@
 **A custom quadrotor mounted on a three-axis gimbal, developed as an end-to-end robotics and control engineering testbed.**
 
 [![ROS 2 Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/jazzy/)
+
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu&logoColor=white)](https://ubuntu.com/)
+
 [![Gazebo Harmonic](https://img.shields.io/badge/Gazebo-Harmonic-22577A)](https://gazebosim.org/docs/harmonic/)
+
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)](https://isocpp.org/)
+
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+
 [![Qt 6](https://img.shields.io/badge/Qt-6-41CD52?logo=qt&logoColor=white)](https://www.qt.io/)
+
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
+[![Docker](https://img.shields.io/badge/Docker-Desktop-2496ED?logo=docker&logoColor=white)](https://www.docker.com/products/docker-desktop/)
+[![WSL 2](https://img.shields.io/badge/WSL-2-0078D4)](https://learn.microsoft.com/windows/wsl/)
+[![Docker Compose](https://img.shields.io/badge/Compose-v2-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Xpra](https://img.shields.io/badge/Xpra-Seamless-555555)](https://xpra.org/)
+[![noVNC](https://img.shields.io/badge/noVNC-Web%20desktop-6E5494)](https://novnc.com/)
+[![Cyclone DDS](https://img.shields.io/badge/CycloneDDS-ROS%202-FF8C00)](https://cyclonedds.io/)
+[![Zenoh](https://img.shields.io/badge/Eclipse%20Zenoh-ROS%202%20DDS-F7941E)](https://zenoh.io/)
+[![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Hardware%20gateway-A22846?logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
+[![systemd](https://img.shields.io/badge/systemd-Auto%20services-555555)](https://systemd.io/)
+[![PowerShell](https://img.shields.io/badge/PowerShell-Install%20%26%20Launch-5391FE?logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/)
+
 [![License: BSD--2--Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue)](LICENSE)
 
-**[Architecture](#system-architecture) · [Demonstrations](#demonstrations) · [Packages](#ros-2-workspace) · [Getting started](#getting-started) · [Research roadmap](#research-and-development-roadmap)**
+**[Architecture](#system-architecture) · [Demonstrations](#demonstrations) · [Packages](#ros-2-workspace) · [Getting started](#getting-started) · [Windows + Docker](#windows--docker-quick-start) · [Research roadmap](#research-and-development-roadmap)**
 
 </div>
 
@@ -37,10 +55,15 @@ The repository is organized around three complementary research tracks:
 ## Visual overview
 
 <div align="center">
+
   <img src="cefiro/public/img/gz_spawn_robot_1.png" alt="CEFIRO quadrotor and gimbal model spawned in Gazebo" width="48%" />
+
   <img src="cefiro/public/img/gz_spawn_robot_2.png" alt="CEFIRO simulation environment in Gazebo" width="48%" />
+
   <img src="cefiro/public/img/gz_spawn_robot_3.png" alt="CEFIRO gimbal and quadrotor simulation view" width="48%" />
+
   <img src="cefiro/public/img/rviz_publish_urdf_1.png" alt="CEFIRO robot description visualized in RViz" width="48%" />
+
 </div>
 
 <sub>Images are stored in [`cefiro/public/img`](cefiro/public/img) and correspond to the repository's own Gazebo and RViz resources.</sub>
@@ -69,7 +92,6 @@ flowchart TB
     BRIDGE["ros_gz_bridge<br/>Clock · sensors · rotor channels"]
     HW["cefiro_hardware_interface<br/>C++20 · serial CF1 protocol"]
     FMU["CEFIRO FMU V3<br/>STM32H743 · real sensors and DShot"]
-
     HMI <-->|"References · modes · controller status"| CTRL
     CTRL -->|"Four RPM requests"| ACT
     ACT -->|"Rotor speed · thrust · reaction torque"| BRIDGE
@@ -82,6 +104,34 @@ flowchart TB
     HMI -. "Separate /real namespace · supervised bench mode" .-> HW
     HW <-->|"USART / CF1 / CRC16"| FMU
 ```
+
+### Cross-platform communication and deployment
+
+CEFIRO also runs on a Windows workstation using Docker Desktop's WSL 2 backend. The ROS 2, Gazebo and Qt 6 applications execute inside Ubuntu 24.04 containers. Xpra forwards Linux application windows to the native Windows client; noVNC provides an independent browser-based fallback desktop. CycloneDDS handles ROS 2 discovery within the Docker network, while the Eclipse Zenoh ROS 2 DDS bridge links that network to the Raspberry Pi without relying on DDS multicast across Docker Desktop's network boundary.
+
+```mermaid
+flowchart LR
+    subgraph WIN[Windows workstation]
+        CLIENT[Xpra Windows client]
+        subgraph DOCKER[Docker Desktop / Ubuntu 24.04]
+            GUI[Qt 6 HMI / Xpra server]
+            SIM[ROS 2 Jazzy / Gazebo Harmonic]
+            ZW[Zenoh ROS 2 DDS client]
+            GUI <-->|ROS 2 / CycloneDDS| SIM
+            GUI <-->|Authorized ROS 2 topics| ZW
+        end
+        GUI <-->|Xpra TCP localhost 14500| CLIENT
+    end
+    subgraph PI[Raspberry Pi]
+        ZP[Zenoh ROS 2 DDS router]
+        HW[cefiro_hardware_interface]
+        ZP <-->|ROS 2 / real namespace| HW
+    end
+    ZW <-->|Zenoh TCP 7447 / trusted LAN| ZP
+    HW <-->|CP2102 USB-UART / CF1| FMU[STM32H743 FMU V3]
+```
+
+The two Zenoh bridges use explicit allowlists: 13 telemetry and diagnostic topics from the Raspberry Pi, and six supervised manual-control topics from Docker. Direct DShot topics, gain updates, ROS services and actions are not forwarded. The bridge is not a hard real-time control loop; the FMU retains local safety interlocks. The Raspberry Pi can run both the hardware interface and Zenoh automatically through `systemd`, using a persistent USB serial device path for hot-plug recovery.
 
 ### ROS 2 control architecture: what is implemented today?
 
@@ -139,6 +189,7 @@ where the motor-generated body wrench is mapped to the gimbal's generalized join
 | [`cefiro_hardware_interface/`](cefiro_hardware_interface) |     `0.4.1`      | ROS 2 ↔ real FMU serial/CF1 bridge, command gating, hardware diagnostics                             |
 | [`cefiro_matlab/`](cefiro_matlab)                         |        —         | MATLAB scripts for local linear models, LQR, and swing-up study                                      |
 | [`cefiro/`](cefiro)                                       |        —         | Project assets, demonstration recordings, and experiment datasets                                    |
+| [`docker/`](docker) | — | Windows/Linux container deployment, Xpra, Zenoh bridge and Raspberry Pi service automation |
 
 <sub>Versions above are read from each `package.xml` in the repository, not release tags. Some internal component documents have independent release numbering; manifest versions and document versions may differ.</sub>
 
@@ -155,12 +206,193 @@ where the motor-generated body wrench is mapped to the gimbal's generalized join
 | Control and dynamics    | **Eigen 3**, NumPy, MATLAB with Control System Toolbox | Modeling, numerical methods, LQR design, verification                  |
 | Embedded target         | **STM32H743**                                          | Custom FMU V3 with serial telemetry and motor-command firmware         |
 | Physical communications | **USART 115200 8N1 / CF1 / CRC16-CCITT**               | Host–FMU protocol and bounded manual commands                          |
+| Container platform | Docker Desktop · Docker Compose v2 · WSL 2 | Reproducible Linux runtime on Windows |
+| Remote graphics | Xpra Seamless · Xvfb · noVNC | Qt 6 application windows on Windows and optional browser desktop |
+| ROS 2 networking | CycloneDDS · Eclipse Zenoh ROS 2 DDS bridge | Local DDS discovery and selected bidirectional ROS 2 traffic across the LAN |
+| Deployment automation | PowerShell · Bash · systemd · udev | Installation, launch, service supervision and stable serial-device identification |
+| Hardware gateway | Raspberry Pi · CP2102 USB–UART | Real-hardware ROS 2 bridge and automatic serial reconnection |
 
 The MATLAB scripts are optional for building the ROS workspace, and this repository does not pin a single MATLAB release.
 
 ## Getting started
 
-### Prerequisites
+Choose the workflow that matches your host:
+
+- [Windows + Docker](#windows--docker-quick-start): containerized Ubuntu, automatic dependencies and Xpra desktop application.
+- [Native Ubuntu 24.04](#native-ubuntu-2404): direct ROS 2 installation and workspace build.
+
+### Windows + Docker quick start
+
+The [docker/](docker/) directory contains the complete environment, including Ubuntu 24.04, ROS 2 Jazzy, Gazebo Harmonic, ROS 2 Control, Qt 6 Charts, Xpra Server, noVNC, CycloneDDS and the Zenoh bridge. No separate Ubuntu distribution, ROS 2 installation or Qt SDK is needed on the Windows host.
+
+#### 1. Install the Windows prerequisites
+
+| Requirement | Installation / purpose |
+| --- | --- |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Required. Start Docker Desktop, select Linux containers and enable the WSL 2 backend. |
+| [Xpra Client for Windows x64](https://xpra.org/stable/windows/Xpra-x86_64_Setup.exe) | Required to display seamless Linux application windows. |
+| [Git for Windows](https://git-scm.com/downloads/win) | Required for cloning and updating the repository using Git. |
+| [WSL 2](https://learn.microsoft.com/windows/wsl/install) | Docker Desktop backend; no standalone Ubuntu distribution is required. |
+
+Use a supported 64-bit Windows 10/11 release, hardware virtualization enabled in BIOS/UEFI, and preferably at least 16 GB RAM and 40 GB free disk space. Complete any administrator prompts or reboot requested by the installers. Docker Desktop must be running before building the images.
+
+From Windows PowerShell (5.1 or later):
+
+```powershell
+docker --version
+docker compose version
+docker info
+```
+
+#### 2. Clone the project
+
+Use a local folder outside OneDrive where possible to avoid sync interference with build files.
+
+```powershell
+New-Item -ItemType Directory -Force C:\Dev | Out-Null
+Set-Location C:\Dev
+git clone https://github.com/Nidhood/PROJECT-CEFIRO.git
+Set-Location .\PROJECT-CEFIRO
+```
+
+Make sure the complete `docker/` directory (v9 or later) and the ROS packages are present. If distributed separately, merge the Docker bundle into the repository root; do not replace the entire repository or delete `.env` or `.docker-data` from an existing installation. The optional Raspberry service bundle must also be merged if `docker/raspberry/services/` is not present.
+
+#### 3. Configure Docker and install all dependencies
+
+Run the following commands from the repository root. The prerequisite script detects missing Windows programs and can launch installers; manual installation and restarts may still be required.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\docker\windows\install-prerequisites.ps1 -InstallMissing
+
+# Example Raspberry Pi address; replace it with the actual address.
+powershell -ExecutionPolicy Bypass -File .\docker\windows\configure.ps1 -RaspberryIp 192.168.68.59 -RosDomainId 42 -RotatePassword
+
+powershell -ExecutionPolicy Bypass -File .\docker\windows\install-project.ps1
+```
+
+`configure.ps1` creates or updates `docker/.env`, generates the local Xpra password and configures the ROS domain and Zenoh endpoint. Use `-RotatePassword` on a fresh installation (or to change the password); omit it when preserving an existing password. Never commit `.env` or its credentials. If the file was previously tracked by Git, remove it from version control and rotate any exposed password.
+
+`install-project.ps1` builds the two Docker images, installs Linux/ROS 2 packages declared in [requirements.apt.txt](docker/requirements.apt.txt), and compiles all eight CEFIRO ROS packages with `colcon`. Build outputs, ROS logs and experiment records persist in `.docker-data/`. No native Windows compiler, Python, Gazebo or Qt development installation is required.
+
+#### 4. Start Docker and the CEFIRO GUI
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\docker\windows\start.ps1
+```
+
+This starts `sim`, `observer`, `xpra` and `zenoh`, launches the Qt 6 HMI in the Xpra container, and attempts to attach the Windows Xpra client. It does not launch a physical hardware node or automatically arm motors. The Gazebo simulation itself is started separately. For development without the Raspberry Pi, use `start.ps1 -NoPi`.
+
+If the GUI does not appear, attach the Windows Xpra client to the existing session using TCP, host `127.0.0.1` and port `14500` (default; not SSH). From PowerShell, the usual installation path also supports:
+
+```powershell
+& "C:\Program Files\Xpra\Xpra.exe" attach tcp://127.0.0.1:14500
+```
+
+Retrieve the password locally if requested:
+
+```powershell
+(Get-Content .\docker\.env | Where-Object { $_ -match '^XPRA_PASSWORD=' }) -replace '^XPRA_PASSWORD=', ''
+```
+
+If the client is connected but the GUI is missing, inspect its log and the Xpra port:
+
+```powershell
+Get-Content .\.docker-data\log\cefiro-gui-xpra.log -Tail 60
+Test-NetConnection 127.0.0.1 -Port 14500
+```
+
+For manual startup of a GUI that is not already running:
+
+```powershell
+Set-Location .\docker
+docker compose -f compose.yaml -f compose.xpra.yaml exec -e DISPLAY=:100 xpra cefiro-run ros2 launch cefiro_gui cefiro_gui.launch.py
+```
+
+The independent noVNC fallback desktop is available at `http://127.0.0.1:6080/vnc.html?autoconnect=1`. It uses display `:99` in `sim`; it does not mirror Xpra's `:100` display. The default container setup uses software rendering; Xpra alone does not provide GPU acceleration for Gazebo.
+
+#### 5. Run Gazebo and inspect ROS 2
+
+From the repository root, open a separate PowerShell terminal:
+
+```powershell
+Set-Location .\docker
+docker compose -f compose.yaml -f compose.xpra.yaml exec -e DISPLAY=:100 xpra cefiro-run ros2 launch cefiro_gz start_gz.launch.py use_sim_time:=true enable_sensors:=true
+```
+
+Use the same Xpra session to view the simulation windows. From another terminal, in the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\docker\windows\status.ps1 -Topics
+```
+
+#### 6. Connect real hardware through the Raspberry Pi
+
+The Raspberry Pi requires its own ROS 2 Jazzy workspace, compiled hardware interface, a compatible Zenoh ROS 2 DDS bridge and matching configuration. For a new Pi with ROS 2 already installed and the repository under `~/cefiro_ws/src/PROJECT-CEFIRO`:
+
+```bash
+cd ~/cefiro_ws/src/PROJECT-CEFIRO/docker/raspberry
+bash install-cefiro-pi.sh ~/cefiro_ws
+bash install-zenoh.sh
+cp zenoh-pi.json5 ~/zenoh-pi.json5
+```
+
+Ensure the `listen` endpoint in `~/zenoh-pi.json5` uses the Pi's actual LAN IP and that both local ROS domains match their bridge configurations (default `42`). Docker uses the Zenoh client role; the Pi uses the router role on TCP port `7447`. Stop any existing manual hardware and Zenoh processes before installing services.
+
+From Windows, copy the configured Pi file and optional automatic-service scripts (example user and IP):
+
+```powershell
+scp .\docker\raspberry\zenoh-pi.json5 nidhood@192.168.68.59:~/zenoh-pi.json5
+scp -r .\docker\raspberry\services nidhood@192.168.68.59:~/cefiro-services
+```
+
+For initial communication-only testing, disconnect ESC power, remove propellers and install the services with motor command transmission disabled. On the Raspberry Pi:
+
+```bash
+cd ~/cefiro-services
+bash install-services.sh --device /dev/ttyUSB0 --telemetry-only
+systemctl status cefiro-hardware cefiro-zenoh --no-pager
+```
+
+Choose the actual USB device at enrollment. The hardware service uses `/dev/serial/by-id/` (or `/dev/serial/by-path/`) rather than relying on `ttyUSB0` remaining unchanged. It waits for the enrolled adapter and the hardware node reconnects if the USB serial link is interrupted, without restoring the previous arm state. The Zenoh service starts independently when the network is ready. For supervised manual bench commissioning, follow the [service documentation](docker/raspberry/services/README.md) and retain the firmware's power, arming, and watchdog protections. The service installer defaults to a conservative DShot limit of 300.
+
+Useful Pi commands:
+
+```bash
+journalctl -u cefiro-hardware -f
+journalctl -u cefiro-zenoh -f
+ros2 topic echo /real/cefiro/hardware/status --full-length --field data --once | python3 -m json.tool
+```
+
+In Windows (repository root):
+
+```powershell
+Test-NetConnection 192.168.68.59 -Port 7447
+powershell -ExecutionPolicy Bypass -File .\docker\windows\status.ps1 -Topics
+```
+
+The `/real/` topics should be visible when both bridges and the Pi publishers are running. To verify Windows-to-Pi routing without activating the motors, keep command transmission disabled and confirm that a disarm request from the GUI appears on `ros2 topic echo /real/cefiro_actuators/armed` in the Pi terminal.
+
+> **Network and hardware safety:** the supplied Zenoh configuration does not enable authentication or TLS. Use only an isolated, trusted bench LAN; do not expose the bridge to the Internet. The ROS namespace and topic allowlists are not security boundaries. Keep physical motor power disconnected during network verification and retain the local emergency stop and firmware watchdog. An acknowledged ROS message does not guarantee acceptance by the FMU.
+
+#### 7. Stop or remove the Docker environment
+
+From the Windows repository root:
+
+```powershell
+# Stop services; preserve build output and experimental data.
+powershell -ExecutionPolicy Bypass -File .\docker\windows\stop.ps1
+
+# Remove CEFIRO containers and the Compose network.
+powershell -ExecutionPolicy Bypass -File .\docker\windows\remove.ps1
+```
+
+Optional cleanup: `remove.ps1 -RemoveImages` removes the CEFIRO-tagged images; adding `-PurgeData` also deletes `.docker-data/` after explicit confirmation. This can permanently remove recordings, logs and compiled output. The scripts do not uninstall Docker Desktop or Xpra or delete the repository. Raspberry Pi services run independently and can be stopped with `sudo systemctl stop cefiro-hardware cefiro-zenoh`.
+
+See [docker/README.md](docker/README.md) for detailed configuration, update steps and troubleshooting.
+
+### Native Ubuntu 24.04
+
+#### Prerequisites
 
 Install a working **ROS 2 Jazzy + Gazebo Harmonic** environment on Ubuntu 24.04, including the ROS–Gazebo bridge, Xacro, the usual colcon tools, and the dependencies declared by the packages. The Qt desktop application also requires Qt 6 Widgets/Charts development libraries.
 
@@ -180,14 +412,12 @@ sudo rosdep init   # Skip if already initialized
 rosdep update
 ```
 
-### Build the workspace
+#### Build the workspace
 
 ```bash
 mkdir -p ~/cefiro_ws/src
 cd ~/cefiro_ws/src
-
 git clone https://github.com/Nidhood/PROJECT-CEFIRO.git
-
 cd ~/cefiro_ws
 source /opt/ros/jazzy/setup.bash
 rosdep install --from-paths src --ignore-src -r -y
@@ -197,7 +427,7 @@ source install/setup.bash
 
 > The repository is ROS-workspace content. `colcon` discovers the ROS packages through their `package.xml` files, even when they are nested below the cloned repository directory. Use a fresh shell or source the workspace in every terminal.
 
-### 1. Visualize the robot description in RViz
+#### 1. Visualize the robot description in RViz
 
 ```bash
 ros2 launch cefiro_description display.launch.py
@@ -205,7 +435,7 @@ ros2 launch cefiro_description display.launch.py
 
 Use the joint-state GUI to examine the model, joint ordering, transforms, and gimbal motion without energizing any motors.
 
-### 2. Launch Gazebo with the simulated controller
+#### 2. Launch Gazebo with the simulated controller
 
 ```bash
 ros2 launch cefiro_gz start_gz.launch.py \
@@ -214,7 +444,7 @@ ros2 launch cefiro_gz start_gz.launch.py \
 
 This launches the world, scenery, quadrotor/gimbal, simulated sensors, actuator node, custom rotor plugin, ROS–Gazebo bridge, and simulation-only attitude-control node.
 
-### 3. Launch the HMI in a separate terminal
+#### 3. Launch the HMI in a separate terminal
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -224,7 +454,7 @@ ros2 launch cefiro_gui cefiro_gui.launch.py
 
 In the HMI, the **`SWING-UP + LQR (SIM)`** strategy implements a staged progression from an inverted configuration to local attitude stabilization. Angle-reference commands are gated until the controller reports the captured/balanced state. The GUI also contains dashboard, signal-generator, metrics, waveform, and experiment-recording views.
 
-### 4. Observe ROS 2 communication
+#### 4. Observe ROS 2 communication
 
 ```bash
 ros2 node list
@@ -362,9 +592,15 @@ The repository root is distributed under the [BSD 2-Clause License](LICENSE). In
 **PROJECT CEFIRO** — engineering, robotics, and control systems research in the context of **IEEE Robotics and Automation Society (RAS), Pontificia Universidad Javeriana, Bogotá, Colombia**.
 
 <div align="center">
+
   <a href="https://www.javeriana.edu.co/">
+
     <img src="cefiro/public/img/footer.png" alt="IEEE RAS Javeriana project footer" width="100%" />
+
   </a>
+
   <br />
+
   <sub>IEEE RAS Javeriana · Robotics, Automation, Embedded Systems and Control</sub>
+
 </div>

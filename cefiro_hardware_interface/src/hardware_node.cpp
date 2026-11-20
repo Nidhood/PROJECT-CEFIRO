@@ -1,7 +1,8 @@
 #include "cefiro_hardware_interface/protocol.hpp"
 #include "cefiro_hardware_interface/motor_command.hpp"
 #include "cefiro_hardware_interface/manual_keepalive.hpp"
-#include "cefiro_hardware_interface/serial_port.hpp"
+#include "cefiro_hardware_interface/transport.hpp"
+#include <sensor_msgs/msg/battery_state.hpp>
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
@@ -45,7 +46,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.5.0";
+constexpr const char* kHardwareVersion = "0.6.0";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -94,6 +95,11 @@ std::vector<std::string> floatFields(const std::vector<double>& values) {
 class HardwareNode final : public rclcpp::Node {
 public:
   HardwareNode() : Node("cefiro_hardware_interface") {
+    transport_mode_ = declare_parameter<std::string>("transport", "serial");
+    wifi_host_ = declare_parameter<std::string>("wifi_host", "192.168.4.1");
+    wifi_port_ = declare_parameter<int>("wifi_port", 9000);
+    wifi_connect_timeout_s_ = declare_parameter<double>("wifi_connect_timeout_s", 3.0);
+    wifi_rx_timeout_s_ = declare_parameter<double>("wifi_rx_timeout_s", 3.0);
     port_ = declare_parameter<std::string>("port", "/dev/ttyUSB0");
     baudrate_ = declare_parameter<int>("baudrate", 115200);
     protocol_mode_ = declare_parameter<std::string>("protocol_mode", "legacy_text");
@@ -128,6 +134,17 @@ public:
     if (protocol_mode_ != "legacy_text" && protocol_mode_ != "cf1") {
       throw std::invalid_argument("protocol_mode must be legacy_text or cf1");
     }
+    if (transport_mode_ != "serial" && transport_mode_ != "wifi") {
+      throw std::invalid_argument("transport must be serial or wifi");
+    }
+    wifi_ = transport_mode_ == "wifi";
+    if (wifi_ && (protocol_mode_ != "cf1" || wifi_host_.empty() || wifi_port_ < 1 ||
+        wifi_port_ > 65535 || !std::isfinite(wifi_connect_timeout_s_) ||
+        wifi_connect_timeout_s_ <= 0 || !std::isfinite(wifi_rx_timeout_s_) || wifi_rx_timeout_s_ < 1.5)) {
+      throw std::invalid_argument("Wi-Fi requires CF1, IPv4, valid port and timeouts");
+    }
+    endpoint_ = wifi_ ? wifi_host_ + ":" + std::to_string(wifi_port_) : port_;
+    link_.configure(wifi_, wifi_ ? wifi_host_ : port_, wifi_ ? wifi_port_ : baudrate_, wifi_connect_timeout_s_);
     if (baudrate_ <= 0 || reconnect_s_ <= 0.0 || sensor_stale_s_ <= 0.0 ||
         command_timeout_s_ <= 0.0 || orientation_timeout_s_ <= 0.0 ||
         !std::isfinite(reconnect_s_) || !std::isfinite(sensor_stale_s_) ||
@@ -152,6 +169,8 @@ public:
     can_tx_ = protocol_mode_ == "cf1" && enable_command_tx_;
     // All names are relative; default launch namespace 'real' isolates the real plant.
     const auto sensor_qos = rclcpp::SensorDataQoS();
+    pub_battery_ = create_publisher<sensor_msgs::msg::BatteryState>("cefiro/sensors/battery", 10);
+    pub_power_ = create_publisher<std_msgs::msg::String>("cefiro/hardware/power_status", 10);
     pub_imu_ = create_publisher<sensor_msgs::msg::Imu>("imu/data", sensor_qos);
     pub_mag_ = create_publisher<sensor_msgs::msg::MagneticField>("magnetometer/data", sensor_qos);
     pub_baro_ = create_publisher<sensor_msgs::msg::FluidPressure>("bmp581/air_pressure", sensor_qos);
@@ -212,7 +231,7 @@ public:
       "cefiro/hardware/reset_fault",
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
              std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        if (!can_tx_ || !serial_.connected() || controller_enabled_ ||
+        if (!can_tx_ || !link_.connected() || controller_enabled_ ||
             arm_requested_ || arm_confirmed_) {
           response->success = false;
           response->message = "Not allowed: require CF1 TX, connected, GUI output OFF, and disarmed";
@@ -224,13 +243,13 @@ public:
           ? "Reset request queued; verify MCU ACK=OK and next STAT state!=FAULT"
           : "Unable to queue reset request";
       });
-    io_timer_ = create_wall_timer(10ms, [this] { pollSerial(); });
+    io_timer_ = create_wall_timer(10ms, [this] { pollTransport(); });
     status_timer_ = create_wall_timer(500ms, [this] { publishStatus(); });
     RCLCPP_INFO(get_logger(), "CEFIRO hardware interface v%s (manual keepalive + 0.60 s GUI lease)",
       kHardwareVersion);
     RCLCPP_INFO(get_logger(),
-      "CEFIRO USART %s at %d 8N1, namespace=%s, protocol=%s, command TX=%s",
-      port_.c_str(), baudrate_, get_namespace(), protocol_mode_.c_str(), can_tx_ ? "ENABLED" : "DISABLED");
+      "CEFIRO %s %s, namespace=%s, protocol=%s, command TX=%s",
+      transport_mode_.c_str(), endpoint_.c_str(), get_namespace(), protocol_mode_.c_str(), can_tx_ ? "ENABLED" : "DISABLED");
     RCLCPP_INFO(get_logger(),
       "GUI MANUAL /real interface: TX=%s, nominal-RPM-to-DSHOT=%s, DShot zero or %u..%u; no measured RPM",
       can_tx_ ? "enabled" : "disabled",
@@ -241,21 +260,23 @@ public:
 
   ~HardwareNode() override {
     // Best-effort safety request only; independent MCU watchdog is mandatory.
-    if (can_tx_ && serial_.connected()) {
+    if (can_tx_ && link_.connected()) {
       const auto stop = encodeFrame(++sequence_, "CMD_STOP", {});
       const auto disarm = encodeFrame(++sequence_, "CMD_ARM", {"0"});
-      if (stop) (void)serial_.writeSome(reinterpret_cast<const std::uint8_t*>(stop->data()), stop->size());
-      if (disarm) (void)serial_.writeSome(reinterpret_cast<const std::uint8_t*>(disarm->data()), disarm->size());
+      if (stop) (void)link_.writeSome(reinterpret_cast<const std::uint8_t*>(stop->data()), stop->size());
+      if (disarm) (void)link_.writeSome(reinterpret_cast<const std::uint8_t*>(disarm->data()), disarm->size());
     }
-    serial_.close();
+    link_.close();
   }
 
 private:
   void resetConnection(std::string_view reason) {
-    if (serial_.connected()) RCLCPP_WARN(get_logger(),
-      "Serial link lost: %.*s; a NEW GUI enable/arm action will be required",
+    if (link_.connected()) RCLCPP_WARN(get_logger(),
+      "Transport link lost: %.*s; a NEW GUI enable/arm action will be required",
       static_cast<int>(reason.size()), reason.data());
-    serial_.close();
+    link_.close();
+    last_valid_frame_.reset();
+    last_battery_.reset(); last_power_.reset();
     lines_.clear();
     tx_queue_.clear();
     pending_tx_.clear();
@@ -278,15 +299,17 @@ private:
     reconnect_at_ = Clock::now() + std::chrono::duration_cast<Clock::duration>(
       std::chrono::duration<double>(reconnect_s_));
   }
-  void connectPort() {
+  void connectTransport() {
     if (Clock::now() < reconnect_at_) return;
     std::string error;
-    if (!serial_.open(port_, baudrate_, error)) {
+    const auto state = link_.connectStep(error);
+    if (state == Transport::State::Pending) return;
+    if (state == Transport::State::Failed) {
       ++serial_errors_;
       reconnect_at_ = Clock::now() + std::chrono::duration_cast<Clock::duration>(
         std::chrono::duration<double>(reconnect_s_));
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
-        "Waiting for UART %s: %s", port_.c_str(), error.c_str());
+        "Waiting for transport %s: %s", endpoint_.c_str(), error.c_str());
       return;
     }
     // Never restore ARM / GUI setpoint after a physical link reconnect.
@@ -304,7 +327,9 @@ private:
     pending_tx_.clear();
     pending_offset_ = 0;
     lines_.clear();
-    RCLCPP_INFO(get_logger(), "Serial connected: %s", port_.c_str());
+    connected_at_ = Clock::now();
+    last_valid_frame_.reset();
+    RCLCPP_INFO(get_logger(), "%s connected: %s", transport_mode_.c_str(), endpoint_.c_str());
     if (can_tx_) {
       // SAFE STOP, NOT E-STOP: the latter latches FMU FAULT and requires an
       // explicit reset. Configure manual mode while still disarmed.
@@ -313,11 +338,11 @@ private:
       mode_ack_sequence_ = queueCommand("CMD_MODE", {"MANUAL"});
     }
   }
-  void pollSerial() {
-    if (!serial_.connected()) { connectPort(); return; }
+  void pollTransport() {
+    if (!link_.connected()) { connectTransport(); return; }
     std::array<std::uint8_t, 4096> buffer{};
     for (int attempt = 0; attempt < 6; ++attempt) {
-      const ssize_t n = serial_.readSome(buffer.data(), buffer.size());
+      const ssize_t n = link_.readSome(buffer.data(), buffer.size());
       if (n < 0) { ++serial_errors_; resetConnection("read error"); return; }
       if (n == 0) break;
       const std::string_view chunk(reinterpret_cast<const char*>(buffer.data()),
@@ -326,6 +351,9 @@ private:
         if (protocol_mode_ == "legacy_text") onLegacy(line);
         else onFrame(line);
       }
+    }
+    if (wifi_ && std::chrono::duration<double>(Clock::now() - last_valid_frame_.value_or(connected_at_)).count() > wifi_rx_timeout_s_) {
+      ++serial_errors_; resetConnection("CF1 receive timeout"); return;
     }
     if (can_tx_) {
       const auto current = Clock::now();
@@ -356,7 +384,7 @@ private:
   }
   std::optional<std::uint16_t> queueCommand(std::string_view kind,
                                              const std::vector<std::string>& payload) {
-    if (!can_tx_ || !serial_.connected()) return std::nullopt;
+    if (!can_tx_ || !link_.connected()) return std::nullopt;
     const auto seq = ++sequence_;
     const auto data = encodeFrame(seq, kind, payload);
     if (!data) { RCLCPP_WARN(get_logger(), "Rejected invalid outgoing CF1 command"); return std::nullopt; }
@@ -390,7 +418,7 @@ private:
         tx_queue_.pop_front();
         pending_offset_ = 0;
       }
-      const auto n = serial_.writeSome(
+      const auto n = link_.writeSome(
         reinterpret_cast<const std::uint8_t*>(pending_tx_.data()) + pending_offset_,
         pending_tx_.size() - pending_offset_);
       if (n < 0) { ++serial_errors_; resetConnection("write error"); return; }
@@ -415,7 +443,7 @@ private:
     if (pending_offset_ == 0) pending_tx_.clear();
     manual_mode_confirmed_ = false;
     mode_ack_sequence_.reset();
-    if (can_tx_ && serial_.connected()) {
+    if (can_tx_ && link_.connected()) {
       if (fault_latched_) {
         // GUI STOP publishes multiple topics without cross-topic ordering.
         // A late enable=false / armed=false MUST NOT erase an earlier ESTOP.
@@ -432,7 +460,7 @@ private:
   }
   void emergencyStop() {
     disarm("GUI EMERGENCY ZERO");
-    if (can_tx_ && serial_.connected()) {
+    if (can_tx_ && link_.connected()) {
       tx_queue_.clear();
       mode_ack_sequence_.reset();
       manual_mode_confirmed_ = false;
@@ -443,7 +471,7 @@ private:
       "GUI EMERGENCY ZERO: STM32 FMU FAULT will remain latched until explicit reset");
   }
   void maybeArm() {
-    if (!can_tx_ || !serial_.connected() || !controller_enabled_ ||
+    if (!can_tx_ || !link_.connected() || !controller_enabled_ ||
         !arm_requested_ || arm_confirmed_ || arm_ack_sequence_ ||
         !(rpm_to_dshot_enabled_ || allow_direct_dshot_) ||
         !manual_mode_confirmed_ || !mcu_status_seen_ || fault_latched_ ||
@@ -459,7 +487,7 @@ private:
   }
   void onArmed(bool armed) {
     if (!armed) { disarm("GUI requested disarm"); return; }
-    if (!can_tx_ || !serial_.connected()) {
+    if (!can_tx_ || !link_.connected()) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 3000,
         "ARM rejected: CF1 command TX is disabled or disconnected");
       return;
@@ -480,7 +508,7 @@ private:
     maybeArm();
   }
   void sendMotorDshot(const std::array<std::uint16_t, 4>& codes) {
-    if (!can_tx_ || !serial_.connected() || !controller_enabled_ ||
+    if (!can_tx_ || !link_.connected() || !controller_enabled_ ||
         !arm_requested_ || !arm_confirmed_ || reverse_requested_ || fault_latched_) return;
     std::vector<std::string> fields;
     for (const std::uint16_t code : codes) {
@@ -594,6 +622,7 @@ private:
       if (bad_frames_ % 50 == 1) RCLCPP_WARN(get_logger(), "Dropped invalid CF1 frame (CRC/framing)");
       return;
     }
+    last_valid_frame_ = Clock::now();
     if (handleFrame(*frame)) ++rx_frames_;
     else ++bad_frames_;
   }
@@ -621,6 +650,40 @@ private:
       const auto v = numbers(fields, 0, 5);
       if (!v || (*v)[0] <= 0.0 || (*v)[3] <= 0.0) return false;
       publishBaro({(*v)[0], (*v)[1], (*v)[2], (*v)[3], (*v)[4]});
+      return true;
+    }
+    if (frame.kind == "BAT" && fields.size() == 6) {
+      const auto v = numbers(fields, 0, 5);
+      const auto level = parseFinite(fields[3]);
+      const auto flags_num = parseFinite(fields[4]);
+      const auto tick = parseInteger(fields[5], 0, 4294967295LL);
+      if (!v || !level || *level < 0 || *level > 3 || std::floor(*level) != *level ||
+          !flags_num || *flags_num < 0 || *flags_num > 255 || std::floor(*flags_num) != *flags_num || !tick) return false;
+      const auto flags = static_cast<unsigned>(*flags_num);
+      const float nan = std::numeric_limits<float>::quiet_NaN();
+      sensor_msgs::msg::BatteryState msg;
+      msg.header.stamp = now(); msg.header.frame_id = body_frame_;
+      msg.voltage = (flags & 1U) && (*v)[0] >= 0 ? static_cast<float>((*v)[0]) : nan;
+      // Firmware ESC current is a nonnegative discharge magnitude when calibrated.
+      // ROS BatteryState uses negative current for discharge.
+      msg.current = (flags & 2U) && (*v)[1] >= 0 ? -static_cast<float>((*v)[1]) : nan;
+      msg.percentage = (flags & 4U) && (*v)[2] >= 0 && (*v)[2] <= 100 ? static_cast<float>((*v)[2] / 100.0) : nan;
+      msg.temperature = msg.charge = msg.capacity = msg.design_capacity = nan;
+      msg.present = (flags & 1U) != 0;
+      msg.power_supply_status = msg.POWER_SUPPLY_STATUS_UNKNOWN;
+      msg.power_supply_health = msg.POWER_SUPPLY_HEALTH_UNKNOWN;
+      msg.power_supply_technology = msg.POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
+      pub_battery_->publish(msg);
+      last_battery_ = Clock::now(); battery_voltage_valid_ = (flags & 1U) != 0;
+      last_bat_payload_.clear();
+      for (const auto& f : fields) { if (!last_bat_payload_.empty()) last_bat_payload_ += ','; last_bat_payload_ += f; }
+      return true;
+    }
+    if (frame.kind == "PWR" && fields.size() == 12) {
+      if (!numbers(fields, 0, 12)) return false;
+      std_msgs::msg::String msg;
+      for (const auto& f : fields) { if (!msg.data.empty()) msg.data += ','; msg.data += f; }
+      pub_power_->publish(msg); last_power_ = Clock::now();
       return true;
     }
     if (frame.kind == "ATT" && (fields.size() == 4 || fields.size() == 5)) {
@@ -860,8 +923,11 @@ private:
     std::ostringstream stream;
     stream << std::boolalpha << '{'
       << "\"hardware_interface_version\":" << jsonQuote(kHardwareVersion) << ','
-      << "\"serial_connected\":" << serial_.connected() << ','
-      << "\"device\":" << jsonQuote(port_) << ','
+      << "\"serial_connected\":" << link_.connected() << ','
+      << "\"transport\":" << jsonQuote(transport_mode_) << ','
+      << "\"transport_connected\":" << link_.connected() << ','
+      << "\"wifi_connected\":" << (wifi_ && link_.connected()) << ','
+      << "\"device\":" << jsonQuote(endpoint_) << ','
       << "\"protocol\":" << jsonQuote(protocol_mode_) << ','
       << "\"command_tx_enabled\":" << can_tx_ << ','
       << "\"armed_requested\":" << arm_requested_ << ','
@@ -889,6 +955,10 @@ private:
       << "\"imu_online\":" << (imu_age >= 0 && imu_age <= sensor_stale_s_) << ','
       << "\"mag_online\":" << (mag_age >= 0 && mag_age <= sensor_stale_s_) << ','
       << "\"baro_online\":" << (baro_age >= 0 && baro_age <= sensor_stale_s_) << ','
+      << "\"battery_online\":" << (age(last_battery_) >= 0 && age(last_battery_) <= sensor_stale_s_) << ','
+      << "\"battery_voltage_valid\":" << (age(last_battery_) >= 0 && age(last_battery_) <= sensor_stale_s_ && battery_voltage_valid_) << ','
+      << "\"battery_raw\":" << jsonQuote(last_battery_ ? last_bat_payload_ : "") << ','
+      << "\"power_online\":" << (age(last_power_) >= 0 && age(last_power_) <= sensor_stale_s_) << ','
       << "\"last_imu_age_s\":" << imu_age << ','
       << "\"last_mag_age_s\":" << mag_age << ','
       << "\"last_baro_age_s\":" << baro_age << ','
@@ -896,6 +966,7 @@ private:
       << "\"rx_valid_frames\":" << rx_frames_ << ','
       << "\"rx_invalid_frames\":" << bad_frames_ + lines_.dropped() << ','
       << "\"serial_errors\":" << serial_errors_ << ','
+      << "\"transport_errors\":" << serial_errors_ << ','
       << "\"sensor_error\":" << jsonQuote(last_sensor_error_) << ','
       << "\"mcu_status\":" << jsonQuote(last_mcu_status_) << ','
       << "\"last_commanded_dshot\":[" << last_dshot_[0] << ','
@@ -906,6 +977,14 @@ private:
     pub_status_->publish(msg);
   }
 
+  std::string transport_mode_, wifi_host_, endpoint_;
+  bool wifi_{false};
+  int wifi_port_{9000};
+  double wifi_connect_timeout_s_{3.0}, wifi_rx_timeout_s_{3.0};
+  Time connected_at_{};
+  std::optional<Time> last_valid_frame_, last_battery_, last_power_;
+  bool battery_voltage_valid_{false};
+  std::string last_bat_payload_;
   std::string port_;
   int baudrate_{115200};
   std::string protocol_mode_;
@@ -928,7 +1007,7 @@ private:
   double orientation_timeout_s_{0.2};
   double max_command_rpm_{12000.0};
   std::string imu_frame_, mag_frame_, baro_frame_, body_frame_;
-  SerialPort serial_;
+  Transport link_;
   LineBuffer lines_;
   Time reconnect_at_{};
   std::deque<std::string> tx_queue_;
@@ -956,6 +1035,8 @@ private:
   std::string last_sensor_error_, last_mcu_status_{"NO MCU STATUS"};
 
   rclcpp::TimerBase::SharedPtr io_timer_, status_timer_;
+  rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr pub_battery_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_power_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_imu_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr pub_mag_;
   rclcpp::Publisher<sensor_msgs::msg::FluidPressure>::SharedPtr pub_baro_;
@@ -978,7 +1059,7 @@ private:
 
 int main(int argc, char** argv) {
   if (argc == 2 && std::string_view(argv[1]) == "--version") {
-    std::cout << "cefiro_hardware_interface 0.5.0\n";
+    std::cout << "cefiro_hardware_interface 0.6.0\n";
     return 0;
   }
   rclcpp::init(argc, argv);

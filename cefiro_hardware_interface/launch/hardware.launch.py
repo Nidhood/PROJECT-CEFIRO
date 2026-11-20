@@ -33,6 +33,7 @@ def generate_launch_description():
             output='screen',
             parameters=[LaunchConfiguration('config'), {
                 'port': LaunchConfiguration('port'),
+                'transport': 'serial',
                 'protocol_mode': LaunchConfiguration('protocol_mode'),
                 'enable_command_tx': ParameterValue(
                     LaunchConfiguration('enable_command_tx'), value_type=bool),

@@ -80,3 +80,7 @@ Remote reset requires explicit `std_srvs/srv/Trigger` call to
 No real measured RPM or detailed motor telemetry exists in this firmware.
 Do not publish simulated RPM as real feedback. Do not bypass firmware AUTO
 inhibition or accept reversed motor direction requests.
+
+## V4 additions and Wi-Fi transport
+
+The ESP32 bridge forwards the same CF1 ASCII stream over TCP port 9000; it does not change the CRC or ROS topic mappings. V4 also emits `BAT` and `PWR`. See [WIFI_CONNECTION.md](WIFI_CONNECTION.md) for exact fields and topics.

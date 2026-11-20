@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cefiro_hardware_interface VERSION 0.5.0 LANGUAGES CXX)
+project(cefiro_hardware_interface VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,6 +19,7 @@ find_package(cefiro_msgs REQUIRED)
 add_library(cefiro_hardware_core STATIC
   src/protocol.cpp
   src/serial_port.cpp
+  src/tcp_port.cpp
   src/motor_command.cpp
 )
 target_include_directories(cefiro_hardware_core PUBLIC
