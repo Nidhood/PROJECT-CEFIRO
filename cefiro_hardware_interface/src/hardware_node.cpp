@@ -2,6 +2,7 @@
 #include "cefiro_hardware_interface/motor_command.hpp"
 #include "cefiro_hardware_interface/manual_keepalive.hpp"
 #include "cefiro_hardware_interface/transport.hpp"
+#include "cefiro_hardware_interface/wifi_manager.hpp"
 #include <sensor_msgs/msg/battery_state.hpp>
 
 #include <rclcpp/rclcpp.hpp>
@@ -46,7 +47,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.6.0";
+constexpr const char* kHardwareVersion = "0.8.1";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -96,10 +97,23 @@ class HardwareNode final : public rclcpp::Node {
 public:
   HardwareNode() : Node("cefiro_hardware_interface") {
     transport_mode_ = declare_parameter<std::string>("transport", "serial");
-    wifi_host_ = declare_parameter<std::string>("wifi_host", "192.168.4.1");
+    wifi_host_ = declare_parameter<std::string>("wifi_host", "cefiro.local");
+    const auto wifi_mode = declare_parameter<std::string>("wifi_mode", "network");
     wifi_port_ = declare_parameter<int>("wifi_port", 9000);
     wifi_connect_timeout_s_ = declare_parameter<double>("wifi_connect_timeout_s", 3.0);
     wifi_rx_timeout_s_ = declare_parameter<double>("wifi_rx_timeout_s", 3.0);
+    const bool wifi_auto_connect = declare_parameter<bool>("wifi_auto_connect", true);
+    WifiConfig wifi_config;
+    wifi_config.ssid = declare_parameter<std::string>("wifi_ssid", "CEFIRO_FMU_V3");
+    wifi_config.interface = declare_parameter<std::string>("wifi_interface", "auto");
+    wifi_config.disconnect_on_exit = declare_parameter<bool>("wifi_disconnect_on_exit", true);
+    wifi_config.retry_s = declare_parameter<double>("wifi_association_retry_s", 2.0);
+    wifi_config.mode = wifi_mode;
+    wifi_config.host = declare_parameter<std::string>("wifi_direct_host", "192.168.4.1");
+    wifi_config.network_host = wifi_host_;
+    wifi_config.port = wifi_port_;
+    wifi_config.manage_ap = wifi_auto_connect;
+    wifi_config.discovery_grace_s = declare_parameter<double>("wifi_discovery_grace_s", 15.0);
     port_ = declare_parameter<std::string>("port", "/dev/ttyUSB0");
     baudrate_ = declare_parameter<int>("baudrate", 115200);
     protocol_mode_ = declare_parameter<std::string>("protocol_mode", "legacy_text");
@@ -141,7 +155,7 @@ public:
     if (wifi_ && (protocol_mode_ != "cf1" || wifi_host_.empty() || wifi_port_ < 1 ||
         wifi_port_ > 65535 || !std::isfinite(wifi_connect_timeout_s_) ||
         wifi_connect_timeout_s_ <= 0 || !std::isfinite(wifi_rx_timeout_s_) || wifi_rx_timeout_s_ < 1.5)) {
-      throw std::invalid_argument("Wi-Fi requires CF1, IPv4, valid port and timeouts");
+      throw std::invalid_argument("Wi-Fi requires CF1, host name or IPv4, valid port and timeouts");
     }
     endpoint_ = wifi_ ? wifi_host_ + ":" + std::to_string(wifi_port_) : port_;
     link_.configure(wifi_, wifi_ ? wifi_host_ : port_, wifi_ ? wifi_port_ : baudrate_, wifi_connect_timeout_s_);
@@ -243,6 +257,11 @@ public:
           ? "Reset request queued; verify MCU ACK=OK and next STAT state!=FAULT"
           : "Unable to queue reset request";
       });
+    if (wifi_) {
+      RCLCPP_INFO(get_logger(), "Wi-Fi mode=%s LAN=%s direct AP=%s",
+        wifi_config.mode.c_str(), wifi_config.network_host.c_str(), wifi_config.ssid.c_str());
+      wifi_manager_ = std::make_unique<WifiManager>(std::move(wifi_config));
+    }
     io_timer_ = create_wall_timer(10ms, [this] { pollTransport(); });
     status_timer_ = create_wall_timer(500ms, [this] { publishStatus(); });
     RCLCPP_INFO(get_logger(), "CEFIRO hardware interface v%s (manual keepalive + 0.60 s GUI lease)",
@@ -267,6 +286,7 @@ public:
       if (disarm) (void)link_.writeSome(reinterpret_cast<const std::uint8_t*>(disarm->data()), disarm->size());
     }
     link_.close();
+    wifi_manager_.reset();  // release AP only after TCP safety shutdown
   }
 
 private:
@@ -275,6 +295,7 @@ private:
       "Transport link lost: %.*s; a NEW GUI enable/arm action will be required",
       static_cast<int>(reason.size()), reason.data());
     link_.close();
+    if (wifi_manager_) wifi_manager_->setLinkActive(false);
     last_valid_frame_.reset();
     last_battery_.reset(); last_power_.reset();
     lines_.clear();
@@ -312,6 +333,7 @@ private:
         "Waiting for transport %s: %s", endpoint_.c_str(), error.c_str());
       return;
     }
+    if (wifi_manager_) wifi_manager_->setLinkActive(true);
     // Never restore ARM / GUI setpoint after a physical link reconnect.
     arm_requested_ = false;
     arm_confirmed_ = false;
@@ -339,6 +361,29 @@ private:
     }
   }
   void pollTransport() {
+    if (wifi_manager_) {
+      wifi_manager_->setLinkActive(link_.connected());
+      const auto status = wifi_manager_->status();
+      if (status.state != wifi_network_state_ || status.interface != wifi_network_interface_) {
+        wifi_network_state_ = status.state;
+        wifi_network_interface_ = status.interface;
+        RCLCPP_INFO(get_logger(), "Wi-Fi association: %s (%s)",
+          status.state.c_str(), status.interface.c_str());
+      }
+      if (!status.ready) {
+        if (wifi_network_ready_ || link_.connected()) resetConnection("Wi-Fi association or route lost");
+        wifi_network_ready_ = false;
+        return;  // do not dial TCP over Ethernet while waiting for the AP
+      }
+      if (status.host != selected_wifi_host_) {
+        resetConnection("Wi-Fi endpoint changed");
+        selected_wifi_host_ = status.host;
+        endpoint_ = selected_wifi_host_ + ":" + std::to_string(wifi_port_);
+        link_.configure(true, selected_wifi_host_, wifi_port_, wifi_connect_timeout_s_);
+        RCLCPP_INFO(get_logger(), "CF1 endpoint selected: %s", endpoint_.c_str());
+      }
+      wifi_network_ready_ = true;
+    }
     if (!link_.connected()) { connectTransport(); return; }
     std::array<std::uint8_t, 4096> buffer{};
     for (int attempt = 0; attempt < 6; ++attempt) {
@@ -927,6 +972,10 @@ private:
       << "\"transport\":" << jsonQuote(transport_mode_) << ','
       << "\"transport_connected\":" << link_.connected() << ','
       << "\"wifi_connected\":" << (wifi_ && link_.connected()) << ','
+      << "\"wifi_auto_connect\":" << get_parameter("wifi_auto_connect").as_bool() << ','
+      << "\"wifi_associated\":" << (wifi_manager_ ? wifi_network_ready_ : (wifi_ && link_.connected())) << ','
+      << "\"wifi_network_state\":" << jsonQuote(wifi_manager_ ? wifi_network_state_ : (wifi_ ? "external" : "disabled")) << ','
+      << "\"wifi_network_interface\":" << jsonQuote(wifi_network_interface_) << ',' 
       << "\"device\":" << jsonQuote(endpoint_) << ','
       << "\"protocol\":" << jsonQuote(protocol_mode_) << ','
       << "\"command_tx_enabled\":" << can_tx_ << ','
@@ -1007,6 +1056,9 @@ private:
   double orientation_timeout_s_{0.2};
   double max_command_rpm_{12000.0};
   std::string imu_frame_, mag_frame_, baro_frame_, body_frame_;
+  std::unique_ptr<WifiManager> wifi_manager_;
+  bool wifi_network_ready_{false};
+  std::string wifi_network_state_, wifi_network_interface_, selected_wifi_host_;
   Transport link_;
   LineBuffer lines_;
   Time reconnect_at_{};
@@ -1059,7 +1111,7 @@ private:
 
 int main(int argc, char** argv) {
   if (argc == 2 && std::string_view(argv[1]) == "--version") {
-    std::cout << "cefiro_hardware_interface 0.6.0\n";
+    std::cout << "cefiro_hardware_interface 0.8.1\n";
     return 0;
   }
   rclcpp::init(argc, argv);

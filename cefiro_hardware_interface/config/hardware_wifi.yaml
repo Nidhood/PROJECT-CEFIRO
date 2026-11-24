@@ -2,7 +2,15 @@
   ros__parameters:
     use_sim_time: false
     transport: wifi
-    wifi_host: 192.168.4.1
+    wifi_auto_connect: true
+    wifi_ssid: CEFIRO_FMU_V3
+    wifi_interface: auto
+    wifi_disconnect_on_exit: true
+    wifi_association_retry_s: 2.0
+    wifi_mode: network
+    wifi_host: cefiro.local
+    wifi_direct_host: 192.168.4.1
+    wifi_discovery_grace_s: 15.0
     wifi_port: 9000
     wifi_connect_timeout_s: 3.0
     wifi_rx_timeout_s: 3.0

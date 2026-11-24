@@ -1,136 +1,42 @@
-# Direct Wi-Fi transport (v0.6.0)
+# Wi-Fi AP + STA / native CF1 TCP (v0.8.0)
 
-The same C++ ROS node supports both the original POSIX serial transport and a
-native, nonblocking TCP stream. The ESP32-C3 forwards the existing CF1 frames;
-no PTY, socat, Python bridge, or ROS topic remapping is required. The default
-endpoint is `192.168.4.1:9000` (CEFIRO_FMU_V3 access point).
+The ROS package uses the same node, topics, parser, watchdog and transports as v0.7.0. STA mode assumes the host already has a LAN connection, e.g. to the phone hotspot; no Wi-Fi reconfiguration is necessary then. A discovery worker broadcasts a nonce-tagged request to local directed IPv4 broadcasts on UDP 9001 and uses the unique reply IP, or resolves `cefiro.local` via `getent ahostsv4`. TCP stream uses port 9000. If UDP multicast/broadcast is filtered, specify the ESP DHCP IP directly. Discovery is not authentication. For DNS resolution install `avahi-daemon libnss-mdns` if required on Ubuntu; directed UDP or explicit IP works without them. No cloud or Internet relay is involved.
 
-## Host network setup (one time)
+Build: `colcon build --symlink-install --packages-up-to cefiro_hardware_interface` in your sourced ROS 2 Jazzy workspace, then `source install/setup.bash`.
 
-Connect the Linux host running `hardware_node` to CEFIRO_FMU_V3. On a Raspberry
-Pi using NetworkManager, run locally (changing Wi-Fi may interrupt SSH):
+| Parameter | Default | Meaning |
+|---|---|---|
+| wifi_mode | auto | LAN first, direct AP fallback only if free adapter; network = LAN only, direct = force AP |
+| wifi_host | cefiro.local | LAN hostname or explicit numeric IPv4 |
+| wifi_direct_host | 192.168.4.1 | Direct AP numeric IPv4 |
+| wifi_discovery_grace_s | 15.0 | Initial grace before auto fallback |
+| wifi_ssid | CEFIRO_FMU_V3 | Direct AP, not phone hotspot |
+| wifi_auto_connect | true | NetworkManager management of direct AP only |
+| wifi_interface | auto | Direct AP adapter selection |
+| wifi_disconnect_on_exit | true | Remove owned temporary AP profile on normal exit |
+| wifi_port | 9000 | TCP port |
+| reconnect_s | 2.0 | TCP retries |
+| wifi_connect_timeout_s | 3.0 | TCP connection timeout |
+| wifi_rx_timeout_s | 3.0 | CF1 receive timeout |
+| enable_command_tx | false | Explicit opt-in only |
+| rpm_to_dshot_enabled | false | Explicit opt-in only |
+| dshot_max | 300 | Conservative host cap |
 
-```bash
-nmcli device wifi list
-nmcli --ask device wifi connect CEFIRO_FMU_V3
-nmcli connection modify CEFIRO_FMU_V3 connection.autoconnect yes
-ip route get 192.168.4.1
+Examples:
+
 ```
-
-Use the configured ESP32 password when prompted. If the saved profile has a
- different name, use that name in the second `nmcli connection` command. The
-node does not change OS Wi-Fi profiles or store Wi-Fi credentials. TCP connects
-on launch, and reconnects automatically when the network becomes reachable.
-If using Docker, the container must have a route to the AP; on Linux native
-host networking is one option. Do not run the Python GUI/monitor and ROS
-hardware node simultaneously: the ESP32 supports one TCP peer. Do not run
-serial and Wi-Fi hardware nodes under the same ROS namespace simultaneously.
-
-## Build
-
-Replace the old package in `~/cefiro_ws/src/cefiro_hardware_interface` (not
-another copy in the workspace). Stop the previously running node first.
-
-```bash
-cd ~/cefiro_ws
-source /opt/ros/jazzy/setup.bash
-colcon build --symlink-install --packages-up-to cefiro_hardware_interface
-source install/setup.bash
-ros2 run cefiro_hardware_interface hardware_node --version
-```
-
-Version should be `cefiro_hardware_interface 0.6.0`.
-
-## Launch
-
-```bash
-# Telemetry-only, automatic TCP connection/reconnect
 ros2 launch cefiro_hardware_interface hardware_wifi.launch.py
-
-# Original serial path remains available (legacy_text or cf1 as applicable)
+ros2 launch cefiro_hardware_interface hardware_wifi.launch.py wifi_mode:=network
+ros2 launch cefiro_hardware_interface hardware_wifi.launch.py wifi_mode:=network wifi_host:=192.168.43.20
+ros2 launch cefiro_hardware_interface hardware_wifi.launch.py wifi_mode:=direct
+ros2 launch cefiro_hardware_interface hardware_wifi.launch.py wifi_mode:=direct wifi_auto_connect:=false
 ros2 launch cefiro_hardware_interface hardware.launch.py port:=/dev/ttyUSB0 protocol_mode:=cf1
-
-# Existing GUI, if installed, in a separate terminal
-ros2 launch cefiro_hardware_interface gui_real.launch.py
 ```
 
-After validation with propellers removed and ESC power isolated as appropriate,
-opt in to command TX and nominal-RPM mapping on a secured bench:
+The explicit IP is illustrative. `auto` does not replace any active Wi-Fi association, even if LAN discovery fails. It will attempt to create a direct AP profile only if a free managed Wi-Fi adapter exists. A selected mode is pinned for the launch; LAN IP can be rediscovered after disconnect but no migration to/from direct occurs until relaunch. For an already-associated direct AP choose `direct wifi_auto_connect:=false`. Direct mode with management may replace the existing association on the selected adapter. Ethernet route/DNS is not modified. AP profile uses WPA-PSK, no default routes, no DHCP DNS, no extra routes; route to 192.168.4.1 checked. Direct mode needs nmcli, iproute2, NetworkManager/PolicyKit permissions. `CEFIRO_WIFI_PASSWORD` overrides the private direct AP default, not STA credentials. STA credentials are stored on ESP, never needed by ROS.
 
-```bash
-ros2 launch cefiro_hardware_interface hardware_wifi.launch.py \
-  enable_command_tx:=true rpm_to_dshot_enabled:=true dshot_max:=300
-```
+Docker on Linux: host network recommended for broadcast/mDNS, or explicit STA IP reachable from container. LAN mode needs no access to NetworkManager or host D-Bus. Managed direct mode requires host network and permitted NetworkManager D-Bus access. In Docker Desktop use host OS Wi-Fi configuration and explicit STA IP or manual AP mode. Do not blindly grant privileged access.
 
-This is not measured RPM control. Existing firmware guards, ACK-gated manual
-arm, 40 ms refresh, 600 ms GUI lease and fault-reset service are preserved.
-Connection loss clears host-side queued commands and arm state; a new GUI
-enable/arm action is required by the existing state machine. TCP is not a
-hard-real-time control link, and delivery of a stop cannot be guaranteed over a
-failed connection. The independent STM32 watchdog remains mandatory.
+One TCP client (close UI/monitor first). `/real/cefiro/hardware/status` retains all fields including `transport_connected`, `wifi_connected`, `wifi_network_state`, `wifi_network_interface`; network state `network_discovered` means candidate IPv4 found, not guaranteed connected. Topic publishers and subscribers unchanged, including BAT/PWR. Control TX defaults disabled. Disconnect clears queued commands and host arm state; requires new explicit enable/arm. Independent STM32 watchdog required. No network identity/authentication or TLS, and CRC does not authenticate. Private LAN only; no port forwarding.
 
-| Launch parameter | Default |
-|---|---|
-| namespace | real |
-| wifi_host (numeric IPv4) | 192.168.4.1 |
-| wifi_port | 9000 |
-| reconnect_s | 2.0 |
-| wifi_connect_timeout_s | 3.0 |
-| wifi_rx_timeout_s | 3.0 |
-| enable_command_tx | false |
-| rpm_to_dshot_enabled | false |
-| allow_direct_dshot | false |
-| dshot_max | 300 |
-
-TCP connection attempts are nonblocking. EOF, I/O errors and the absence of
-CRC-valid CF1 frames for `wifi_rx_timeout_s` reset the connection. The TCP
-socket status alone is not a sensor health indicator. The status JSON keeps
-`serial_connected` as a legacy alias for the active transport so existing GUI
-consumers continue to work; `transport`, `transport_connected`, `wifi_connected`
-and `transport_errors` explicitly describe the current link.
-
-## ROS graph
-
-All existing publishers, subscriptions and service names are preserved;
-namespace `real` by default. The node only publishes actual received data,
-with the original conversion units and ROS receive timestamps. CF1 `BAT` and
-`PWR` from the V4 firmware add:
-
-* `/real/cefiro/sensors/battery` (`sensor_msgs/msg/BatteryState`): valid voltage,
-  fraction 0..1 if valid, negative discharge current if calibrated; unknown
-  values are NaN. `present` reflects the firmware voltage-valid flag, not a
-  physical battery presence detector. Inspect status flags for invalid data.
-* `/real/cefiro/hardware/power_status` (`std_msgs/msg/String`): original PWR CSV
-  `adc_v_raw,adc_i_raw,bat_pin_mV,current_pin_mV,esc_current_mV,adc_fresh,init_stage,dma_errors,adc_sequence,bench_mode,esc_armed,sample_ms`.
-* Hardware status JSON adds battery/power freshness and the raw BAT CSV
-  `voltage_v,current_a,soc_percent,level,flags,sample_ms`. The flags are integer
-  bit values transmitted as decimal floats by the firmware (1 voltage valid,
-  2 current calibrated, 4 SOC valid, 8 ADC fresh, 16 bench mode).
-
-```bash
-ros2 topic list
-ros2 topic echo /real/cefiro/hardware/status
-ros2 topic echo /real/cefiro/sensors/battery
-ros2 topic echo /real/cefiro/hardware/power_status
-ros2 topic hz /real/bmp581/air_pressure
-```
-
-No battery frames are invented if an older firmware is in use. The V4 Wi-Fi
-firmware already supports TCP CF1; no MCU reflash is required for this change.
-The original serial launch is retained for firmware exposing CF1 or legacy
-telemetry over UART; V4 Wi-Fi firmware may reserve its USB-UART console for
-maintenance instead of CF1, so the serial launch does not magically change the
-MCU's selected link.
-
-## Tests without ROS
-
-```bash
-bash tools/verify_protocol.sh
-bash tools/verify_manual_keepalive.sh
-bash tools/verify_tcp_transport.sh
-```
-
-The transport test uses a real local TCP socket, verifies fragmented and merged
-CF1 frames (including BAT/PWR), command/ACK, EOF, reconnection and failure to
-connect. Full ROS Jazzy/cefiro_msgs compilation and physical device testing
-must be performed in the target workspace.
+Host tests: `bash tools/verify_protocol.sh`, `bash tools/verify_manual_keepalive.sh`, `bash tools/verify_tcp_transport.sh`, `bash tools/verify_wifi_manager.sh`, `bash tools/verify_lan_discovery.sh`, `bash tools/verify_udp_discovery.sh` (isolated test LAN). Full ROS build and physical testing are pending.

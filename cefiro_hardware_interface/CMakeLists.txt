@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cefiro_hardware_interface VERSION 0.6.0 LANGUAGES CXX)
+project(cefiro_hardware_interface VERSION 0.8.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(Threads REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -20,8 +21,10 @@ add_library(cefiro_hardware_core STATIC
   src/protocol.cpp
   src/serial_port.cpp
   src/tcp_port.cpp
+  src/wifi_manager.cpp
   src/motor_command.cpp
 )
+target_link_libraries(cefiro_hardware_core PUBLIC Threads::Threads)
 target_include_directories(cefiro_hardware_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>

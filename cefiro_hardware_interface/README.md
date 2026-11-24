@@ -1,5 +1,7 @@
-> **Release 0.6.0 — native Wi-Fi TCP / CF1, plus V4 battery telemetry.**
-> See [Wi-Fi connection](docs/WIFI_CONNECTION.md) for the new launch and setup.
+> **V0.8.1:** `hardware_wifi.launch.py` defaults to `wifi_mode:=network` to preserve the existing Wi-Fi. Explicit auto and direct modes are still available.
+
+> **Release 0.8.0 — LAN-first AP+STA, UDP/mDNS discovery, direct AP fallback, native TCP/CF1.**
+> See [Wi-Fi connection](docs/WIFI_CONNECTION.md) for zero-profile automatic association, networking prerequisites, launch options and Docker limitations.
 >
 > **Previous release 0.5.0 (configurable DShot up to 2047):** use `INSTALLAR_EN_RASPBERRY.md` and
 > `tools/install_and_verify.sh`. A stale v0.3 binary rejects the valid 0.60 s
@@ -9,7 +11,7 @@
 # cefiro_hardware_interface — C++20 / ROS 2 Jazzy / CEFIRO FMU V3
 
 This package bridges the **actual** CEFIRO STM32H743 modular firmware to the
-CEFIRO Qt6 HMI using Linux USB-to-USART (115200 8N1) or direct TCP over the ESP32-C3 Wi-Fi AP (192.168.4.1:9000). Simulation remains isolated
+CEFIRO Qt6 HMI using Linux USB-to-USART (115200 8N1) or TCP over the ESP32-C3 STA network or direct AP (192.168.4.1:9000). Simulation remains isolated
 from the real plant under `/real`.
 
 ## Verified integration contract (from `CEFIRO_FMU_V3_Modular_Main_Explicito.zip`)
