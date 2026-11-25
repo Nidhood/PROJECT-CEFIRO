@@ -25,3 +25,6 @@
 - New launch arguments and link status fields; no changes to the existing ROS publishers/subscriptions, CF1 codec or manual control watchdog.
 - Private lab default credential can be overridden with CEFIRO_WIFI_PASSWORD. No secret in ROS parameter values or child arguments.
 - Added fake-NetworkManager integration test for association, missing AP, wrong route, loss/reconnect, permissions and cleanup.
+
+## 0.8.5
+- Decode firmware zero-output bench mode and BAT/PWR freshness; preserve exact DShot rejection reason and inhibit real motor commands until powered-test prerequisites are met.

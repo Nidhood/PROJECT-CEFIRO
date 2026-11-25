@@ -1,6 +1,7 @@
 #include "cefiro_hardware_interface/protocol.hpp"
 #include "cefiro_hardware_interface/motor_command.hpp"
 #include "cefiro_hardware_interface/manual_keepalive.hpp"
+#include "cefiro_hardware_interface/manual_power_gate.hpp"
 #include "cefiro_hardware_interface/transport.hpp"
 #include "cefiro_hardware_interface/wifi_manager.hpp"
 #include <sensor_msgs/msg/battery_state.hpp>
@@ -48,7 +49,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.8.4";
+constexpr const char* kHardwareVersion = "0.8.5";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -316,6 +317,7 @@ private:
     last_valid_frame_.reset();
     ping_ack_at_.reset(); pending_pings_.clear(); next_ping_at_ = {};
     last_battery_.reset(); last_power_.reset();
+    power_gate_ = {};
     lines_.clear();
     tx_queue_.clear();
     pending_tx_.clear();
@@ -369,6 +371,7 @@ private:
     lines_.clear();
     connected_at_ = Clock::now();
     last_valid_frame_.reset(); ping_ack_at_.reset(); pending_pings_.clear();
+    last_battery_.reset(); last_power_.reset(); power_gate_ = {};
     next_ping_at_ = connected_at_;
     // Terminate any partial line left in the STM32 maintenance/CF1 parser.
     if (!wifi_ && protocol_mode_ == "cf1") tx_queue_.push_back("\n");
@@ -429,6 +432,11 @@ private:
     }
     if (can_tx_ && sessionReady()) {
       const auto current = Clock::now();
+      if (arm_requested_ || arm_confirmed_ || arm_ack_sequence_) {
+        if (const auto reason = manualPowerReason(current); !reason.empty()) {
+          disarm("Manual power interlock: " + std::string(reason));
+        }
+      }
       if (arm_ack_sequence_ && current >= arm_ack_deadline_) {
         disarm("STM32 ARM ACK timeout");
       }
@@ -546,12 +554,19 @@ private:
     RCLCPP_ERROR(get_logger(),
       "GUI EMERGENCY ZERO: STM32 FMU FAULT will remain latched until explicit reset");
   }
+  [[nodiscard]] std::string_view manualPowerReason(Time current) const {
+    const auto fresh = [&](const std::optional<Time>& stamp) {
+      return stamp && current >= *stamp &&
+          std::chrono::duration<double>(current - *stamp).count() <= sensor_stale_s_;
+    };
+    return power_gate_.reason(fresh(last_battery_), fresh(last_power_));
+  }
   void maybeArm() {
     if (!can_tx_ || !sessionReady() || !controller_enabled_ ||
         !arm_requested_ || arm_confirmed_ || arm_ack_sequence_ ||
         !(rpm_to_dshot_enabled_ || allow_direct_dshot_) ||
         !manual_mode_confirmed_ || !mcu_status_seen_ || fault_latched_ ||
-        reverse_requested_ || !last_mcu_stat_ ||
+        reverse_requested_ || !manualPowerReason(Clock::now()).empty() || !last_mcu_stat_ ||
         std::chrono::duration<double>(Clock::now() - *last_mcu_stat_).count() > 1.25) {
       return;
     }
@@ -566,6 +581,13 @@ private:
     if (!can_tx_ || !sessionReady()) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 3000,
         "ARM rejected: CF1 command TX is disabled or disconnected");
+      return;
+    }
+    if (const auto reason = manualPowerReason(Clock::now()); !reason.empty()) {
+      const std::string message = "ARM inhibited: " + std::string(reason);
+      disarm(message);
+      last_stop_reason_ = message;
+      RCLCPP_WARN(get_logger(), "%s", message.c_str());
       return;
     }
     if (fault_latched_ || reverse_requested_) {
@@ -586,7 +608,8 @@ private:
   }
   void sendMotorDshot(const std::array<std::uint16_t, 4>& codes) {
     if (!can_tx_ || !sessionReady() || !controller_enabled_ ||
-        !arm_requested_ || !arm_confirmed_ || reverse_requested_ || fault_latched_) return;
+        !arm_requested_ || !arm_confirmed_ || reverse_requested_ || fault_latched_ ||
+        !manualPowerReason(Clock::now()).empty()) return;
     std::vector<std::string> fields;
     for (const std::uint16_t code : codes) {
       if (code != 0 && (code < manual_map_.dshot_min || code > manual_map_.dshot_max)) {
@@ -754,12 +777,21 @@ private:
       msg.power_supply_technology = msg.POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
       pub_battery_->publish(msg);
       last_battery_ = Clock::now(); battery_voltage_valid_ = (flags & 1U) != 0;
+      power_gate_.battery_valid = battery_voltage_valid_ && (*v)[0] > 0.0;
+      power_gate_.battery_adc_fresh = (flags & 8U) != 0;
+      power_gate_.battery_bench = (flags & 16U) != 0;
       last_bat_payload_.clear();
       for (const auto& f : fields) { if (!last_bat_payload_.empty()) last_bat_payload_ += ','; last_bat_payload_ += f; }
       return true;
     }
     if (frame.kind == "PWR" && fields.size() == 12) {
       if (!numbers(fields, 0, 12)) return false;
+      const auto adc_fresh = parseInteger(fields[5], 0, 1);
+      const auto bench = parseInteger(fields[9], 0, 1);
+      const auto armed = parseInteger(fields[10], 0, 1);
+      if (!adc_fresh || !bench || !armed) return false;
+      power_gate_.power_adc_fresh = *adc_fresh != 0;
+      power_gate_.power_bench = *bench != 0;
       std_msgs::msg::String msg;
       for (const auto& f : fields) { if (!msg.data.empty()) msg.data += ','; msg.data += f; }
       pub_power_->publish(msg); last_power_ = Clock::now();
@@ -832,7 +864,7 @@ private:
         arm_confirmed_ = accepted;
         if (!accepted) {
           RCLCPP_WARN(get_logger(), "STM32 ARM rejected: %s", fields[2].c_str());
-          disarm("STM32 ARM rejected");
+          disarm("STM32 ARM rejected: " + fields[2]);
         } else {
           arm_confirmed_at_ = Clock::now();
           RCLCPP_INFO(get_logger(), "STM32 ACK accepted GUI MANUAL ARM");
@@ -865,7 +897,11 @@ private:
           fields[0].c_str(), fields[2].c_str(),
           manual_stream_.guiAgeSeconds(Clock::now()),
           manual_stream_.txAgeSeconds(Clock::now()), mcu_fmu_state_);
-        disarm("STM32 DShot rejected");
+        if (fields[2] == "BENCH_ZERO_ONLY") power_gate_.bench_denial = true;
+        // Keep the exact denial even if subsequent STOP/MODE ACKs replace last_ack_.
+        const std::string reason = "STM32 DShot rejected: " + fields[2];
+        disarm(reason);
+        last_stop_reason_ = reason;
       }
       return true;
     }
@@ -1035,6 +1071,9 @@ private:
       << "\"armed_acknowledged\":" << arm_confirmed_ << ','
       << "\"gui_output_enabled\":" << controller_enabled_ << ','
       << "\"last_stop_reason\":" << jsonQuote(last_stop_reason_) << ','
+      << "\"firmware_bench_zero_only\":" << power_gate_.benchZeroOnly() << ','
+      << "\"manual_power_ready\":" << manualPowerReason(Clock::now()).empty() << ','
+      << "\"manual_power_inhibit_reason\":" << jsonQuote(manualPowerReason(Clock::now())) << ',' 
       << "\"rpm_to_dshot_enabled\":" << rpm_to_dshot_enabled_ << ','
       << "\"allow_direct_dshot\":" << allow_direct_dshot_ << ','
       << "\"configured_dshot_min\":" << manual_map_.dshot_min << ','
@@ -1089,6 +1128,7 @@ private:
   std::string last_stop_reason_{"startup"};
   std::optional<Time> last_valid_frame_, last_battery_, last_power_;
   bool battery_voltage_valid_{false};
+  ManualPowerGate power_gate_{};
   std::string last_bat_payload_;
   std::string port_;
   int baudrate_{115200};

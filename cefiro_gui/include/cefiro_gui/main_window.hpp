@@ -236,6 +236,8 @@ private:
     bool manual_mode_{false};
     bool manual_dirty_{false};
     bool command_active_{false};
+    QElapsedTimer real_manual_start_clock_{};
+    bool real_manual_ack_seen_{false};
     bool reference_pad_unlocked_{false};
     bool wave_running_{false};
     bool e_stop_{false};

@@ -141,10 +141,15 @@ MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
  waveform_timer_=new QTimer(this);waveform_timer_->setInterval(20);waveform_timer_->setTimerType(Qt::PreciseTimer);
  connect(waveform_timer_,&QTimer::timeout,this,[this]{tickWaveform();});
  manual_publish_timer_ = new QTimer(this);
- manual_publish_timer_->setInterval(50);
- connect(manual_publish_timer_, &QTimer::timeout, this, [this] {
-     if (command_active_ && manual_mode_) publishMotorCommand();
- });
+  // CEFIRO_V086_MANUAL_LEASE: renew the live GUI command, not the ARM command.
+  manual_publish_timer_->setInterval(50);
+  manual_publish_timer_->setTimerType(Qt::PreciseTimer);
+  connect(manual_publish_timer_, &QTimer::timeout, this, [this] {
+      if (command_active_ && manual_mode_ && !e_stop_) {
+          // Keep the periodic path lightweight; widget updates are event-driven.
+          bridge_.publishMotorCommand(motor_command_rpm_, motor_command_direction_);
+      }
+  });
  manual_publish_timer_->start();
  statusBar()->setSizeGripEnabled(false);
  status_ros_=label("ROS: WAITING");status_rec_=label("REC: IDLE");status_control_=label("CONTROL: DISABLED");status_samples_=label("SAMPLES: 0");
@@ -1140,6 +1145,32 @@ void MainWindow::updateReferenceGate(){
     }
 }
 void MainWindow::startOutput(){
+ if(command_active_) return; // ARM is an explicit edge, not an automatic retry.
+ if(bridge_.isReal() && manual_mode_) {
+   const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+   if (bridge_.hardwareStatusFresh() && state.value("firmware_bench_zero_only").toBool(false)) {
+     QMessageBox::warning(this,"BENCH_ZERO_ONLY",
+       "The STM32 is running zero-output bench firmware. Motor throttle is inhibited. "
+       "Check the normal powered-test firmware and battery telemetry before arming.");
+     return;
+   }
+   if (bridge_.hardwareStatusFresh() && !state.value("manual_power_ready").toBool(false)) {
+     const QString reason=state.value("manual_power_inhibit_reason").toString("Update hardware interface to v0.8.5 and check BAT/PWR telemetry");
+     QMessageBox::warning(this,"Manual power interlock",reason);
+     return;
+   }
+   if(!bridge_.hardwareStatusFresh() || !state.value("transport_connected").toBool(false) ||
+      !state.value("command_tx_enabled").toBool(false) ||
+      !state.value("manual_mode_acknowledged").toBool(false) ||
+      !state.value("rpm_to_dshot_enabled").toBool(false) ||
+      state.value("firmware_fault_latched").toBool(true) ||
+      state.value("armed_requested").toBool(false) ||
+      state.value("armed_acknowledged").toBool(false)) {
+     QMessageBox::warning(this,"Real hardware not ready",
+       "Wait for the CF1 session and MANUAL acknowledgement. Verify RPM mapping, faults and command TX. Do not arm an already active session.");
+     return;
+   }
+ }
  if(bridge_.isReal() && !manual_mode_ && controller_->currentText().contains("SWING-UP")){
    QMessageBox::critical(this,"Simulation-only controller",
        "SWING-UP + LQR has not been validated on real motors. Select SIMULATION to run it.");
@@ -1181,7 +1212,19 @@ void MainWindow::startOutput(){
  // Avoid stale ATTITUDE/LQR mode causing dual publishers on the same motors.
  if (manual_mode_) bridge_.publishReference({0.0,0.0,0.0},"MANUAL","OPEN LOOP");
  resetEquilibriumReference();
- e_stop_=false;command_active_=true;
+ // Start real manual operation at zero, then require an explicit slider change.
+  if(bridge_.isReal() && manual_mode_) {
+      motor_command_rpm_.fill(0.0);
+      for(std::size_t i=0;i<motor_sliders_.size();++i) {
+          if(motor_sliders_[i]) { QSignalBlocker b(motor_sliders_[i]); motor_sliders_[i]->setValue(0); }
+          if(motor_speed_[i]) { QSignalBlocker b(motor_speed_[i]); motor_speed_[i]->setValue(0.0); }
+      }
+      if(master_motor_slider_) { QSignalBlocker b(master_motor_slider_); master_motor_slider_->setValue(0); }
+      if(master_motor_speed_) { QSignalBlocker b(master_motor_speed_); master_motor_speed_->setValue(0.0); }
+      real_manual_ack_seen_=false;
+      real_manual_start_clock_.start();
+  }
+  e_stop_=false;command_active_=true;
  if(plant_selector_)plant_selector_->setEnabled(false);
  bridge_.setEnabled(true);
  updateReferenceGate();
@@ -1214,6 +1257,8 @@ void MainWindow::stopOutput(bool emergency){
     }
     wave_running_ = false;
     command_active_ = false;
+    real_manual_start_clock_.invalidate();
+    real_manual_ack_seen_=false;
     if(plant_selector_)plant_selector_->setEnabled(true);
     e_stop_ = emergency;
     resetEquilibriumReference();
@@ -1285,6 +1330,23 @@ void MainWindow::setMonitorAxis(int idx){
     // Keep the operator's AUTO Y preference when changing monitor axes.
 }
 void MainWindow::tick(){
+ if(command_active_ && manual_mode_ && bridge_.isReal() && real_manual_start_clock_.isValid()) {
+   const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+   const bool linked=bridge_.hardwareStatusFresh() && state.value("transport_connected").toBool(false);
+   const bool enabled=state.value("gui_output_enabled").toBool(false);
+   const bool armed=state.value("armed_acknowledged").toBool(false);
+   const bool fault=state.value("firmware_fault_latched").toBool(false);
+   if(linked && enabled && armed && !fault) real_manual_ack_seen_=true;
+   const bool power_ready=state.value("manual_power_ready").toBool(false);
+   const bool failed=!linked || fault || !power_ready || (real_manual_ack_seen_ && (!enabled || !armed)) ||
+       (!real_manual_ack_seen_ && real_manual_start_clock_.elapsed()>2500);
+   if(failed) {
+     QString reason=state.value("last_stop_reason").toString();
+     if (!power_ready && linked) reason=state.value("manual_power_inhibit_reason").toString(reason);
+     stopOutput(false); // Never automatically re-arm after a stop or connection loss.
+     if(applied_value_) applied_value_->setText("SAFE STOP: "+(reason.isEmpty()?QString("ARM not confirmed / link lost"):reason));
+   }
+ }
  refreshReferenceLimits();
  updateReferenceGate();
  // A fresh reference is a GUI heartbeat for the simulation-only balance node.
@@ -1294,6 +1356,15 @@ void MainWindow::tick(){
  status_ros_->setText(fresh?"ROS: IMU ONLINE":"ROS: IMU WAITING / STALE");
  status_control_->setText(command_active_?"OUTPUT REQUEST: ENABLED":"CONTROL: DISABLED");
  if(bridge_.feedbackFresh())status_control_->setText("CTRL: "+QString::fromStdString(bridge_.controllerStatus()));
+ if (bridge_.isReal() && manual_mode_ && bridge_.hardwareStatusFresh()) {
+   const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+   const QString inhibit=state.value("manual_power_inhibit_reason").toString();
+   if (!inhibit.isEmpty()) status_control_->setText("INHIBITED: "+inhibit);
+   else if (!command_active_) {
+     const QString reason=state.value("last_stop_reason").toString();
+     if (!reason.isEmpty() && reason!="startup") status_control_->setText("STOP: "+reason);
+   } else if (state.value("armed_acknowledged").toBool(false)) status_control_->setText("MANUAL: ARMED");
+ }
  if (command_active_ && !manual_mode_) {
    if (bridge_.feedbackFresh()) {
      applied_value_->setText("Controller: " + QString::fromStdString(bridge_.controllerStatus()));
@@ -1310,12 +1381,15 @@ void MainWindow::tick(){
        const auto state=json.object();
        const int max_dshot=state.value("configured_dshot_max").toInt(300);
        const auto commands=state.value("last_commanded_dshot").toArray();
-       const bool serial_ok=state.value("serial_connected").toBool(false);
+       const bool serial_ok=state.value("transport_connected").toBool(false);
+       const QString power_reason=state.value("manual_power_inhibit_reason").toString();
        if (master_motor_label_) {
          master_motor_label_->setText(QString("%1 nominal RPM · host DShot cap %2/2047 · UART %3")
            .arg(f(master_motor_speed_ ? master_motor_speed_->value() : 0.0,0))
            .arg(max_dshot)
            .arg(serial_ok ? "connected" : "offline"));
+         if (!power_reason.isEmpty() && bridge_.isReal())
+           master_motor_label_->setText(master_motor_label_->text()+" · "+power_reason);
        }
        for (int i=0; i<4; ++i) {
          if (!motor_labels_[size_t(i)]) continue;
