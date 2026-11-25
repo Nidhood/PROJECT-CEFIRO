@@ -20,7 +20,7 @@ def generate_launch_description():
         DeclareLaunchArgument('wifi_interface', default_value='auto'),
         DeclareLaunchArgument('wifi_disconnect_on_exit', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('wifi_association_retry_s', default_value='2.0'),
-        DeclareLaunchArgument('wifi_mode', default_value='network', choices=['auto', 'network', 'direct']),
+        DeclareLaunchArgument('wifi_mode', default_value='auto', choices=['auto', 'network', 'direct']),
         DeclareLaunchArgument('wifi_host', default_value='cefiro.local'),
         DeclareLaunchArgument('wifi_direct_host', default_value='192.168.4.1'),
         DeclareLaunchArgument('wifi_discovery_grace_s', default_value='15.0'),

@@ -29,6 +29,7 @@
 #include <deque>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -47,7 +48,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.8.1";
+constexpr const char* kHardwareVersion = "0.8.4";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -98,7 +99,7 @@ public:
   HardwareNode() : Node("cefiro_hardware_interface") {
     transport_mode_ = declare_parameter<std::string>("transport", "serial");
     wifi_host_ = declare_parameter<std::string>("wifi_host", "cefiro.local");
-    const auto wifi_mode = declare_parameter<std::string>("wifi_mode", "network");
+    const auto wifi_mode = declare_parameter<std::string>("wifi_mode", "auto");
     wifi_port_ = declare_parameter<int>("wifi_port", 9000);
     wifi_connect_timeout_s_ = declare_parameter<double>("wifi_connect_timeout_s", 3.0);
     wifi_rx_timeout_s_ = declare_parameter<double>("wifi_rx_timeout_s", 3.0);
@@ -245,7 +246,7 @@ public:
       "cefiro/hardware/reset_fault",
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
              std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        if (!can_tx_ || !link_.connected() || controller_enabled_ ||
+        if (!can_tx_ || !sessionReady() || controller_enabled_ ||
             arm_requested_ || arm_confirmed_) {
           response->success = false;
           response->message = "Not allowed: require CF1 TX, connected, GUI output OFF, and disarmed";
@@ -274,12 +275,12 @@ public:
       can_tx_ ? "enabled" : "disabled",
       rpm_to_dshot_enabled_ ? "enabled" : "disabled",
       unsigned(manual_map_.dshot_min), unsigned(manual_map_.dshot_max));
-    if (!can_tx_) RCLCPP_WARN(get_logger(), "CF1 TX OFF. Sensor telemetry only; old legacy_text firmware can never drive motors");
+    if (!can_tx_) RCLCPP_WARN(get_logger(), "Motor TX OFF. Read-only CF1 PING and sensor telemetry only");
   }
 
   ~HardwareNode() override {
     // Best-effort safety request only; independent MCU watchdog is mandatory.
-    if (can_tx_ && link_.connected()) {
+    if (can_tx_ && sessionReady()) {
       const auto stop = encodeFrame(++sequence_, "CMD_STOP", {});
       const auto disarm = encodeFrame(++sequence_, "CMD_ARM", {"0"});
       if (stop) (void)link_.writeSome(reinterpret_cast<const std::uint8_t*>(stop->data()), stop->size());
@@ -290,13 +291,30 @@ public:
   }
 
 private:
+  bool sessionReady() const noexcept {
+    return link_.connected() && (protocol_mode_ != "cf1" || ping_ack_at_.has_value());
+  }
+  void beginCf1Session() {
+    arm_requested_ = arm_confirmed_ = controller_enabled_ = false;
+    manual_mode_confirmed_ = mcu_status_seen_ = false;
+    arm_ack_sequence_.reset(); mode_ack_sequence_.reset();
+    arm_confirmed_at_.reset(); manual_stream_.reset();
+    if (can_tx_) {
+      (void)queueCommand("CMD_STOP", {});
+      (void)queueCommand("CMD_ARM", {"0"});
+      mode_ack_sequence_ = queueCommand("CMD_MODE", {"MANUAL"});
+    }
+    RCLCPP_INFO(get_logger(), "CF1 end-to-end session established: %s", endpoint_.c_str());
+  }
   void resetConnection(std::string_view reason) {
+    last_stop_reason_ = std::string(reason);
     if (link_.connected()) RCLCPP_WARN(get_logger(),
       "Transport link lost: %.*s; a NEW GUI enable/arm action will be required",
       static_cast<int>(reason.size()), reason.data());
     link_.close();
     if (wifi_manager_) wifi_manager_->setLinkActive(false);
     last_valid_frame_.reset();
+    ping_ack_at_.reset(); pending_pings_.clear(); next_ping_at_ = {};
     last_battery_.reset(); last_power_.reset();
     lines_.clear();
     tx_queue_.clear();
@@ -350,15 +368,11 @@ private:
     pending_offset_ = 0;
     lines_.clear();
     connected_at_ = Clock::now();
-    last_valid_frame_.reset();
-    RCLCPP_INFO(get_logger(), "%s connected: %s", transport_mode_.c_str(), endpoint_.c_str());
-    if (can_tx_) {
-      // SAFE STOP, NOT E-STOP: the latter latches FMU FAULT and requires an
-      // explicit reset. Configure manual mode while still disarmed.
-      (void)queueCommand("CMD_STOP", {});
-      (void)queueCommand("CMD_ARM", {"0"});
-      mode_ack_sequence_ = queueCommand("CMD_MODE", {"MANUAL"});
-    }
+    last_valid_frame_.reset(); ping_ack_at_.reset(); pending_pings_.clear();
+    next_ping_at_ = connected_at_;
+    // Terminate any partial line left in the STM32 maintenance/CF1 parser.
+    if (!wifi_ && protocol_mode_ == "cf1") tx_queue_.push_back("\n");
+    RCLCPP_INFO(get_logger(), "%s open: %s; waiting for CF1 PING ACK", transport_mode_.c_str(), endpoint_.c_str());
   }
   void pollTransport() {
     if (wifi_manager_) {
@@ -397,10 +411,23 @@ private:
         else onFrame(line);
       }
     }
-    if (wifi_ && std::chrono::duration<double>(Clock::now() - last_valid_frame_.value_or(connected_at_)).count() > wifi_rx_timeout_s_) {
-      ++serial_errors_; resetConnection("CF1 receive timeout"); return;
+    if (protocol_mode_ == "cf1") {
+      const auto current = Clock::now();
+      if (current - ping_ack_at_.value_or(connected_at_) >
+          (ping_ack_at_ ? 750ms : 3000ms) ||
+          std::chrono::duration<double>(current - last_valid_frame_.value_or(connected_at_)).count() > wifi_rx_timeout_s_) {
+        ++serial_errors_; resetConnection("CF1 PING/receive timeout"); return;
+      }
+      // Read-only PING is allowed even with motor command TX disabled.
+      if (current >= next_ping_at_ && tx_queue_.size() < 4U) {
+        while (!pending_pings_.empty() && current - pending_pings_.front().second > 750ms)
+          pending_pings_.pop_front();
+        if (const auto seq = queueCommand("CMD_PING", {}))
+          pending_pings_.emplace_back(*seq, current);
+        next_ping_at_ = current + 200ms;
+      }
     }
-    if (can_tx_) {
+    if (can_tx_ && sessionReady()) {
       const auto current = Clock::now();
       if (arm_ack_sequence_ && current >= arm_ack_deadline_) {
         disarm("STM32 ARM ACK timeout");
@@ -424,12 +451,12 @@ private:
            std::chrono::duration<double>(current - *last_mcu_stat_).count() > 1.25)) {
         disarm("MCU status heartbeat lost");
       }
-      flushTx();
     }
+    if (protocol_mode_ == "cf1") flushTx();
   }
   std::optional<std::uint16_t> queueCommand(std::string_view kind,
                                              const std::vector<std::string>& payload) {
-    if (!can_tx_ || !link_.connected()) return std::nullopt;
+    if (!link_.connected() || (kind != "CMD_PING" && (!can_tx_ || !sessionReady()))) return std::nullopt;
     const auto seq = ++sequence_;
     const auto data = encodeFrame(seq, kind, payload);
     if (!data) { RCLCPP_WARN(get_logger(), "Rejected invalid outgoing CF1 command"); return std::nullopt; }
@@ -442,10 +469,13 @@ private:
     }
     if (tx_queue_.size() >= kCommandQueueMax) {
       tx_queue_.clear();
-      pending_tx_.clear();
-      pending_offset_ = 0;
+      if (pending_offset_ == 0) pending_tx_.clear();
       arm_requested_ = false;
       arm_confirmed_ = false;
+      controller_enabled_ = false;
+      manual_stream_.reset();
+      last_stop_reason_ = "UART TX queue overflow";
+      fault_latched_ = true;
       arm_ack_sequence_.reset();
       const auto estop = encodeFrame(++sequence_, "CMD_ESTOP", {});
       if (estop) tx_queue_.push_back(*estop);
@@ -474,6 +504,7 @@ private:
   }
   void disarm(std::string_view reason) {
     const bool was_active = arm_requested_ || arm_confirmed_ || controller_enabled_;
+    if (was_active) last_stop_reason_ = std::string(reason);
     arm_requested_ = false;
     arm_confirmed_ = false;
     controller_enabled_ = false;
@@ -488,7 +519,7 @@ private:
     if (pending_offset_ == 0) pending_tx_.clear();
     manual_mode_confirmed_ = false;
     mode_ack_sequence_.reset();
-    if (can_tx_ && link_.connected()) {
+    if (can_tx_ && sessionReady()) {
       if (fault_latched_) {
         // GUI STOP publishes multiple topics without cross-topic ordering.
         // A late enable=false / armed=false MUST NOT erase an earlier ESTOP.
@@ -505,7 +536,7 @@ private:
   }
   void emergencyStop() {
     disarm("GUI EMERGENCY ZERO");
-    if (can_tx_ && link_.connected()) {
+    if (can_tx_ && sessionReady()) {
       tx_queue_.clear();
       mode_ack_sequence_.reset();
       manual_mode_confirmed_ = false;
@@ -516,7 +547,7 @@ private:
       "GUI EMERGENCY ZERO: STM32 FMU FAULT will remain latched until explicit reset");
   }
   void maybeArm() {
-    if (!can_tx_ || !link_.connected() || !controller_enabled_ ||
+    if (!can_tx_ || !sessionReady() || !controller_enabled_ ||
         !arm_requested_ || arm_confirmed_ || arm_ack_sequence_ ||
         !(rpm_to_dshot_enabled_ || allow_direct_dshot_) ||
         !manual_mode_confirmed_ || !mcu_status_seen_ || fault_latched_ ||
@@ -532,7 +563,7 @@ private:
   }
   void onArmed(bool armed) {
     if (!armed) { disarm("GUI requested disarm"); return; }
-    if (!can_tx_ || !link_.connected()) {
+    if (!can_tx_ || !sessionReady()) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 3000,
         "ARM rejected: CF1 command TX is disabled or disconnected");
       return;
@@ -547,13 +578,14 @@ private:
       return;
     }
     arm_requested_ = true;
+    last_stop_reason_.clear();
     arm_confirmed_ = false;
     arm_confirmed_at_.reset();
     manual_stream_.reset();
     maybeArm();
   }
   void sendMotorDshot(const std::array<std::uint16_t, 4>& codes) {
-    if (!can_tx_ || !link_.connected() || !controller_enabled_ ||
+    if (!can_tx_ || !sessionReady() || !controller_enabled_ ||
         !arm_requested_ || !arm_confirmed_ || reverse_requested_ || fault_latched_) return;
     std::vector<std::string> fields;
     for (const std::uint16_t code : codes) {
@@ -668,6 +700,8 @@ private:
       return;
     }
     last_valid_frame_ = Clock::now();
+    // Do not publish stale buffered telemetry before the matching PING ACK.
+    if (!sessionReady() && frame->kind != "ACK") return;
     if (handleFrame(*frame)) ++rx_frames_;
     else ++bad_frames_;
   }
@@ -756,7 +790,7 @@ private:
       for (std::size_t i = 0; i < 4; ++i) msg.data[i] = (*v)[i];
       pub_rpm_->publish(msg);
       last_motor_ = Clock::now();
-      if (!*armed) arm_confirmed_ = false;
+      if (!*armed && arm_confirmed_) disarm("MCU reports disarmed");
       last_mcu_status_ = "MOTOR bus=" + number((*v)[8], 2) + "V, armed=" + std::to_string(*armed) +
                          ", watchdog=" + std::to_string(*watchdog);
       // Do not fake unmeasured thrust/current/torque fields of MotorTelemetry.
@@ -766,6 +800,19 @@ private:
     if (frame.kind == "ACK" && fields.size() == 3) {
       const auto ack = parseInteger(fields[0], 0, 65535);
       if (!ack) return false;
+      if (fields[1] == "CMD_PING") {
+        const auto current = Clock::now();
+        const auto it = std::find_if(pending_pings_.begin(), pending_pings_.end(),
+          [&](const auto& p) { return p.first == *ack && current - p.second <= 750ms; });
+        if (it != pending_pings_.end() && fields[2] == "OK") {
+          const bool first = !ping_ack_at_;
+          pending_pings_.erase(pending_pings_.begin(), std::next(it));
+          ping_ack_at_ = current;
+          if (first) beginCf1Session();
+        }
+        return true; // PING ACK must not overwrite operator command acknowledgements.
+      }
+      if (!sessionReady()) return true;
       last_ack_ = std::to_string(*ack) + "," + fields[1] + "," + fields[2];
       std_msgs::msg::String ack_msg;
       ack_msg.data = last_ack_;
@@ -791,6 +838,10 @@ private:
           RCLCPP_INFO(get_logger(), "STM32 ACK accepted GUI MANUAL ARM");
           if (manual_stream_.fresh(Clock::now())) {
             if (const auto* codes = manual_stream_.setpoint()) sendMotorDshot(*codes);
+          } else {
+            // Zero is safe while waiting for the first fresh GUI setpoint.
+            // Do not call update(): the GUI lease must still expire on silence.
+            sendMotorDshot({0, 0, 0, 0});
           }
         }
       }
@@ -895,7 +946,7 @@ private:
     pub_rpm_->publish(rpm);
     pub_motor_telemetry_->publish(msg);
     last_motor_ = Clock::now();
-    if (!msg.armed) arm_confirmed_ = false;
+    if (!msg.armed && arm_confirmed_) disarm("MCU reports disarmed");
     return true;
   }
   void publishImu(const ImuReading& reading) {
@@ -968,10 +1019,11 @@ private:
     std::ostringstream stream;
     stream << std::boolalpha << '{'
       << "\"hardware_interface_version\":" << jsonQuote(kHardwareVersion) << ','
-      << "\"serial_connected\":" << link_.connected() << ','
+      << "\"serial_connected\":" << sessionReady() << ','
       << "\"transport\":" << jsonQuote(transport_mode_) << ','
-      << "\"transport_connected\":" << link_.connected() << ','
-      << "\"wifi_connected\":" << (wifi_ && link_.connected()) << ','
+      << "\"transport_open\":" << link_.connected() << ','
+      << "\"transport_connected\":" << sessionReady() << ','
+      << "\"wifi_connected\":" << (wifi_ && sessionReady()) << ','
       << "\"wifi_auto_connect\":" << get_parameter("wifi_auto_connect").as_bool() << ','
       << "\"wifi_associated\":" << (wifi_manager_ ? wifi_network_ready_ : (wifi_ && link_.connected())) << ','
       << "\"wifi_network_state\":" << jsonQuote(wifi_manager_ ? wifi_network_state_ : (wifi_ ? "external" : "disabled")) << ','
@@ -982,6 +1034,7 @@ private:
       << "\"armed_requested\":" << arm_requested_ << ','
       << "\"armed_acknowledged\":" << arm_confirmed_ << ','
       << "\"gui_output_enabled\":" << controller_enabled_ << ','
+      << "\"last_stop_reason\":" << jsonQuote(last_stop_reason_) << ','
       << "\"rpm_to_dshot_enabled\":" << rpm_to_dshot_enabled_ << ','
       << "\"allow_direct_dshot\":" << allow_direct_dshot_ << ','
       << "\"configured_dshot_min\":" << manual_map_.dshot_min << ','
@@ -1030,7 +1083,10 @@ private:
   bool wifi_{false};
   int wifi_port_{9000};
   double wifi_connect_timeout_s_{3.0}, wifi_rx_timeout_s_{3.0};
-  Time connected_at_{};
+  Time connected_at_{}, next_ping_at_{};
+  std::optional<Time> ping_ack_at_;
+  std::deque<std::pair<std::uint16_t,Time>> pending_pings_;
+  std::string last_stop_reason_{"startup"};
   std::optional<Time> last_valid_frame_, last_battery_, last_power_;
   bool battery_voltage_valid_{false};
   std::string last_bat_payload_;

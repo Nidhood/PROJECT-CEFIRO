@@ -16,7 +16,9 @@ def generate_launch_description():
         DeclareLaunchArgument('namespace', default_value='real'),
         DeclareLaunchArgument('config', default_value=config_file),
         DeclareLaunchArgument('port', default_value='/dev/ttyUSB0'),
-        DeclareLaunchArgument('protocol_mode', default_value='legacy_text',
+        DeclareLaunchArgument('baudrate', default_value='115200'),
+        DeclareLaunchArgument('allow_direct_dshot', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('protocol_mode', default_value='cf1',
                               choices=['legacy_text', 'cf1']),
         DeclareLaunchArgument('enable_command_tx', default_value='false',
                               choices=['true', 'false']),
@@ -32,7 +34,9 @@ def generate_launch_description():
             namespace=LaunchConfiguration('namespace'),
             output='screen',
             parameters=[LaunchConfiguration('config'), {
-                'port': LaunchConfiguration('port'),
+                'port': ParameterValue(LaunchConfiguration('port'), value_type=str),
+                'baudrate': ParameterValue(LaunchConfiguration('baudrate'), value_type=int),
+                'allow_direct_dshot': ParameterValue(LaunchConfiguration('allow_direct_dshot'), value_type=bool),
                 'transport': 'serial',
                 'protocol_mode': LaunchConfiguration('protocol_mode'),
                 'enable_command_tx': ParameterValue(

@@ -1,3 +1,10 @@
+# 0.8.2 — Companion USB–USART / verified CF1 sessions
+
+- Both Wi-Fi modes preserved; default auto, explicit network/direct.
+- Serial launch defaults to CF1, configurable baudrate and port.
+- Read-only PING every 200 ms and matching ACK before state-changing commands; no auto re-arm.
+- Exclusive serial descriptor lock and MCU session arbitration.
+
 # Changelog
 
 ## 0.8.1

@@ -4,7 +4,7 @@
     # Matches STM32H743 USART2 PA2/PA3 and the current main.c.
     port: /dev/ttyUSB0
     baudrate: 115200
-    protocol_mode: legacy_text
+    protocol_mode: cf1
     # Keep false until the MCU supports CF1 RX, ACK and its own motor watchdog.
     enable_command_tx: false
     allow_direction_commands: false  # current STM32 does not support CMD_DIR

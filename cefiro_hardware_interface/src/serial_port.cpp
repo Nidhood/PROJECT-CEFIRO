@@ -2,6 +2,7 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <termios.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 namespace cefiro::hardware {
@@ -28,6 +29,10 @@ bool SerialPort::open(const std::string& port, int baudrate, std::string& error)
   if (!speed) { error = "Unsupported baudrate"; return false; }
   const int fd = ::open(port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
   if (fd < 0) { error = "open failed: " + std::to_string(errno); return false; }
+  if (::flock(fd, LOCK_EX | LOCK_NB) < 0) {
+    error = "serial port already in use (exclusive lock failed)";
+    ::close(fd); return false;
+  }
   termios opts{};
   if (::tcgetattr(fd, &opts) < 0) {
     error = "tcgetattr failed: " + std::to_string(errno);
@@ -36,7 +41,11 @@ bool SerialPort::open(const std::string& port, int baudrate, std::string& error)
   ::cfmakeraw(&opts);
   opts.c_cflag |= CLOCAL | CREAD;
   opts.c_cflag &= ~CSTOPB;
-  opts.c_cflag &= ~PARENB;
+  opts.c_cflag &= ~(PARENB | PARODD);
+  // The CP2102 link has only TX, RX and GND: never inherit RTS/CTS.
+#ifdef CRTSCTS
+  opts.c_cflag &= ~CRTSCTS;
+#endif
   opts.c_cflag &= ~CSIZE;
   opts.c_cflag |= CS8;
   opts.c_iflag &= ~(IXON | IXOFF | IXANY);

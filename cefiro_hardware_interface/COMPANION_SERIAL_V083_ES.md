@@ -1,0 +1,4 @@
+# Companion serial V0.8.3
+Host-only patch based on the V0.8.5 archive (ROS node V0.8.2). Explicitly disables hardware flow control and sends a line separator before the first PING on serial CF1. No changes to motor range, watchdog, STM32, ESP32, or topics. Only one CF1 session can own the STM32; close Wi-Fi clients before connecting serial. The physical fault remains unconfirmed.
+
+With all motors disconnected, stop ROS nodes/services and run `python3 tools/test_companion_link.py --port /dev/ttyUSB0 --seconds 10 --hz 5 --require-sensors`. The tool sends PING only and displays raw frame counts plus first payloads. Requires pyserial. On success, close the tool and launch ROS as usual. Verify node version 0.8.3 and `CF1 end-to-end session established`. No hardware or ROS build was executed here.
