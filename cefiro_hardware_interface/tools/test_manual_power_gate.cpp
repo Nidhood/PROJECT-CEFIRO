@@ -25,5 +25,21 @@ int main() {
   assert(gate.reason(true,true)=="Battery ADC not fresh");
   gate.battery_adc_fresh=true;
   assert(gate.reason(true,true).empty());
-  std::cout << "Manual power gate: PASS\n";
+  gate.battery_valid=false;
+  gate.external_manual=true;
+  assert(gate.reason(true,true)=="External power profile inhibited by STM32");
+  gate.external_ready=true;
+  assert(gate.reason(true,true).empty());
+  assert(!gate.reason(false,true).empty());
+  assert(!gate.reason(true,false).empty());
+  gate.power_adc_fresh=false;
+  assert(gate.reason(true,true)=="Battery ADC not fresh");
+  gate.power_adc_fresh=true;
+  gate.power_bench=true;
+  assert(gate.reason(true,true)=="BENCH_ZERO_ONLY");
+  gate.power_bench=false; gate.bench_denial=true;
+  assert(gate.reason(true,true)=="BENCH_ZERO_ONLY");
+  gate.bench_denial=false; gate.external_manual=false;
+  assert(gate.reason(true,true)=="Battery voltage invalid");
+  std::cout << "Manual power gate (battery, bench, external): PASS\n";
 }

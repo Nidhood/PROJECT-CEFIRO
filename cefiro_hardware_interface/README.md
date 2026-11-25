@@ -1,3 +1,7 @@
+# External power profile compatibility (V0.8.8 FMU)
+
+The external manual profile is advertised by the STM32 over CF1 BAT flags 5 and 6. Battery 3S undervoltage is not required in this profile. The operator must verify the actual ESC supply independently; ADC freshness, analog overvoltage, E-stop and communications watchdogs remain active. No automatic output.
+
 > **V0.8.1:** `hardware_wifi.launch.py` defaults to `wifi_mode:=network` to preserve the existing Wi-Fi. Explicit auto and direct modes are still available.
 
 > **Release 0.8.0 — LAN-first AP+STA, UDP/mDNS discovery, direct AP fallback, native TCP/CF1.**

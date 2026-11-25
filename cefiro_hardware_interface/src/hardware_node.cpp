@@ -49,7 +49,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.8.5";
+constexpr const char* kHardwareVersion = "0.8.6";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -780,6 +780,8 @@ private:
       power_gate_.battery_valid = battery_voltage_valid_ && (*v)[0] > 0.0;
       power_gate_.battery_adc_fresh = (flags & 8U) != 0;
       power_gate_.battery_bench = (flags & 16U) != 0;
+      power_gate_.external_manual = (flags & 32U) != 0;
+      power_gate_.external_ready = (flags & 64U) != 0;
       last_bat_payload_.clear();
       for (const auto& f : fields) { if (!last_bat_payload_.empty()) last_bat_payload_ += ','; last_bat_payload_ += f; }
       return true;
@@ -1072,6 +1074,8 @@ private:
       << "\"gui_output_enabled\":" << controller_enabled_ << ','
       << "\"last_stop_reason\":" << jsonQuote(last_stop_reason_) << ','
       << "\"firmware_bench_zero_only\":" << power_gate_.benchZeroOnly() << ','
+      << "\"firmware_external_supply_manual\":" << power_gate_.external_manual << ','
+      << "\"external_supply_policy_ready\":" << (power_gate_.external_manual && manualPowerReason(Clock::now()).empty()) << ',' 
       << "\"manual_power_ready\":" << manualPowerReason(Clock::now()).empty() << ','
       << "\"manual_power_inhibit_reason\":" << jsonQuote(manualPowerReason(Clock::now())) << ',' 
       << "\"rpm_to_dshot_enabled\":" << rpm_to_dshot_enabled_ << ','
