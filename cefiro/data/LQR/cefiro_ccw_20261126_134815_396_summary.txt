@@ -1,0 +1,19 @@
+CEFIRO ATTITUDE EXPERIMENT SUMMARY
+CSV: /home/nidhood/cefiro_ws/src/cefiro/data/LQR/cefiro_ccw_20261126_134815_396.csv
+Notes: 
+Controller selection: OPEN LOOP
+Source: MANUAL
+Samples written to disk: 701
+Samples with valid orientation: 701
+Capture time [wall seconds]: 28.011
+Detected local maxima: 0
+Note: controller actuation is not guaranteed without an external controller.
+ROLL RMSE=161.11deg MAE=157.98deg Peak=179.96deg
+PITCH RMSE=9.19deg MAE=8.83deg Peak=17.99deg
+YAW RMSE=64.84deg MAE=32.35deg Peak=179.52deg
+
+LATEST STEP RESPONSES DURING THIS RECORDING
+ROLL: no step recorded in this acquisition
+PITCH: no step recorded in this acquisition
+YAW: no step recorded in this acquisition
+Step metrics are estimated from the last step commanded on each axis.
