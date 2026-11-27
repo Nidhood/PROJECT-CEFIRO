@@ -1,4 +1,6 @@
 #include "cefiro_gui/scope_plot.hpp"
+#include "cefiro_gui/ui_scale.hpp"
+#include <QFont>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
@@ -28,8 +30,9 @@ ScopePlot::ScopePlot(const QString& title,const QString& units,const QStringList
     setObjectName("chartFrame");setMinimumHeight(170);
     auto* root=new QVBoxLayout(this);root->setContentsMargins(4,2,4,4);root->setSpacing(2);
     auto* header=new QHBoxLayout;header->setSpacing(3);
-    auto* name=new QLabel(title,this);name->setObjectName("chartTitle");header->addWidget(name);header->addStretch();
-    auto make=[&](const QString& label,const QString& help){auto* b=new QToolButton(this);b->setObjectName("chartToolButton");b->setText(label);b->setToolTip(help);b->setFixedHeight(22);header->addWidget(b);return b;};
+    if(!title.isEmpty()){auto* name=new QLabel(title,this);name->setObjectName("chartTitle");name->setWordWrap(true);root->addWidget(name);}
+    header->addStretch();
+    auto make=[&](const QString& label,const QString& help){auto* b=new QToolButton(this);b->setObjectName("chartToolButton");b->setText(label);b->setToolTip(help);b->setMinimumHeight(22);header->addWidget(b);return b;};
     auto* t_minus=make("T−","Zoom time in");time_label_=new QLabel("15 s",this);time_label_->setObjectName("chartWindowLabel");header->addWidget(time_label_);
     auto* t_plus=make("T+","Zoom time out");
     auto* y_minus=make("Y−","Zoom vertically in");
@@ -293,6 +296,19 @@ void ScopePlot::refresh(){
     }
     if(auto_y_)fitY();
     if(hovering_)updateCursor(hover_position_);
+}
+void ScopePlot::setTypographyScale(double scale){
+    QFont labels=font();labels.setPixelSize(scaledPixels(12,scale));labels.setBold(false);
+    QFont titles=labels;titles.setPixelSize(scaledPixels(13,scale));titles.setBold(true);
+    for(auto* axis:{x_,y_}){axis->setLabelsFont(labels);axis->setTitleFont(titles);}
+    chart_->legend()->setFont(labels);
+    for(auto* button:findChildren<QToolButton*>())button->setMinimumHeight(scaledPixels(26,scale));
+    auto_fit_button_->setMinimumWidth(scaledPixels(91,scale));
+    hover_label_->setMinimumWidth(scaledPixels(118,scale));
+    hover_label_->setMaximumWidth(scaledPixels(310,scale));
+    hover_label_->setMargin(scaledPixels(8,scale));
+    hover_label_->setFont(labels);
+    dirty_=true;
 }
 void ScopePlot::reTheme(const QColor& fg,const QColor& bg,const QColor& grid,const QList<QColor>& colors){
  fg_=fg;bg_=bg;grid_=grid;colors_=colors;chart_->setBackgroundBrush(bg);chart_->setPlotAreaBackgroundBrush(bg);chart_->setPlotAreaBackgroundVisible(true);

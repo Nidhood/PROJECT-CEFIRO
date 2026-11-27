@@ -3,6 +3,8 @@
 #include <QString>
 
 class QCheckBox;
+class QGridLayout;
+class QResizeEvent;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -53,9 +55,20 @@ public:
                       double progress_fraction = -1.0,
                       const QString& estimate_text = QString());
     void showError(const QString& message);
+    void setMotorInputStatus(const QString& message);
     void setWaveformInformation(const QString& text);
+    void setTypographyScale(double scale);
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 private:
     void updateCaptureVisibility();
+    void reflowTypography();
+    QGridLayout* columns_grid_{nullptr};
+    QGridLayout* stats_grid_{nullptr};
+    QLabel* stats_captions_[4]{};
+    double ui_scale_{1.0};
+    int column_count_{2};
+    int stat_count_{4};
     QLineEdit* directory_{nullptr};
     QComboBox* time_unit_{nullptr};
     QLineEdit* prefix_{nullptr};
@@ -81,6 +94,7 @@ private:
     QLabel* estimate_label_{nullptr};
     QLabel* error_label_{nullptr};
     QLabel* waveform_label_{nullptr};
+    QLabel* motor_input_status_{nullptr};
     QProgressBar* progress_bar_{nullptr};
     QCheckBox* save_attitude_{nullptr};
     QCheckBox* save_reference_{nullptr};

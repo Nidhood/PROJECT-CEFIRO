@@ -31,12 +31,18 @@ assert 'add_rpm_panel("RPM / REQUESTED REFERENCE"' in win
 assert 'add_rpm_panel("RPM / MEASURED FEEDBACK"' in win
 assert 'grid->addWidget(panel,5,column)' in win
 assert 'last_motor_group_s_' in win_header
-assert 'onMotorEvent(fallback,motor_time)' in win
-assert 'std::array<std::array<std::size_t,5>,2> latest_motor' in win
+assert 'host_status_={values,HostOrigin::Status' in bridge
+assert 'chooseHost(host_topic_,host_status_' in bridge
+assert 'for(const auto& event:motor_events)' in win
+assert 'rpm_equivalent_plot_->append' in win
+assert 'MotorEventKind::FmuDshot' in win
+assert 'if(!event.from_real)append_dshot(event.dshot' in win
+assert 's.host_dshot_valid=true;s.host_dshot=host->codes' in bridge
+assert 'host_dshot_source' in win
 assert 'Sending a command alone does not mean the plant is connected.' in bridge
 assert 'msg.command_source' in bridge
 assert '#include <cefiro_msgs/msg/motor_telemetry.hpp>' in header
 assert '#include <cefiro_msgs/msg/motor_dshot.hpp>' in header
 assert 'real?' in bridge
 assert 'src/ros_bridge.cpp' in (root/'CMakeLists.txt').read_text()
-print('Motor signal routing, semantics, and 12-panel layout checks passed')
+print('Motor signal routing, semantics, and 13-panel layout checks passed')

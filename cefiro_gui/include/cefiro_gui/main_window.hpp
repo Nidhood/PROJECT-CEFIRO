@@ -45,6 +45,7 @@ protected:
 private:
     void scheduleResponsiveLayout();
     void applyResponsiveLayout();
+    void applyTypography(bool force=false);
     void reflowDashboard(int available_width);
     void reflowControl(int available_width);
     void reflowSystem(int available_width);
@@ -143,9 +144,11 @@ private:
  ScopePlot* altitude_plot_{nullptr};
  ScopePlot* rpm_target_plot_{nullptr};
  ScopePlot* rpm_feedback_plot_{nullptr};
+ ScopePlot* rpm_equivalent_plot_{nullptr};
+ QLabel* rpm_equivalent_value_{nullptr};
  QLabel* rpm_target_value_{nullptr};
  QLabel* rpm_feedback_value_{nullptr};
- std::array<std::array<double,3>,2> last_motor_group_s_{{{{-1.,-1.,-1.}},{{-1.,-1.,-1.}}}};
+ std::array<std::array<double,4>,2> last_motor_group_s_{{{{-1.,-1.,-1.,-1.}},{{-1.,-1.,-1.,-1.}}}};
  std::array<double,2> last_motor_telemetry_s_{{-1.,-1.}};
  QLabel* altitude_value_{nullptr};
  QLabel* pressure_value_{nullptr};
@@ -157,7 +160,6 @@ private:
  std::array<bool,2> baro_online_{{false,false}};
  bool dshot_online_{false};
  std::array<std::array<QList<QPointF>,3>,2> live_refs_{}, live_meas_{};
- double last_dshot_time_{-1};
     std::array<QLabel*,3> attitude_values_{};
     std::array<QLabel*,3> rate_values_{};
     std::array<QLabel*,3> rmse_values_{};
@@ -246,6 +248,10 @@ private:
     bool control_tab_active_{false};
     int monitor_axis_{0};
     int theme_index_{0};
+    QString base_theme_qss_;
+    double ui_scale_{1.0};
+    int ui_scale_percent_{0}; // 0 = automatic
+    QLabel* ui_scale_label_{nullptr};
     std::uint64_t collected_{0};
     QFile recording_file_;
     QTextStream recording_stream_;
@@ -253,6 +259,7 @@ private:
     QElapsedTimer publish_clock_{};
     QElapsedTimer recording_clock_{};
     quint64 recorded_samples_{0};
+    quint64 recorded_host_rows_{0},recorded_fmu_rows_{0};
     int recording_events_{0};
     double recording_end_s_{-1.0};
     double recording_start_ros_s_{0.0};

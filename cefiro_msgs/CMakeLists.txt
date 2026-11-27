@@ -5,12 +5,14 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorRpm.msg"
   "msg/MotorDshot.msg"
   "msg/MotorTelemetry.msg"
-  DEPENDENCIES std_msgs
+  "msg/IdentificationSample.msg"
+  DEPENDENCIES std_msgs sensor_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)

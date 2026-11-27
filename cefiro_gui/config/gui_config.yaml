@@ -4,6 +4,10 @@ cefiro_hmi:
     display_relative_attitude: true
     equilibrium_world_yaw_deg: 151.318
     real_imu_topic: /real/imu/data
+    real_identification_input: true
+    # Match hardware interface rpm_deadband if changed. Integer or decimal accepted.
+    nominal_rpm_deadband: 25
+    real_identification_topic: /real/cefiro/hardware/identification_sample
     real_magnetometer_topic: /real/magnetometer/data
     real_barometer_topic: /real/bmp581/air_pressure
     real_status_topic: /real/cefiro/control/status

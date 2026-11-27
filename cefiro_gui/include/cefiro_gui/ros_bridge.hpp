@@ -1,5 +1,6 @@
 #pragma once
 #include "cefiro_gui/models.hpp"
+#include "cefiro_gui/recording_join.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <chrono>
@@ -14,6 +15,7 @@
 #include <cefiro_msgs/msg/motor_rpm.hpp>
 #include <cefiro_msgs/msg/motor_dshot.hpp>
 #include <cefiro_msgs/msg/motor_telemetry.hpp>
+#include <cefiro_msgs/msg/identification_sample.hpp>
 #include <deque>
 #include <mutex>
 #include <thread>
@@ -22,7 +24,7 @@
 namespace cefiro::gui {
 // Command/setpoint, transport request, and measurement are deliberately distinct.
 enum class MotorEventKind { TargetRpm=0, DirectDshot=1, MeasuredRpm=2,
-                             Telemetry=3, HostCommandedDshot=4 };
+                             Telemetry=3, HostCommandedDshot=4, FmuDshot=5 };
 struct MotorEvent {
     MotorEventKind kind{MotorEventKind::TargetRpm};
     bool from_real{false};
@@ -30,6 +32,9 @@ struct MotorEvent {
     std::array<double,4> measured_rpm{};
     std::array<std::uint16_t,4> dshot{};
     std::uint8_t command_source{0};
+    HostOrigin host_origin{HostOrigin::None};
+    MotorClock::time_point received{};
+    NominalMotorMap nominal_map{};
 };
 class RosBridge final {
 public:
@@ -48,8 +53,14 @@ public:
     void resetTelemetry(bool real);
     void stop();
     std::vector<Telemetry> drain();
+    void beginRealRecording();
+    std::vector<Telemetry> drainRealRecording(bool finish=false);
     std::vector<MotorEvent> drainMotor();
     bool motorFreshFor(bool real,double timeout_s=2.0) const;
+    bool fmuDshotFresh() const;
+    std::optional<HostDshotSample> latestHostDshot() const;
+    NominalMotorMap nominalMotorMap() const;
+    std::string recordingInputsStatus() const;
     bool imuFresh(double timeout_s=1.5) const;
     bool magFresh(double timeout_s=2.5) const;
     bool baroFresh(double timeout_s=2.5) const;
@@ -58,6 +69,9 @@ public:
     void setMotorArmed(bool armed);
     void setEnabled(bool enabled);
     void publishGains(const std::vector<double>& pid, const std::vector<double>& lqr);
+    bool publishSwingTuning(bool real,const std::vector<double>& values);
+    std::string swingTuningStatus(bool real) const;
+    bool requestSimSafetyReset();
     void emergencyStop();
     std::string controllerStatus() const;
     bool feedbackFresh(double timeout_s=2.0) const;
@@ -79,7 +93,9 @@ private:
     void onMotorDshot(const MotorDshot& msg,bool real,bool host_confirmed);
     void onMotorTelemetry(const MotorTelemetry& msg,bool real);
     void pushMotor(MotorEvent event);
+    void pushMotorLocked(MotorEvent event);
     void onImu(const Imu& msg,bool real);
+    void onIdentification(const cefiro_msgs::msg::IdentificationSample& id);
     void onMag(const Mag& msg,bool real);
     void onBaro(const Baro& msg,bool real);
     void onStatus(const std_msgs::msg::String& msg, bool real);
@@ -88,6 +104,7 @@ private:
     rclcpp::Node::SharedPtr node_;
     rclcpp::executors::SingleThreadedExecutor executor_;
     rclcpp::Subscription<Imu>::SharedPtr sub_imu_,sub_real_imu_;
+    rclcpp::Subscription<cefiro_msgs::msg::IdentificationSample>::SharedPtr sub_identification_;
     rclcpp::Subscription<Mag>::SharedPtr sub_mag_,sub_real_mag_;
     rclcpp::Subscription<Baro>::SharedPtr sub_baro_,sub_real_baro_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_status_;
@@ -105,13 +122,24 @@ private:
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_strategy_,pub_real_strategy_;
     rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr pub_pid_,pub_real_pid_;
     rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr pub_lqr_,pub_real_lqr_;
+    std::array<rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr,2> pub_swing_{};
+    std::array<rclcpp::Subscription<std_msgs::msg::String>::SharedPtr,2> sub_swing_{};
+    std::array<std::string,2> swing_status_{};
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_safety_reset_;
     rclcpp::Publisher<cefiro_msgs::msg::MotorRpm>::SharedPtr pub_motor_rpm_,pub_real_motor_rpm_;
     rclcpp::Publisher<std_msgs::msg::Int8MultiArray>::SharedPtr pub_motor_direction_,pub_real_motor_direction_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_motor_armed_,pub_real_motor_armed_;
     std::thread worker_;
     mutable std::mutex mutex_;
     std::deque<Telemetry> queue_;
+    RecordingJoin recording_join_;
+    bool real_recording_{false};
     std::deque<MotorEvent> motor_queue_;
+    HostDshotSample host_topic_{},host_status_{};
+    NominalMotorMap nominal_map_{};
+    MotorClock::time_point fmu_dshot_rx_{},battery_rx_{};
+    double battery_voltage_{0.0};
+    double nominal_deadband_{25.0};
     std::array<std::chrono::steady_clock::time_point,2> motor_rx_{};
     Telemetry latest_{},latest_real_{};
  bool real_selected_{false};

@@ -1,16 +1,16 @@
 
 /* CEFIRO Qt6 HMI · original QUBE-Servo 2 structural conventions */
-* { font-family: "Inter", "Segoe UI", "DejaVu Sans", sans-serif; font-size:11px; }
+* { font-family: "Inter", "Segoe UI", "DejaVu Sans", sans-serif; font-size:12px; }
 QMainWindow, QWidget, QDialog { background: #000000; color: #d0f0ff; }
 QToolBar#topbar { background: #000f1a; border:0; border-bottom:1px solid #14516a; spacing:8px; padding:7px; }
 QTabBar#topTabs::tab { background:transparent; color:#7bb8dd; border:0; padding:11px 20px; font-weight:700; }
 QTabBar#topTabs::tab:selected { color:#00e6ff; border-bottom:2px solid #00e6ff; }
-QLabel#pageTitle { font-size:22px; font-weight:900; color:#00e6ff; }
-QLabel#pageSubtitle, QLabel#hint { color:#7bb8dd; font-size:10px; }
-QLabel#eyebrow { color:#7bb8dd; font-size:9px; font-weight:700; }
-QLabel#panelTitle, QLabel#chartTitle { color:#b084ff; font-size:11px; font-weight:800; }
-QLabel#metricValue { color:#d0f0ff; font-size:13px; font-weight:700; }
-QLabel#topologyLine { background:#000f1a; border:1px solid #14516a; padding:12px; color:#d0f0ff;font-size:11px;font-weight:700; }
+QLabel#pageTitle { font-size:24px; font-weight:900; color:#00e6ff; }
+QLabel#pageSubtitle, QLabel#hint { color:#7bb8dd; font-size:11px; }
+QLabel#eyebrow { color:#7bb8dd; font-size:10px; font-weight:700; }
+QLabel#panelTitle, QLabel#chartTitle { color:#b084ff; font-size:14px; font-weight:800; }
+QLabel#metricValue { color:#d0f0ff; font-size:15px; font-weight:700; }
+QLabel#topologyLine { background:#000f1a; border:1px solid #14516a; padding:12px; color:#d0f0ff;font-size:12px;font-weight:700; }
 QFrame#panel { background:#000f1a; border:1px solid #14516a; border-radius:6px; }
 QFrame#chartFrame { background:transparent; border:none; }
 QFrame#hudSeparator { color:#14516a; background:#14516a; max-height:1px; }
@@ -26,8 +26,8 @@ QPushButton#primaryAction {background:#00e6ff; border:1px solid #00e6ff; color:#
 QPushButton#emergencyButton {background:#ff5468; border:1px solid #ff5468; color:#ffffff; font-weight:900;}
 QPushButton#recordButton {background:#000f1a; border:1px solid #00e6ff; color:#00e6ff; font-weight:850;}
 QPushButton#sourceModeButton:checked {color:#00e6ff; border:1px solid #00e6ff; font-weight:800;}
-QToolButton#chartToolButton {padding:0px 5px; border:0px; min-height:17px; font-size:10px; color:#b084ff; }
-QLabel#chartWindowLabel {color:#7bb8dd; min-width:35px; font-size:10px;}
+QToolButton#chartToolButton {padding:0px 5px; border:0px; min-height:17px; font-size:11px; color:#b084ff; }
+QLabel#chartWindowLabel {color:#7bb8dd; min-width:35px; font-size:11px;}
 QGroupBox { border:1px solid #14516a; border-radius:4px; margin-top:12px; padding:10px 7px 6px 7px; font-weight:750; color:#b084ff; }
 QGroupBox::title { subcontrol-origin:margin; left:8px; padding:0px 4px; }
 QTabWidget::pane {border:1px solid #14516a; border-radius:3px;}
@@ -44,7 +44,7 @@ QCheckBox::indicator:checked {background:#00e6ff;border:1px solid #00e6ff;}
 QLabel#errorText { color:#ff5468; font-weight:700; }
 /* Per-plot Y axis auto-fit toggle: checked = tracking, unchecked = fixed scale. */
 QToolButton#chartAutoFitButton {
-    font-size:10px;
+    font-size:11px;
     font-weight:600;
     min-height:18px;
     min-width:88px;

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include "cefiro_gui/motor_observation.hpp"
 
 namespace cefiro::gui {
 constexpr double pi = 3.14159265358979323846;
@@ -41,6 +42,13 @@ struct Telemetry {
     SampleKind kind{SampleKind::Imu};
  bool from_real{false};
     double ros_time_s{0.0};
+    bool fmu_dshot_valid{false},fmu_armed{false},host_dshot_valid{false},battery_valid{false};
+    std::uint32_t fmu_sample_ms{0};
+    std::uint8_t fmu_state{0};
+    std::array<std::uint16_t,4> fmu_dshot{},host_dshot{};
+    double host_dshot_age_s{0.},battery_voltage_v{0.};
+    HostOrigin host_origin{HostOrigin::None};
+    NominalMotorMap nominal_map{};
     std::int64_t sequence{0};
     Quaternion orientation{};
     bool orientation_valid{false};

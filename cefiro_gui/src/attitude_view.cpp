@@ -1,5 +1,6 @@
 #include "cefiro_gui/attitude_view.hpp"
 #include <QFont>
+#include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
@@ -141,7 +142,7 @@ void AttitudeView::paintEvent(QPaintEvent*) {
 
     if (!valid_) {
         painter.setPen(fg_);
-        painter.setFont(QFont("Sans", 10, QFont::Bold));
+        QFont warning=font();warning.setBold(true);painter.setFont(warning);
         painter.drawText(rect(), Qt::AlignCenter, "WAITING FOR IMU ORIENTATION");
     } else {
         const std::array<QVector3D, 4> motors = {{{-0.72f, -0.72f, 0.0f},
@@ -239,7 +240,8 @@ void AttitudeView::paintEvent(QPaintEvent*) {
                                            QColor("#448cff")}};
     const std::array<QString, 3> labels = {{"X / ROLL", "Y / PITCH", "Z / YAW"}};
     const QPointF center = projectBody({0.f, 0.f, 0.f}).xy;
-    painter.setFont(QFont("Sans", 9, QFont::Bold));
+    QFont axis_font=font();axis_font.setBold(true);painter.setFont(axis_font);
+    const QFontMetrics axis_metrics(axis_font);
     for (int i = 0; i < 3; ++i) {
         const QPointF end = projectBody(axes[std::size_t(i)]).xy;
         painter.setPen(QPen(colors[std::size_t(i)], 2.8));
@@ -248,23 +250,28 @@ void AttitudeView::paintEvent(QPaintEvent*) {
         painter.drawEllipse(end, 3.0, 3.0);
         painter.setPen(colors[std::size_t(i)]);
         const QPointF direction = end - center;
-        const QPointF label_at = end + QPointF(direction.x() >= 0 ? 6 : -72,
-                                              direction.y() >= 0 ? 14 : -6);
-        painter.drawText(QRectF(label_at, QSizeF(88, 20)), labels[std::size_t(i)]);
+        const auto& text=labels[std::size_t(i)];
+        const int tw=axis_metrics.horizontalAdvance(text)+6,th=axis_metrics.height()+4;
+        const QPointF proposed=end+QPointF(direction.x()>=0?6:-tw-6,direction.y()>=0?6:-th);
+        const QPointF label_at(std::clamp(proposed.x(),2.0,std::max(2.0,double(width()-tw-2))),
+                               std::clamp(proposed.y(),2.0,std::max(2.0,double(height()-th-2))));
+        painter.drawText(QRectF(label_at,QSizeF(tw,th)),Qt::AlignLeft|Qt::AlignVCenter,text);
     }
 
-    painter.setFont(QFont("Sans", 9));
+    painter.setFont(font());
+    const QFontMetrics text_metrics(painter.font());
+    const int line_h=text_metrics.height()+4;
     painter.setPen(fg_.darker(145));
-    painter.drawText(QRectF(10, 7, width() - 20, 19), Qt::AlignLeft,
-                     "DRAG TO ORBIT  ·  DOUBLE-CLICK TO RESET");
-    painter.drawText(QRectF(10, height() - 25, width() / 2.0, 19), Qt::AlignLeft,
+    painter.drawText(QRectF(10,7,width()-20,line_h),Qt::AlignLeft,
+                     text_metrics.elidedText("DRAG TO ORBIT  ·  DOUBLE-CLICK TO RESET",Qt::ElideRight,width()-20));
+    painter.drawText(QRectF(10,height()-2*line_h-4,width()-20,line_h),Qt::AlignLeft,
                      QString("CAM  %1° / %2°")
                          .arg(azimuth_ * 180.0 / kPi, 0, 'f', 0)
                          .arg(elevation_ * 180.0 / kPi, 0, 'f', 0));
     if (valid_) {
         const auto angles = q_.eulerDeg();
         painter.setPen(fg_);
-        painter.drawText(QRectF(15, height() - 25, width() - 25, 19), Qt::AlignRight,
+        painter.drawText(QRectF(10,height()-line_h-4,width()-20,line_h), Qt::AlignRight,
             QString("R %1°   P %2°   Y %3°")
                 .arg(angles[0], 0, 'f', 1)
                 .arg(angles[1], 0, 'f', 1)

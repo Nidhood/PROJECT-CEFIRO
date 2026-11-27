@@ -48,10 +48,15 @@ void AttitudeCommandPad::setOnEdited(std::function<void(int,double)> callback) {
     on_edited_ = std::move(callback);
 }
 QPointF AttitudeCommandPad::center() const {
-    return QPointF(width() * 0.47, height() * 0.50);
+    QFont text_font=font();text_font.setBold(true);
+    const int label_width=QFontMetrics(text_font).horizontalAdvance("PITCH -180.0°")+12;
+    return QPointF(std::max(1,width()-label_width)*0.5,height()*0.50);
 }
 double AttitudeCommandPad::radiusStep() const {
-    return std::clamp(std::min(width() * 0.73, height() * 0.90) / 6.0, 17.0, 45.0);
+    // Use the same responsive geometry for rendering AND pointer hit testing.
+    const double available_width=2.0*center().x();
+    const double max_step=45.0*std::max(1.0,QFontMetrics(font()).height()/15.0);
+    return std::clamp(std::min(available_width*0.88,height()*0.88)/6.0,9.0,max_step);
 }
 int AttitudeCommandPad::ringAt(const QPointF& position) const {
     const double dist = std::hypot(position.x() - center().x(), position.y() - center().y());
@@ -175,12 +180,14 @@ void AttitudeCommandPad::paintEvent(QPaintEvent*) {
     p.setBrush(QColor("#152638"));
     p.drawRoundedRect(QRectF(c.x()-7,c.y()-7,14,14),2.0,2.0);
     p.setOpacity(1.0);
-    QFont font=p.font();font.setPixelSize(10);font.setBold(true);p.setFont(font);
-    const int x=std::max(2,width()-89);
-    const int h=std::min(27,std::max(17,height()/5));
+    QFont text_font=font();text_font.setBold(true);p.setFont(text_font);
+    const QFontMetrics metrics(text_font);
+    const int text_w=metrics.horizontalAdvance("PITCH -180.0°")+8;
+    const int x=std::max(2,width()-text_w);
+    const int h=metrics.height()+6;
     for(int i=0;i<3;++i){
         p.setPen(QColor(ares_theme_?std::array<const char*,3>{"#ff304c","#ff9e79","#ffddc6"}[std::size_t(i)]:kColors[std::size_t(i)]));
-        p.drawText(QRect(x, int(c.y())+(i-1)*h-10, 87,22),
+        p.drawText(QRect(x, int(c.y())+(i-1)*h-h/2, text_w,h),
                    Qt::AlignLeft|Qt::AlignVCenter,
                    QString("%1 %2°").arg(kNames[std::size_t(i)])
                                      .arg(angles_[std::size_t(i)],0,'f',1));

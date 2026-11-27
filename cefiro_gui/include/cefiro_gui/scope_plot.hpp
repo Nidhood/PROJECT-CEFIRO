@@ -31,6 +31,7 @@ public:
     void setAutoFitY(bool enabled=true,double minimumSpan=2.0);
     void setDashed(int index,bool yes=true);
     void setActive(bool enabled);
+    void setTypographyScale(double scale);
     void reTheme(const QColor& foreground,const QColor& background,const QColor& grid,const QList<QColor>& colors);
 protected:
     bool eventFilter(QObject* object,QEvent* event) override;

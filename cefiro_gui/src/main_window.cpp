@@ -1,4 +1,9 @@
 #include "cefiro_gui/main_window.hpp"
+#include "cefiro_gui/ui_scale.hpp"
+#include <QFontMetrics>
+#include <QKeySequence>
+#include <QShortcut>
+#include <QScreen>
 #include "cefiro_gui/scope_plot.hpp"
 #include "cefiro_gui/attitude_view.hpp"
 #include "cefiro_gui/attitude_command_pad.hpp"
@@ -47,6 +52,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QRandomGenerator>
 #include <QPen>
 #include <algorithm>
 #include <cmath>
@@ -77,7 +83,7 @@ QDoubleSpinBox* MainWindow::spin(double min,double max,double value,double step,
 QLabel* MainWindow::label(const QString& text,const QString& id){
  auto* l=new QLabel(text);
  if(!id.isEmpty())l->setObjectName(id);
- if(id=="hint"||id=="pageSubtitle"||id=="metricValue"||id=="panelTitle"){
+ if(id=="pageTitle"||id=="hint"||id=="pageSubtitle"||id=="metricValue"||id=="panelTitle"){
      l->setWordWrap(true);
      l->setMinimumWidth(0);
  }
@@ -102,7 +108,7 @@ QWidget* MainWindow::titledPanel(const QString& title,QVBoxLayout*& inner,QWidge
  return panel;
 }
 MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
- setWindowTitle("CEFIRO GUI v2.4 | TRON ARES CONTROL");
+ setWindowTitle("CEFIRO GUI v2.4.4 | TRON ARES CONTROL");
  startupTrace("MainWindow constructor entered");
  setMinimumSize(610,480);
  resize(1530,910);
@@ -133,6 +139,7 @@ MainWindow::MainWindow(QWidget* parent):QMainWindow(parent){
  if(altitude_plot_) altitude_plot_->setActive(true);
  if(rpm_target_plot_)rpm_target_plot_->setActive(true);
  if(rpm_feedback_plot_)rpm_feedback_plot_->setActive(true);
+ if(rpm_equivalent_plot_)rpm_equivalent_plot_->setActive(true);
  if (preview_) preview_->setActive(false);
  if (live_) live_->setActive(false);
  startupTrace("Starting ROS executor");
@@ -188,14 +195,13 @@ void MainWindow::buildToolbar(){
  auto* bar=new QToolBar(this);bar->setObjectName("topbar");bar->setMovable(false);bar->setFloatable(false);
  bar->setIconSize(QSize(16,16));
  bar->setMinimumHeight(48);
- bar->setMaximumHeight(48);
  brand_label_=label("▣ CEFIRO  //  ARES","aresBrand");
  brand_label_->setMinimumHeight(28);
- brand_label_->setMaximumHeight(28);
+
  bar->addWidget(brand_label_);
  nav_=new QTabBar(bar);nav_->setObjectName("topTabs");nav_->setExpanding(false);nav_->setDrawBase(false);
  nav_->setMinimumHeight(32);
- nav_->setMaximumHeight(32);
+
  for(const QString& name:QStringList{"Dashboard","Signal Generator","System"})nav_->addTab(name);
  connect(nav_,&QTabBar::currentChanged,this,[this](int i){stack_->setCurrentIndex(i);control_tab_active_=(i==1);
    for (auto* p : dash_) {
@@ -212,6 +218,7 @@ void MainWindow::buildToolbar(){
     if (altitude_plot_) altitude_plot_->setActive(i == 0);
     if (rpm_target_plot_) rpm_target_plot_->setActive(i == 0);
     if (rpm_feedback_plot_) rpm_feedback_plot_->setActive(i == 0);
+    if (rpm_equivalent_plot_) rpm_equivalent_plot_->setActive(i == 0);
  });
  bar->addWidget(nav_);
  auto* spacer=new QWidget(bar);
@@ -224,19 +231,20 @@ void MainWindow::buildToolbar(){
  plant_selector_->addItem("SIMULATION",false);
  plant_selector_->addItem("REAL HARDWARE",true);
  plant_selector_->setMinimumWidth(130);
- plant_selector_->setFixedHeight(30);
+ plant_selector_->setMinimumHeight(30);
  plant_selector_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
  plant_selector_->setToolTip("Select the command destination. Both plants are monitored independently. Stop commands before switching.");
  bar->addWidget(plant_selector_);
  connect(plant_selector_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int index){
      if(command_active_)return;
+     if(recorder_active_)stopRecording(); // Never mix SIM and REAL in one CSV.
      bridge_.selectReal(index==1);
      resetSelectedFeedback();
      refreshReferenceLimits();
      setTheme(theme_index_);
  });
  theme_label_=label("THEME  ","eyebrow");bar->addWidget(theme_label_);
- theme_combo_=new QComboBox(bar);theme_combo_->addItems(kThemes);theme_combo_->setMinimumWidth(120);theme_combo_->setFixedHeight(30);theme_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);bar->addWidget(theme_combo_);
+ theme_combo_=new QComboBox(bar);theme_combo_->addItems(kThemes);theme_combo_->setMinimumWidth(120);theme_combo_->setMinimumHeight(30);theme_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);bar->addWidget(theme_combo_);
  connect(theme_combo_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int i){setTheme(i);});addToolBar(Qt::TopToolBarArea,bar);
 }
 void MainWindow::buildDashboard(){
@@ -248,7 +256,7 @@ void MainWindow::buildDashboard(){
  dashboard_scroll_->setObjectName("dashboardScroll");
  dashboard_scroll_->setWidgetResizable(true);
  dashboard_scroll_->setFrameShape(QFrame::NoFrame);
- dashboard_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+ dashboard_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
  body->addWidget(dashboard_scroll_,1);
  auto* container=new QWidget(dashboard_scroll_);
  container->setObjectName("dashboardCanvas");
@@ -258,7 +266,7 @@ void MainWindow::buildDashboard(){
  auto* grid=dashboard_grid_;
  dashboard_scroll_->setWidget(container);
  dashboard_scroll_->viewport()->installEventFilter(this);
- const QStringList titles={"ROLL / φ","PITCH / θ","YAW / ψ","ANGULAR RATES / p q r","LINEAR ACCELERATION / axyz","MAGNETIC FIELD / Bxyz","BAROMETER / PRESSURE","MAGNETOMETER / MAGNITUDE","DSHOT / HOST REQUEST"};
+ const QStringList titles={"ROLL / φ","PITCH / θ","YAW / ψ","ANGULAR RATES / p q r","LINEAR ACCELERATION / axyz","MAGNETIC FIELD / Bxyz","BAROMETER / PRESSURE","MAGNETOMETER / MAGNITUDE","DSHOT / HOST & FMU"};
  const QStringList units={"deg","deg","deg","deg/s","m/s²","µT","hPa","µT","DShot"};
  for(int i=0;i<9;++i){QVBoxLayout* inner=nullptr;auto* panel=titledPanel(titles[i],inner,page);
     auto* metric=label(i<3?"-- deg":"--","metricValue");
@@ -277,7 +285,8 @@ void MainWindow::buildDashboard(){
        i==6?QStringList{"SIM hPa","REAL hPa"}:
        i==7?QStringList{"SIM |B|","REAL |B|"}:
        QStringList{"SIM M1","SIM M2","SIM M3","SIM M4",
-                   "REAL M1","REAL M2","REAL M3","REAL M4"};
+                   "HOST M1","HOST M2","HOST M3","HOST M4",
+                   "FMU M1","FMU M2","FMU M3","FMU M4"};
     dash_[size_t(i)]=new ScopePlot("",units[i],keys,panel);dash_[size_t(i)]->setMinimumHeight(235);
     if(i<3){
        dash_[size_t(i)]->setDashed(0);
@@ -343,10 +352,24 @@ void MainWindow::buildDashboard(){
  };
  add_rpm_panel("RPM / REQUESTED REFERENCE",rpm_target_plot_,rpm_target_value_,0);
  add_rpm_panel("RPM / MEASURED FEEDBACK",rpm_feedback_plot_,rpm_feedback_value_,1);
+ QVBoxLayout* equiv_inner=nullptr;
+ auto* equiv_panel=titledPanel("RPM / DSHOT EQUIVALENT (NOMINAL)",equiv_inner,container);
+ rpm_equivalent_value_=label("-- RPM equivalent (not measured)","metricValue");
+ equiv_inner->addWidget(rpm_equivalent_value_);
+ rpm_equivalent_plot_=new ScopePlot("","RPM",QStringList{"HOST M1","HOST M2","HOST M3","HOST M4",
+       "FMU M1","FMU M2","FMU M3","FMU M4"},equiv_panel);
+ rpm_equivalent_plot_->setMinimumHeight(235);
+ rpm_equivalent_plot_->setYRange(0,12000);
+ rpm_equivalent_plot_->setAutoFitY(true,300.0);
+ for(int motor=4;motor<8;++motor)rpm_equivalent_plot_->setDashed(motor);
+ equiv_inner->addWidget(rpm_equivalent_plot_,1);
+ equiv_panel->setMinimumHeight(308);
+ grid->addWidget(equiv_panel,6,0);
+ dashboard_panels_.append(equiv_panel);
  // Reading order stays consistent as the panel grid changes its columns.
  // Pressure is immediately followed by relative altitude.
- if(dashboard_panels_.size()==12){
-   const QVector<int> order{0,1,2,3,4,5,6,9,7,8,10,11};
+ if(dashboard_panels_.size()==13){
+   const QVector<int> order{0,1,2,3,4,5,6,9,7,8,10,11,12};
    const auto original=dashboard_panels_;
    for(int i=0;i<order.size();++i)dashboard_panels_[i]=original[order[i]];
  }
@@ -356,6 +379,8 @@ void MainWindow::buildDashboard(){
     if(altitude_plot_)altitude_plot_->clear();
     if(rpm_target_plot_)rpm_target_plot_->clear();
     if(rpm_feedback_plot_)rpm_feedback_plot_->clear();
+    if(rpm_equivalent_plot_)rpm_equivalent_plot_->clear();
+    if(rpm_equivalent_value_)rpm_equivalent_value_->setText("-- RPM equivalent");
     for(auto& source:last_motor_group_s_)source.fill(-1.0);
     last_motor_telemetry_s_.fill(-1.0);
     if(dshot_value_)dshot_value_->setText("-- DShot");
@@ -434,6 +459,105 @@ void MainWindow::buildControl() {
     controller_->addItems({"OPEN LOOP", "PID", "LQR", "SWING-UP + LQR (SIM)", "CUSTOM"});
     ctrl->addWidget(controller_, 1);
     arch->addLayout(ctrl);
+    auto* tuneSwing=new QPushButton("SWING-UP TUNING",architecture);
+    tuneSwing->setObjectName("secondary");arch->addWidget(tuneSwing);
+    auto* resetSafety=new QPushButton("RESET SAFETY FAULT (SIM)",architecture);
+    resetSafety->setObjectName("secondary");arch->addWidget(resetSafety);
+    connect(resetSafety,&QPushButton::clicked,this,[this]{
+        if(command_active_||bridge_.isReal()){
+            QMessageBox::warning(this,"Safety reset","Disable output. For real hardware use the explicit hardware reset_fault service.");return;
+        }
+        if(QMessageBox::question(this,"Safety reset","Confirm the gimbal is stationary and the cause of the fault has been corrected. Output will remain OFF.",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
+        if(!bridge_.requestSimSafetyReset())QMessageBox::warning(this,"Safety reset","Controller is not connected.");
+        else applied_value_->setText("Reset requested; check controller feedback before activating.");
+    });
+    connect(tuneSwing,&QPushButton::clicked,this,[this]{
+        if(command_active_){QMessageBox::warning(this,"Swing-up tuning","Deactivate command output first.");return;}
+        const bool real=bridge_.isReal();
+        QDialog dialog(this);dialog.setWindowTitle(real?"REAL / SWING-UP PILOT":"SIM / SWING-UP TUNING");
+        auto* outer=new QVBoxLayout(&dialog);
+        auto* scroll=new QScrollArea(&dialog);scroll->setWidgetResizable(true);
+        auto* content=new QWidget(scroll);scroll->setWidget(content);outer->addWidget(scroll,1);
+        auto* layout=new QVBoxLayout(content);auto* form=new QFormLayout;
+        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        const auto available=screen()->availableGeometry().size();
+        dialog.resize(std::min(scaledPixels(680,ui_scale_),available.width()-40),
+                      std::min(scaledPixels(520,ui_scale_),available.height()-60));
+        layout->addWidget(label(real?"SHADOW calculates torque only. POWERED requires measured calibration, monitored power, mechanical protection and a constrained roll fixture. Start inverted and stationary. Direction is mathematical roll, not ESC CW/CCW.":"URDF joint order: yaw / pitch / roll. Apply while output is OFF. Torque and RPM limits are unchanged.","hint"));
+        std::array<QDoubleSpinBox*,3> kp{},kd{};
+        const std::array<double,3> defaultsP=real?std::array<double,3>{1.1,0.,0.}:std::array<double,3>{.12,.65,.90};
+        const std::array<double,3> defaultsD=real?std::array<double,3>{.4,0.,0.}:std::array<double,3>{.14,.32,.32};
+        const QStringList axes=real?QStringList{"Body roll"}:QStringList{"Joint yaw","Joint pitch","Joint roll"};
+        for(int i=0;i<axes.size();++i){
+            kp[i]=spin(0.,3.,defaultsP[i],.05,3);kd[i]=spin(0.,1.5,defaultsD[i],.02,3);
+            form->addRow(axes[i]+" Kp [Nm/rad]",kp[i]);form->addRow(axes[i]+" Kd [Nm s/rad]",kd[i]);
+        }
+        auto* duration=spin(5.,30.,real?12.:11.,.5,2);form->addRow("Trajectory duration [s]",duration);
+        QComboBox* trialMode=nullptr;
+        if(real){trialMode=new QComboBox(&dialog);trialMode->addItems({"SHADOW / no motors","POWERED / calibrated roll only"});form->addRow("Trial type",trialMode);}
+        unsigned trialToken=0;
+        bool leaseActive=false;
+        QComboBox* direction=nullptr;
+        if(real){direction=new QComboBox(&dialog);direction->addItems({"Positive roll (+)","Negative roll (-)"});form->addRow("Roll direction",direction);}
+        layout->addLayout(form);
+        auto* status=label("Not applied","hint");layout->addWidget(status);
+        auto* apply=new QPushButton(real?"START SELECTED TRIAL":"APPLY SIM GAINS",&dialog);outer->addWidget(apply);
+        auto* close=new QPushButton(real?"STOP TRIAL / CLOSE":"CLOSE",&dialog);outer->addWidget(close);
+        if(real){
+            auto* emergency=new QPushButton("EMERGENCY STOP / LATCH",&dialog);outer->addWidget(emergency);
+            connect(emergency,&QPushButton::clicked,&dialog,[&,this]{leaseActive=false;bridge_.emergencyStop();apply->setEnabled(false);status->setText("Emergency stop requested; verify FMU state");});
+        }
+        QTimer timer(&dialog);timer.setInterval(80);
+        connect(&timer,&QTimer::timeout,&dialog,[&,this]{
+            const QString raw=QString::fromStdString(bridge_.swingTuningStatus(real));
+            if(leaseActive){
+                if((raw.startsWith("CMD_SWING_REAL:") && !raw.endsWith(": OK")) || raw.startsWith("REJECTED:") || raw.startsWith("FAULT:"))leaseActive=false;
+                if(raw.startsWith("SHADOW,") && (raw.split(',').size()==2))leaseActive=false;
+                if(!bridge_.hardwareStatusFresh(1.0) || bridge_.isReal()!=real || !recorder_active_) {
+                    leaseActive=false;
+                    (void)bridge_.publishSwingTuning(true,{});
+                }
+                if(leaseActive && !bridge_.publishSwingTuning(true,{double(trialToken)}))leaseActive=false;
+            }
+            if(raw.isEmpty())return;
+            const auto parts=raw.split(',');
+            if(parts.size()==9 && parts[0]=="SHADOW"){
+                constexpr double r2d=57.29577951308232;
+                status->setText(QString("%1 | roll %2 deg / ref %3 deg | p %4 deg/s | torque %5 Nm (proposal only) | t %6 s")
+                  .arg(parts[1]=="2.00000"?"LQR":"SWING-UP").arg(parts[2].toDouble()*r2d,0,'f',1).arg(parts[3].toDouble()*r2d,0,'f',1).arg(parts[4].toDouble()*r2d,0,'f',1).arg(parts[5]).arg(parts[7]));
+            }else if(parts.size()==13 && parts[0]=="SWING_REAL"){
+                constexpr double r2d=57.29577951308232;
+                status->setText(QString("%1 | roll %2 / ref %3 deg | p %4 deg/s | torque %5 Nm | logical DShot %6 %7 %8 %9")
+                  .arg(parts[1].toDouble()==0.?"SPINUP":(parts[1].toDouble()==2.?"LQR":"SWING-UP"))
+                  .arg(parts[2].toDouble()*r2d,0,'f',1).arg(parts[3].toDouble()*r2d,0,'f',1).arg(parts[4].toDouble()*r2d,0,'f',1)
+                  .arg(parts[5]).arg(parts[8]).arg(parts[9]).arg(parts[10]).arg(parts[11]));
+            }else status->setText(raw);
+        });
+        bool shadowRequested=false;
+        connect(apply,&QPushButton::clicked,&dialog,[&,this]{
+            if(command_active_||bridge_.isReal()!=real){status->setText("Rejected: output/source changed");return;}
+            std::vector<double> v;
+            if(real){
+                v={kp[0]->value(),kd[0]->value(),duration->value(),direction->currentIndex()==0?1.:-1.};
+                if(trialMode->currentIndex()==1){
+                    if(duration->value()<8.){status->setText("Real pilot requires >=8 seconds");return;}
+                    if(!recorder_active_ || recording_config_.mode!=0 || recording_config_.start_delay_s>0. || recording_config_.save_interval_ms!=0 || !recording_config_.save_rates || !recording_config_.save_attitude){status->setText("Start a continuous full-rate recording with attitude and rates, zero start delay before opening this panel");return;}
+                    if(!bridge_.imuFresh(0.5) || !have_sample_ || !last_sample_.from_real || !bridge_.fmuDshotFresh() || !last_sample_.orientation_valid){status->setText("Valid real IMU / FMU DShot snapshot required");return;}
+                    if(QMessageBox::warning(&dialog,"POWERED BENCH TRIAL","Requires measured roll actuator/model calibration, protected one-axis fixture, independent physical E-stop and monitored power. Motor stop does not prevent a gravity-driven fall. No free flight. Continue only after bench safety review?",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
+                    trialToken=static_cast<unsigned>(QRandomGenerator::global()->bounded(1,65536));v.push_back(double(trialToken));
+                }
+            }
+            else{for(auto* k:kp)v.push_back(k->value());for(auto* k:kd)v.push_back(k->value());v.push_back(duration->value());}
+            if(!bridge_.publishSwingTuning(real,v)){status->setText("Controller not connected");return;}
+            shadowRequested=shadowRequested||real;status->setText("Waiting for acknowledgement...");
+            leaseActive=real && trialToken!=0;timer.start();
+            if(real){apply->setEnabled(false);trialMode->setEnabled(false);kp[0]->setEnabled(false);kd[0]->setEnabled(false);duration->setEnabled(false);direction->setEnabled(false);}
+
+        });
+        connect(close,&QPushButton::clicked,&dialog,&QDialog::accept);
+        dialog.exec();timer.stop();
+        if(shadowRequested)(void)bridge_.publishSwingTuning(true,{});
+    });
     auto* source = new QHBoxLayout;
     automatic_btn_ = new QPushButton("AUTOMATIC", architecture);
     manual_btn_ = new QPushButton("MANUAL", architecture);
@@ -604,8 +728,8 @@ void MainWindow::buildControl() {
     master_select_none_btn_=new QPushButton("NONE", master_select_widget_);
     master_select_all_btn_->setObjectName("secondary");
     master_select_none_btn_->setObjectName("secondary");
-    master_select_all_btn_->setMaximumWidth(54);
-    master_select_none_btn_->setMaximumWidth(62);
+    master_select_all_btn_->setMinimumWidth(54);
+    master_select_none_btn_->setMinimumWidth(62);
     select_row->addWidget(master_select_all_btn_);
     select_row->addWidget(master_select_none_btn_);
     master_layout->addWidget(master_select_widget_, 2, 0, 1, 5);
@@ -824,6 +948,23 @@ void MainWindow::buildSystem(){
  system_scroll_->viewport()->installEventFilter(this);
  root->addWidget(label("CEFIRO / SYSTEM STATUS","pageTitle"));
  root->addWidget(label("Live ROS 2 connection, IMU orientation, sensor frames and controller feedback","pageSubtitle"));
+ QVBoxLayout* display=nullptr;
+ auto* display_panel=titledPanel("DISPLAY / UI SCALE",display,content);
+ auto* scale_row=new QHBoxLayout;
+ auto* scale_combo=new QComboBox(display_panel);
+ scale_combo->addItem("AUTO (window size)",0);
+ for(int percent:{100,120,140,160,180,200})scale_combo->addItem(QString("%1%").arg(percent),percent);
+ ui_scale_label_=label("100% · AUTO","metricValue");
+ scale_row->addWidget(scale_combo,1);scale_row->addWidget(ui_scale_label_,1);
+ display->addLayout(scale_row);
+ display->addWidget(label("Scales labels, controls, chart axes, legends and dialogs. Qt handles monitor DPI. Ctrl+0 restores automatic scaling.","hint"));
+ root->addWidget(display_panel);
+ connect(scale_combo,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this,scale_combo](int){
+     ui_scale_percent_=scale_combo->currentData().toInt();
+     scheduleResponsiveLayout();
+ });
+ auto* reset_scale=new QShortcut(QKeySequence("Ctrl+0"),this);
+ connect(reset_scale,&QShortcut::activated,scale_combo,[scale_combo]{scale_combo->setCurrentIndex(0);});
  system_grid_=new QGridLayout;
  auto* g=system_grid_;
  g->setSpacing(10);
@@ -1176,6 +1317,9 @@ void MainWindow::startOutput(){
        "SWING-UP + LQR has not been validated on real motors. Select SIMULATION to run it.");
    return;
  }
+ if(!bridge_.isReal() && !manual_mode_ && controller_->currentText().contains("LQR") && QString::fromStdString(bridge_.controllerStatus()).contains("FAULT_LATCHED")){
+    QMessageBox::warning(this,"Safety fault latched","Correct the cause and use RESET SAFETY FAULT (SIM) before activation.");return;
+ }
  if(!output_enabled_->isChecked()){
   QMessageBox::information(this,"Output inhibited","Enable 'Output enabled' before sending controller commands.");return;
  }
@@ -1330,6 +1474,14 @@ void MainWindow::setMonitorAxis(int idx){
     // Keep the operator's AUTO Y preference when changing monitor axes.
 }
 void MainWindow::tick(){
+ if(command_active_ && !manual_mode_ && !bridge_.isReal() && controller_->currentText().contains("LQR")){
+   const auto status=QString::fromStdString(bridge_.controllerStatus());
+   if(status.contains("FAULT_LATCHED") || !bridge_.feedbackFresh()){
+     stopOutput(false);
+     {QSignalBlocker b(output_enabled_);output_enabled_->setChecked(false);}
+     applied_value_->setText("SAFE STOP: "+status);
+   }
+ }
  if(command_active_ && manual_mode_ && bridge_.isReal() && real_manual_start_clock_.isValid()) {
    const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
    const bool linked=bridge_.hardwareStatusFresh() && state.value("transport_connected").toBool(false);
@@ -1372,38 +1524,35 @@ void MainWindow::tick(){
      applied_value_->setText("NO CONTROLLER FEEDBACK - swing-up inactive");
    }
  }
- // Show the bridge's requested DShot values, never a fabricated measured RPM.
- // The host's configured ceiling is authoritative (300 unless explicitly raised).
- if (manual_mode_) {
-   if (bridge_.hardwareStatusFresh()) {
-     const auto json=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus()));
-     if (json.isObject()) {
-       const auto state=json.object();
-       const int max_dshot=state.value("configured_dshot_max").toInt(300);
-       const auto commands=state.value("last_commanded_dshot").toArray();
-       const bool serial_ok=state.value("transport_connected").toBool(false);
-       const QString power_reason=state.value("manual_power_inhibit_reason").toString();
-       if (master_motor_label_) {
-         master_motor_label_->setText(QString("%1 nominal RPM · host DShot cap %2/2047 · UART %3")
-           .arg(f(master_motor_speed_ ? master_motor_speed_->value() : 0.0,0))
-           .arg(max_dshot)
-           .arg(serial_ok ? "connected" : "offline"));
-         if (!power_reason.isEmpty() && bridge_.isReal())
-           master_motor_label_->setText(master_motor_label_->text()+" · "+power_reason);
-       }
-       for (int i=0; i<4; ++i) {
-         if (!motor_labels_[size_t(i)]) continue;
-         const int requested=commands.size()>i ? commands.at(i).toInt(0) : 0;
-         motor_labels_[size_t(i)]->setText(QString("Nom %1\nDShot req %2")
-           .arg(f(motor_command_rpm_[size_t(i)],0)).arg(requested));
-       }
+ // Manual readouts follow received host commands, not slider guesses or
+ // missing JSON fields. Keep nominal equivalent speed separate from feedback.
+ if(manual_mode_ && bridge_.isReal()){
+     const auto host=bridge_.latestHostDshot();
+     const auto map=bridge_.nominalMotorMap();
+     const auto equivalent=host?map.inverse(host->codes):std::nullopt;
+     const auto doc=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus()));
+     const auto state=doc.object();
+     if(master_motor_label_){
+         QString text=QString("%1 RPM requested · %2 · %3")
+             .arg(f(master_motor_speed_?master_motor_speed_->value():0.0,0))
+             .arg(map.valid()?QString("DShot cap %1").arg(map.max_code):QString("DShot map unavailable"))
+             .arg(host?QString::fromLatin1(originName(host->origin)):QString("No fresh host DShot"));
+         if(bridge_.hardwareStatusFresh()){
+             const auto reason=state.value("manual_power_inhibit_reason").toString();
+             if(!reason.isEmpty())text+=" · "+reason;
+         }
+         master_motor_label_->setText(text);
      }
-   } else {
-     if (master_motor_label_) master_motor_label_->setText("DShot bridge telemetry unavailable · commands NOT verified");
-     for(int i=0;i<4;++i) if(motor_labels_[size_t(i)])
-       motor_labels_[size_t(i)]->setText(QString("Nom %1\nBridge offline")
-         .arg(f(motor_command_rpm_[size_t(i)],0)));
-   }
+     for(std::size_t i=0;i<4;++i)if(motor_labels_[i]){
+         motor_labels_[i]->setText(QString("Req %1 RPM\nDShot %2 · Eq %3 RPM")
+             .arg(f(motor_command_rpm_[i],0))
+             .arg(host?QString::number(host->codes[i]):QString("--"))
+             .arg(equivalent?f((*equivalent)[i],0):QString("--")));
+     }
+ }else if(manual_mode_){
+     if(master_motor_label_)master_motor_label_->setText("SIMULATION · RPM reference");
+     for(std::size_t i=0;i<4;++i)if(motor_labels_[i])
+         motor_labels_[i]->setText(QString("Req %1 RPM (SIM)").arg(f(motor_command_rpm_[i],0)));
  }
  // One fresh render per sensor and plant per UI frame, regardless of which
  // ROS callback arrived last. Prevents REAL suppressing SIM or vice versa.
@@ -1424,10 +1573,13 @@ void MainWindow::tick(){
                 s.ros_time_s, s.attitude_deg[std::size_t(axis)]);
         }
     }
-    if(selected && s.kind==SampleKind::Imu && recorder_active_)saveRecord(s);
+    if(selected && !s.from_real && s.kind==SampleKind::Imu && recorder_active_)saveRecord(s);
     const bool last_in_source=last_event[s.from_real ? 1 : 0]
                                     [static_cast<std::size_t>(s.kind)]==i;
     onSample(s,last_in_source);
+ }
+ if(recorder_active_ && bridge_.isReal()){
+     for(const auto& sample:bridge_.drainRealRecording())saveRecord(sample);
  }
  updateSourceConnections();
  if (recorder_active_ && recording_end_s_ > 0.0 &&
@@ -1435,6 +1587,8 @@ void MainWindow::tick(){
      recording_should_stop_ = true;
  }
  if (recorder_active_ && recording_should_stop_) stopRecording();
+ if (recording_dialog_ && recording_dialog_->isVisible() && !recorder_active_)
+     recording_dialog_->setMotorInputStatus(bridge_.isReal()?QString::fromStdString(bridge_.recordingInputsStatus()):QString("SIMULATION — real DShot inputs not required"));
  if (recorder_active_ && recording_dialog_ && recording_dialog_->isVisible()) {
      const double elapsed_s = recorder_active_ ? recording_clock_.elapsed() / 1000.0 : 0.0;
      double progress_fraction = -1.0;
@@ -1457,42 +1611,18 @@ void MainWindow::tick(){
          recorded_samples_,
          elapsed_s,
          recording_events_, recording_path_, progress_fraction, estimate_text);
+     if(bridge_.isReal())recording_dialog_->setMotorInputStatus(QString::fromStdString(bridge_.recordingInputsStatus())+
+         QString(" | CSV valid rows HOST %1 / FMU %2").arg(recorded_host_rows_).arg(recorded_fmu_rows_));
  }
  // Motor monitoring is independent of the IMU and of the selected control plant.
  // Plot actual transport/plant messages, not the GUI slider value as feedback.
  const auto motor_events=bridge_.drainMotor();
- std::array<std::array<std::size_t,5>,2> latest_motor{};
- for(auto& source:latest_motor)source.fill(motor_events.size());
- for(std::size_t i=0;i<motor_events.size();++i){
-     const auto& event=motor_events[i];
-     latest_motor[event.from_real?1:0][static_cast<std::size_t>(event.kind)]=i;
- }
  const double motor_time=clock_.elapsed()/1000.0;
- for(std::size_t i=0;i<motor_events.size();++i){
-     const auto& event=motor_events[i];
-     if(latest_motor[event.from_real?1:0][static_cast<std::size_t>(event.kind)]!=i)continue;
-     onMotorEvent(event,motor_time);
- }
- // The hardware status JSON is a fallback only when the dedicated host
- // commanded-DShot topic is absent. It is never RPM feedback.
- if(bridge_.hardwareStatusFresh()){
-     const auto json=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus()));
-     if(json.isObject() && json.object().value("serial_connected").toBool(false) &&
-        (last_motor_group_s_[1][2]<0.0 || motor_time-last_motor_group_s_[1][2]>0.6)){
-         const auto codes=json.object().value("last_commanded_dshot").toArray();
-         if(codes.size()==4 && motor_time-last_dshot_time_>=0.05){
-             MotorEvent fallback;
-             fallback.from_real=true;
-             fallback.kind=MotorEventKind::HostCommandedDshot;
-             bool valid=true;
-             for(int motor=0;motor<4;++motor){
-                 const int code=codes.at(motor).toInt(-1);
-                 if(code!=0 && (code<48 || code>2047)){valid=false;break;}
-                 fallback.dshot[size_t(motor)]=static_cast<std::uint16_t>(code);
-             }
-             if(valid){onMotorEvent(fallback,motor_time);last_dshot_time_=motor_time;}
-         }
-     }
+ const auto motor_now=MotorClock::now();
+ // Preserve all received motor updates, not just one event per UI frame.
+ for(const auto& event:motor_events){
+     const double age=std::chrono::duration<double>(motor_now-event.received).count();
+     if(age>=0.0 && age<=2.0)onMotorEvent(event,std::max(0.0,motor_time-age));
  }
  expireMotorGroups(motor_time);
  status_samples_->setText(QString("SAMPLES: %1").arg(collected_));
@@ -1510,17 +1640,23 @@ void MainWindow::tick(){
 void MainWindow::clearMotorGroup(bool real,int group){
     const int source=real?1:0;
     ScopePlot* plot=(group==0)?rpm_target_plot_:(group==1?rpm_feedback_plot_:dash_[8]);
-    if(plot)for(int motor=0;motor<4;++motor)plot->clearSeries(source*4+motor);
+    if(plot)for(int motor=0;motor<4;++motor)plot->clearSeries((group==3?8:source*4)+motor);
+    if(real && (group==2||group==3) && rpm_equivalent_plot_)
+        for(int motor=0;motor<4;++motor)rpm_equivalent_plot_->clearSeries((group==2?0:4)+motor);
     last_motor_group_s_[size_t(source)][size_t(group)]=-1.0;
     if(real==bridge_.isReal()){
+        if(real && group>=2){
+            if(last_motor_group_s_[1][group==2?3:2]>=0.0)return;
+            if(rpm_equivalent_value_)rpm_equivalent_value_->setText("-- RPM equivalent / no fresh DShot");
+        }
         auto* metric=(group==0)?rpm_target_value_:(group==1?rpm_feedback_value_:dshot_value_);
-        if(metric)metric->setText(group==2?"-- DShot":"-- RPM");
+        if(metric)metric->setText(group>=2?"-- DShot":"-- RPM");
     }
 }
 void MainWindow::expireMotorGroups(double time_s){
     constexpr double timeout_s=2.0;
     for(int source=0;source<2;++source){
-        for(int group=0;group<3;++group){
+        for(int group=0;group<(source==1?4:3);++group){
             const double last=last_motor_group_s_[size_t(source)][size_t(group)];
             if(last>=0.0 && time_s-last>timeout_s)clearMotorGroup(source==1,group);
         }
@@ -1549,10 +1685,20 @@ void MainWindow::onMotorEvent(const MotorEvent& event,double time_s){
         last_motor_group_s_[size_t(source)][1]=time_s;
         if(selected && rpm_feedback_value_)rpm_feedback_value_->setText(format_motors(values,"RPM measured"));
     };
-    const auto append_dshot=[&](const std::array<std::uint16_t,4>& codes,const QString& origin){
-        for(int m=0;m<4;++m)dash_[8]->append(first+m,time_s,codes[size_t(m)]);
-        last_motor_group_s_[size_t(source)][2]=time_s;
+    const auto append_dshot=[&](const std::array<std::uint16_t,4>& codes,const QString& origin,bool fmu=false){
+        const int group=fmu?3:2;
+        for(int m=0;m<4;++m)dash_[8]->append((fmu?8:first)+m,time_s,codes[size_t(m)]);
+        last_motor_group_s_[size_t(source)][size_t(group)]=time_s;
         if(selected && dshot_value_)dshot_value_->setText(format_motors(codes,origin));
+        if(event.from_real && rpm_equivalent_plot_){
+            if(const auto rpm=event.nominal_map.inverse(codes)){
+                for(int m=0;m<4;++m)rpm_equivalent_plot_->append((fmu?4:0)+m,time_s,(*rpm)[size_t(m)]);
+                if(selected && rpm_equivalent_value_)rpm_equivalent_value_->setText(format_motors(*rpm,fmu?"RPM eq (FMU)":"RPM eq (HOST)"));
+            }else{
+                for(int m=0;m<4;++m)rpm_equivalent_plot_->clearSeries((fmu?4:0)+m);
+                if(selected && rpm_equivalent_value_)rpm_equivalent_value_->setText("DShot received / nominal mapping unavailable or outside range");
+            }
+        }
     };
     switch(event.kind){
         case MotorEventKind::TargetRpm:
@@ -1560,12 +1706,12 @@ void MainWindow::onMotorEvent(const MotorEvent& event,double time_s){
             break;
         case MotorEventKind::DirectDshot:
             // For raw DShot commands there is NO RPM reference; do not invent one.
-            if(last_motor_group_s_[size_t(source)][0]>=0.0)
-                clearMotorGroup(event.from_real,0);
-            // Only show raw input in the absence of recent backend-applied DShot.
-            if(last_motor_group_s_[size_t(source)][2]<0.0 ||
-               time_s-last_motor_group_s_[size_t(source)][2]>0.6)
+            // Real direct input is not proof of host acceptance. Keep it out
+            // of the host/FMU curves; SIM keeps its original command display.
+            if(!event.from_real){
+                if(last_motor_group_s_[0][0]>=0.0)clearMotorGroup(false,0);
                 append_dshot(event.dshot,"DShot input (unconfirmed)");
+            }
             break;
         case MotorEventKind::MeasuredRpm:
             // MotorTelemetry contains the same feedback with richer provenance.
@@ -1577,13 +1723,18 @@ void MainWindow::onMotorEvent(const MotorEvent& event,double time_s){
             last_motor_telemetry_s_[size_t(source)]=time_s;
             if(event.command_source==1)
                 append_requested(event.requested_rpm);
-            else if(event.command_source==2 && last_motor_group_s_[size_t(source)][0]>=0.0)
-                clearMotorGroup(event.from_real,0);
+            else if(!event.from_real && event.command_source==2 && last_motor_group_s_[0][0]>=0.0)
+                clearMotorGroup(false,0);
             append_measured(event.measured_rpm);
-            append_dshot(event.dshot,"DShot applied / telemetry");
+            // Generic real motor telemetry may contain placeholders. Only
+            // IdentificationSample supplies the dedicated FMU DShot curve.
+            if(!event.from_real)append_dshot(event.dshot,"DShot applied / telemetry");
             break;
         case MotorEventKind::HostCommandedDshot:
-            append_dshot(event.dshot,"host DShot request");
+            append_dshot(event.dshot,QString("host DShot (%1)").arg(QString::fromLatin1(originName(event.host_origin))));
+            break;
+        case MotorEventKind::FmuDshot:
+            append_dshot(event.dshot,"FMU accepted DShot",true);
             break;
     }
 }
@@ -1698,9 +1849,9 @@ void MainWindow::clearSourceHistory(bool real){
     clearSensorHistory(real,SampleKind::Imu);
     clearSensorHistory(real,SampleKind::Magnetometer);
     clearSensorHistory(real,SampleKind::Barometer);
-    for(int group=0;group<3;++group)clearMotorGroup(real,group);
+    for(int group=0;group<(real?4:3);++group)clearMotorGroup(real,group);
     last_motor_telemetry_s_[real?1u:0u]=-1.0;
-    if(real)last_dshot_time_=-1.0;
+    
     bridge_.resetTelemetry(real);
 }
 
@@ -1708,6 +1859,10 @@ void MainWindow::resetSelectedFeedback(){
     have_sample_=false;
     stats_.reset();
     last_sample_=Telemetry{};
+    if(dshot_value_)dshot_value_->setText("-- DShot");
+    if(rpm_target_value_)rpm_target_value_->setText("-- RPM requested");
+    if(rpm_feedback_value_)rpm_feedback_value_->setText("-- RPM measured");
+    if(rpm_equivalent_value_)rpm_equivalent_value_->setText("-- RPM equivalent");
     for(auto& analyzer:response_analyzers_)analyzer=StepResponseAnalyzer{};
     for(auto* l:attitude_values_)if(l)l->setText("-- deg");
     for(auto* l:rate_values_)if(l)l->setText("--");
@@ -1797,6 +1952,7 @@ void MainWindow::scheduleResponsiveLayout(){
 void MainWindow::applyResponsiveLayout(){
     if(!ui_ready_ || shutting_down_ || reflow_in_progress_)return;
     reflow_in_progress_=true;
+    applyTypography();
     if(dashboard_scroll_)reflowDashboard(dashboard_scroll_->viewport()->width());
     if(control_scroll_)reflowControl(control_scroll_->viewport()->width());
     if(system_scroll_)reflowSystem(system_scroll_->viewport()->width());
@@ -1810,6 +1966,7 @@ void MainWindow::applyResponsiveLayout(){
     reflow_in_progress_=false;
 }
 void MainWindow::reflowDashboard(int available_width){
+    available_width=layoutWidth(available_width,ui_scale_);
     if(!dashboard_grid_||dashboard_panels_.isEmpty())return;
     // Three columns only on genuinely wide desktop monitors.
     const int cols=dashboard_columns_==3
@@ -1817,29 +1974,32 @@ void MainWindow::reflowDashboard(int available_width){
         : dashboard_columns_==2
         ? (available_width>=2160?3:(available_width<890?1:2))
         : (available_width>=2160?3:(available_width>=960?2:1));
-    if(dashboard_columns_==cols)return;
+    const bool columns_changed=dashboard_columns_!=cols;
     dashboard_columns_=cols;
-    for(QWidget* panel:dashboard_panels_)dashboard_grid_->removeWidget(panel);
+    if(columns_changed)for(QWidget* panel:dashboard_panels_)dashboard_grid_->removeWidget(panel);
     for(int i=0;i<dashboard_panels_.size();++i){
         QWidget* panel=dashboard_panels_[i];
-        dashboard_grid_->addWidget(panel,i/cols,i%cols);
+        if(columns_changed)dashboard_grid_->addWidget(panel,i/cols,i%cols);
         const int width_hint=available_width/cols;
         const int card_height=width_hint<530?303:width_hint<850?355:395;
-        panel->setMinimumHeight(card_height);
+        panel->setMinimumHeight(scaledPixels(card_height,ui_scale_));
         // ScopePlot has no Q_OBJECT. Qt's findChildren<ScopePlot*>() would
         // match *any* QFrame subclass via ScopePlot's inherited metaobject.
         // Check the C++ runtime type before calling ScopePlot methods.
         for(QWidget* child:panel->findChildren<QWidget*>()){
             if(auto* scope=dynamic_cast<ScopePlot*>(child)){
-                scope->setMinimumHeight(std::max(190,card_height-85));
+                scope->setMinimumHeight(scaledPixels(std::max(190,card_height-85),ui_scale_));
             }
         }
     }
-    for(int c=0;c<3;++c)dashboard_grid_->setColumnStretch(c,c<cols?1:0);
-    for(int r=0;r<dashboard_panels_.size();++r)dashboard_grid_->setRowStretch(r,0);
-    dashboard_grid_->invalidate();
+    if(columns_changed){
+        for(int c=0;c<3;++c)dashboard_grid_->setColumnStretch(c,c<cols?1:0);
+        for(int r=0;r<dashboard_panels_.size();++r)dashboard_grid_->setRowStretch(r,0);
+        dashboard_grid_->invalidate();
+    }
 }
 void MainWindow::reflowControl(int available_width){
+    available_width=layoutWidth(available_width,ui_scale_);
     if(!control_columns_||!control_left_||!control_right_)return;
     const int mode=control_columns_mode_==2 ? (available_width<1020?1:2) : (available_width>1080?2:1);
     if(control_columns_mode_==mode)return;
@@ -1863,6 +2023,7 @@ void MainWindow::reflowControl(int available_width){
     control_columns_->invalidate();
 }
 void MainWindow::reflowSystem(int available_width){
+    available_width=layoutWidth(available_width,ui_scale_);
     if(!system_grid_||!system_sensor_panel_||!system_ros_panel_)return;
     const int mode=system_columns_mode_==2 ? (available_width<820?1:2) : (available_width>880?2:1);
     if(system_columns_mode_==mode)return;
@@ -1883,6 +2044,7 @@ void MainWindow::reflowSystem(int available_width){
     system_grid_->invalidate();
 }
 void MainWindow::reflowMotorControls(int available_width){
+    available_width=layoutWidth(available_width,ui_scale_);
     if(!motor_panels_grid_||motor_panels_.size()!=4)return;
     const int cols=motor_columns_mode_==4
         ? (available_width<760?(available_width<420?1:2):4)
@@ -1899,6 +2061,7 @@ void MainWindow::reflowMotorControls(int available_width){
     motor_panels_grid_->invalidate();
 }
 void MainWindow::reflowMasterControl(int available_width){
+    available_width=layoutWidth(available_width,ui_scale_);
     if(!master_control_grid_||!master_title_||!master_motor_label_||!master_select_widget_)return;
     const int mode=master_columns_mode_==2 ? (available_width<545?1:2) : (available_width>590?2:1);
     if(master_columns_mode_==mode)return;
@@ -1935,6 +2098,7 @@ void MainWindow::reflowMasterControl(int available_width){
     master_control_grid_->invalidate();
 }
 void MainWindow::reflowTrajectoryFields(int available_width){
+    available_width=layoutWidth(available_width,ui_scale_);
     if(!trajectory_fields_grid_||trajectory_edits_.size()!=13||trajectory_labels_.size()!=13)return;
     const int cols=trajectory_columns_mode_==2 ? (available_width<590?1:2) : (available_width>645?2:1);
     if(trajectory_columns_mode_==cols)return;
@@ -1954,31 +2118,81 @@ void MainWindow::reflowTrajectoryFields(int available_width){
     trajectory_fields_grid_->invalidate();
 }
 void MainWindow::updateCompactChrome(int available_width){
+    available_width=layoutWidth(available_width,ui_scale_);
     const bool compact=available_width<1130;
     const bool narrow=available_width<790;
     if(brand_label_)brand_label_->setVisible(theme_index_==0 && available_width>=1350);
     if(control_target_label_)control_target_label_->setVisible(!compact);
     if(theme_label_)theme_label_->setVisible(!compact);
     if(plant_selector_){
-        plant_selector_->setMinimumWidth(narrow?108:130);
-        plant_selector_->setMaximumWidth(narrow?145:210);
+        plant_selector_->setMinimumWidth(scaledPixels(narrow?108:130,ui_scale_));
+        plant_selector_->setMaximumWidth(scaledPixels(narrow?145:210,ui_scale_));
     }
     if(theme_combo_){
-        theme_combo_->setMinimumWidth(narrow?100:120);
-        theme_combo_->setMaximumWidth(narrow?125:210);
+        theme_combo_->setMinimumWidth(scaledPixels(narrow?100:120,ui_scale_));
+        theme_combo_->setMaximumWidth(scaledPixels(narrow?125:210,ui_scale_));
     }
     if(nav_){
         nav_->setTabText(0,narrow?"LIVE":"Dashboard");
         nav_->setTabText(1,narrow?"CONTROL":"Signal Generator");
         nav_->setTabText(2,"System");
     }
-    if(status_sim_connection_)status_sim_connection_->setMinimumWidth(narrow?94:126);
-    if(status_real_connection_)status_real_connection_->setMinimumWidth(narrow?94:126);
+    if(status_sim_connection_)status_sim_connection_->setMinimumWidth(scaledPixels(narrow?94:126,ui_scale_));
+    if(status_real_connection_)status_real_connection_->setMinimumWidth(scaledPixels(narrow?94:126,ui_scale_));
     if(status_rec_)status_rec_->setVisible(!compact);
     if(status_control_)status_control_->setVisible(!narrow);
     if(status_samples_)status_samples_->setVisible(!compact);
     if(status_ros_)status_ros_->setVisible(!narrow);
     for(auto* sep:statusBar()->findChildren<QLabel*>("statusDivider"))sep->setVisible(!compact);
+}
+void MainWindow::applyTypography(bool force){
+    const double next=effectiveUiScale(width(),height(),ui_scale_percent_);
+    if(!force && std::abs(next-ui_scale_)<0.001)return;
+    ui_scale_=next;
+    if(!base_theme_qss_.isEmpty()){
+        // Scale explicit QSS pixels (fonts, padding, control sizes) from the
+        // immutable theme, never from the previously scaled stylesheet.
+        static const QRegularExpression pixels(R"((-?\d+(?:\.\d+)?)px)");
+        QString scaled;
+        qsizetype pos=0;
+        auto matches=pixels.globalMatch(base_theme_qss_);
+        while(matches.hasNext()){
+            const auto match=matches.next();
+            scaled+=base_theme_qss_.mid(pos,match.capturedStart()-pos);
+            scaled+=QString::number(qRound(match.captured(1).toDouble()*ui_scale_))+"px";
+            pos=match.capturedEnd();
+        }
+        scaled+=base_theme_qss_.mid(pos);
+        qApp->setStyleSheet(scaled);
+    }
+    if(ui_scale_label_)ui_scale_label_->setText(QString("%1% · %2").arg(qRound(ui_scale_*100)).arg(ui_scale_percent_?"MANUAL":"AUTO"));
+    // Respect Qt's native size hints and grow custom controls with the text.
+    if(auto* bar=findChild<QToolBar*>("topbar")){
+        bar->setMinimumHeight(scaledPixels(48,ui_scale_));
+        bar->setIconSize(QSize(scaledPixels(16,ui_scale_),scaledPixels(16,ui_scale_)));
+    }
+    if(brand_label_)brand_label_->setMinimumHeight(scaledPixels(28,ui_scale_));
+    if(nav_)nav_->setMinimumHeight(scaledPixels(32,ui_scale_));
+    for(auto* combo:{plant_selector_,theme_combo_})if(combo)combo->setMinimumHeight(scaledPixels(34,ui_scale_));
+    if(master_select_all_btn_)master_select_all_btn_->setMinimumWidth(scaledPixels(54,ui_scale_));
+    if(master_select_none_btn_)master_select_none_btn_->setMinimumWidth(scaledPixels(62,ui_scale_));
+    for(auto* slider:motor_sliders_)if(slider){
+        slider->setFixedHeight(scaledPixels(175,ui_scale_));
+        slider->setFixedWidth(scaledPixels(34,ui_scale_));
+    }
+    if(command_pad_){command_pad_->setMinimumHeight(scaledPixels(175,ui_scale_));command_pad_->update();}
+    if(view_){view_->setMinimumSize(scaledPixels(260,ui_scale_),scaledPixels(200,ui_scale_));view_->update();}
+    if(preview_)preview_->setMinimumHeight(scaledPixels(145,ui_scale_));
+    if(live_)live_->setMinimumHeight(scaledPixels(155,ui_scale_));
+    for(QWidget* widget:findChildren<QWidget*>()){
+        if(auto* scope=dynamic_cast<ScopePlot*>(widget))scope->setTypographyScale(ui_scale_);
+    }
+    for(auto* table:findChildren<QTableWidget*>()){
+        table->verticalHeader()->setDefaultSectionSize(scaledPixels(28,ui_scale_));
+        table->horizontalHeader()->setMinimumSectionSize(scaledPixels(60,ui_scale_));
+        table->resizeRowsToContents();
+    }
+    if(recording_dialog_)recording_dialog_->setTypographyScale(ui_scale_);
 }
 void MainWindow::setTheme(int index){
     if (index < 0 || index >= int(kThemes.size())) {
@@ -1986,14 +2200,15 @@ void MainWindow::setTheme(int index){
     }
     theme_index_ = index;
  QString file=QString(":/theme/%1.qss").arg(QStringList{"tron_ares","matlab","light","dark","tron_evolution","cyberpunk"}[index]);
- QFile qss(file);if(qss.open(QIODevice::ReadOnly|QIODevice::Text))qApp->setStyleSheet(QString::fromUtf8(qss.readAll()));
+ QFile qss(file);if(qss.open(QIODevice::ReadOnly|QIODevice::Text))base_theme_qss_=QString::fromUtf8(qss.readAll());
+ applyTypography(true);
  const auto& t=kTheme[size_t(index)];
  startupTrace("Theme palette loaded");
  const QList<QColor> colors=index==0 ? QList<QColor>{
      QColor("#ff334d"),QColor("#ff9b77"),QColor("#ffd1bf"),QColor("#eb5676"),
      QColor("#ffa398"),QColor("#d72b3c"),QColor("#ffe2cb"),QColor("#f16b4c")}
      : QList<QColor>{QColor(t.red),QColor(t.blue),QColor(t.teal),QColor("#f8b869")};
- if(brand_label_)brand_label_->setVisible(index==0&&width()>=1350);
+ if(brand_label_)brand_label_->setVisible(index==0&&layoutWidth(width(),ui_scale_)>=1350);
  // AresPanel and AresPage intentionally do not declare Q_OBJECT.
  // Their inherited Qt metaobjects belong to QFrame/QWidget. In particular,
  // findChildren<AresPage*>() matches arbitrary QWidgets and then tries to
@@ -2026,6 +2241,7 @@ void MainWindow::setTheme(int index){
   if(altitude_plot_)altitude_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
   if(rpm_target_plot_)rpm_target_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
   if(rpm_feedback_plot_)rpm_feedback_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
+  if(rpm_equivalent_plot_)rpm_equivalent_plot_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(preview_)preview_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(live_)live_->reTheme(QColor(t.fg),QColor(t.bg),QColor(t.grid),colors);
  if(view_)view_->setTheme(QColor(t.bg),QColor(t.fg),QColor(t.red),QColor(t.blue));
@@ -2034,7 +2250,7 @@ void MainWindow::setTheme(int index){
      const QString accent=bridge_.isReal()?QString("#ffb57d"):t.red;
      plant_selector_->setStyleSheet(QString(
          "QComboBox#plantSelector { background:%1; color:%2; border:1px solid %2; "
-         "border-radius:8px; padding:7px 12px; font-weight:800; min-height:19px; } "
+         "border-radius:8px; font-weight:800; } "
          "QComboBox#plantSelector:hover { border:2px solid %2; } "
          "QComboBox#plantSelector:disabled { color:%3; border-color:%3; }")
          .arg(t.bg,accent,t.grid));
@@ -2103,6 +2319,7 @@ void MainWindow::startRecording() {
             double(config.periods) / waveformConfig().frequency_hz;
     }
     recorded_samples_ = 0;
+    recorded_host_rows_=recorded_fmu_rows_=0;
     recording_events_ = 0;
     recording_should_stop_ = false;
     last_saved_s_ = -1.e9;
@@ -2121,9 +2338,19 @@ void MainWindow::startRecording() {
     if (recording_config_.save_baro) columns << "pressure_hPa" << "relative_alt_m";
     if (recording_config_.save_validity) columns << "orientation_valid" << "mag_valid" << "baro_valid";
     if (recording_config_.save_strategy_source) columns << "strategy" << "source";
+    columns << "plant" << "fmu_sample_ms" << "fmu_dshot_valid"
+            << "dshot_fmu_m1" << "dshot_fmu_m2" << "dshot_fmu_m3" << "dshot_fmu_m4"
+            << "fmu_armed" << "fmu_state" << "host_dshot_valid" << "host_dshot_age_s"
+            << "dshot_host_m1" << "dshot_host_m2" << "dshot_host_m3" << "dshot_host_m4"
+            << "battery_valid" << "battery_voltage_v" << "quaternion_valid" << "qw" << "qx" << "qy" << "qz"
+            << "host_dshot_source" << "rpm_map_valid" << "rpm_map_min_dshot" << "rpm_map_max_dshot"
+            << "rpm_map_full_scale" << "rpm_map_deadband"
+            << "rpm_eq_host_m1" << "rpm_eq_host_m2" << "rpm_eq_host_m3" << "rpm_eq_host_m4"
+            << "rpm_eq_fmu_m1" << "rpm_eq_fmu_m2" << "rpm_eq_fmu_m3" << "rpm_eq_fmu_m4";
     recording_stream_ << columns.join(',') << "\n";
     recording_clock_.start();
     recorder_active_ = true;
+    if(bridge_.isReal())bridge_.beginRealRecording();
     record_btn_->setText("RECORDER ●");
     status_rec_->setText("REC: ACTIVE");
     recording_dialog_->setRecordingState(true);
@@ -2160,7 +2387,17 @@ void MainWindow::startRecording() {
             yaml << "  controller_acknowledgement: "
                  << (bridge_.feedbackFresh() ? "available" : "not_confirmed") << '\n';
             yaml << "  time_unit: " << quoteYaml(QStringList{"ms","s","min"}[config.time_unit]) << '\n';
+            yaml << "  plant: " << (bridge_.isReal()?"REAL":"SIM") << '\n';
+            yaml << "  motor_input_schema: fmu_imu_snapshot_v1\n";
+            yaml << "  motor_order: [M1, M2, M3, M4] # logical, after firmware remap\n";
+            yaml << "  fmu_input: accepted throttle setpoint at IMU processing, not measured RPM\n";
+            yaml << "  missing_motor_values: blank\n";
+            yaml << "  host_time: ROS receive timestamp; fmu_sample_ms is MCU uptime\n";
+            yaml << "  host_dshot_age_semantics: reception_age_for_topic_or_reported_tx_age_plus_reception_for_status\n";
+            yaml << "  rpm_equivalent: inverse_nominal_host_map_not_measured_speed\n";
             yaml << "  saved_groups:\n";
+            yaml << "    motor_input: true\n";
+
             yaml << "    attitude: " << (config.save_attitude ? "true" : "false") << '\n';
             yaml << "    reference: " << (config.save_reference ? "true" : "false") << '\n';
             yaml << "    error: " << (config.save_error ? "true" : "false") << '\n';
@@ -2178,6 +2415,9 @@ void MainWindow::startRecording() {
 
 void MainWindow::stopRecording() {
     if (!recorder_active_) return;
+    if(bridge_.isReal()){
+        for(const auto& sample:bridge_.drainRealRecording(true))saveRecord(sample);
+    }
     recorder_active_ = false;
     recording_should_stop_ = false;
     recording_stream_.flush();
@@ -2260,7 +2500,28 @@ void MainWindow::saveRecord(const Telemetry& sample) {
         out << ',' << controller_->currentText()
             << ',' << (manual_mode_ ? "MANUAL" : "AUTOMATIC");
     }
+    out << ',' << (sample.from_real?"REAL":"SIM") << ',';
+    if(sample.fmu_dshot_valid)out<<sample.fmu_sample_ms;
+    out<<','<<int(sample.fmu_dshot_valid);
+    for(auto code:sample.fmu_dshot){out<<',';if(sample.fmu_dshot_valid)out<<unsigned(code);}
+    out<<',';if(sample.fmu_dshot_valid)out<<int(sample.fmu_armed);
+    out<<',';if(sample.fmu_dshot_valid)out<<unsigned(sample.fmu_state);
+    out<<','<<int(sample.host_dshot_valid)<<',';
+    if(sample.host_dshot_valid)out<<sample.host_dshot_age_s;
+    for(auto code:sample.host_dshot){out<<',';if(sample.host_dshot_valid)out<<unsigned(code);}
+    out<<','<<int(sample.battery_valid)<<',';if(sample.battery_valid)out<<sample.battery_voltage_v;
+    out<<','<<int(sample.orientation_valid);
+    for(double q:{sample.orientation.w,sample.orientation.x,sample.orientation.y,sample.orientation.z}){out<<',';if(sample.orientation_valid)out<<q;}
+    out<<',';if(sample.host_dshot_valid)out<<originName(sample.host_origin);
+    out<<','<<int(sample.nominal_map.valid());
+    const auto map=sample.nominal_map;
+    for(double v:{double(map.min_code),double(map.max_code),map.full_rpm,map.deadband_rpm}){out<<',';if(map.valid())out<<v;}
+    const auto host_rpm=sample.host_dshot_valid?map.inverse(sample.host_dshot):std::nullopt;
+    const auto fmu_rpm=sample.fmu_dshot_valid?map.inverse(sample.fmu_dshot):std::nullopt;
+    for(const auto& rpm:{host_rpm,fmu_rpm})for(std::size_t i=0;i<4;++i){out<<',';if(rpm)out<<(*rpm)[i];}
     out << "\n";
+    if(sample.host_dshot_valid)++recorded_host_rows_;
+    if(sample.fmu_dshot_valid)++recorded_fmu_rows_;
     ++recorded_samples_;
     if (recorded_samples_ % 128 == 0) out.flush();
     if (out.status() != QTextStream::Ok) {
@@ -2281,6 +2542,8 @@ void MainWindow::exportSummary() {
     out << "Controller selection: " << controller_->currentText() << '\n';
     out << "Source: " << (manual_mode_ ? "MANUAL" : "AUTOMATIC") << '\n';
     out << "Samples written to disk: " << recorded_samples_ << '\n';
+    out << "Host DShot valid rows: " << recorded_host_rows_ << '\n';
+    out << "FMU DShot valid rows: " << recorded_fmu_rows_ << '\n';
     out << "Samples with valid orientation: " << recording_stats_.count << '\n';
     out << "Capture time [wall seconds]: " << recording_clock_.elapsed() / 1000.0 << '\n';
     out << "Detected local maxima: " << recording_events_ << '\n';

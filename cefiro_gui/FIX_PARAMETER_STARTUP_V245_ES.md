@@ -1,0 +1,5 @@
+# CEFIRO GUI v2.4.5 — Parameter startup fix
+
+La declaración rígida de tipo double de `nominal_rpm_deadband` causaba InvalidParameterTypeException al recibir un string. El YAML anterior contenía un decimal sin comillas; por tanto la causa exacta de la interpretación en el equipo no se puede confirmar sin inspeccionar el archivo instalado y el locale. La nueva declaración dinámica admite double, integer y string numérico con punto decimal; se valida que el número sea finito y no negativo. Una configuración inválida no cierra la GUI ni inventa RPM: bloquea el cálculo nominal de respaldo hasta disponer de un mapa válido del hardware. La configuración por defecto es 25 RPM (entero YAML). No se cambia la actuación, el mapeo, las ganancias, el firmware, la IMU ni el escalado de v2.4.4.
+
+Sustituir la carpeta `cefiro_gui`, compilar con `colcon build --symlink-install --packages-up-to cefiro_gui --cmake-clean-cache` y cargar `source install/setup.bash` en una terminal nueva. Probar el arranque con motores desarmados. La compilación completa ROS 2/Qt6 no está disponible en el entorno de preparación.

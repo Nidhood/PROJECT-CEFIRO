@@ -1,4 +1,8 @@
 #include "cefiro_gui/recording_dialog.hpp"
+#include "cefiro_gui/ui_scale.hpp"
+#include <QResizeEvent>
+#include <QTimer>
+#include <QScreen>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
@@ -54,6 +58,8 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     outer->addWidget(heading);
     auto* subtitle = new QLabel("Configure capture rules, exported columns and recording progress", this);
     subtitle->setObjectName("pageSubtitle");
+    subtitle->setWordWrap(true);
+    heading->setWordWrap(true);
     outer->addWidget(subtitle);
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
@@ -72,6 +78,7 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     cap->setObjectName("panelTitle");
     dv->addWidget(cap);
     auto* form = new QFormLayout;
+    form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     auto* folder = new QHBoxLayout;
     directory_ = new QLineEdit(destination);
     QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
@@ -172,6 +179,7 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     col_title->setObjectName("panelTitle");
     colv->addWidget(col_title);
     auto* col_grid = new QGridLayout;
+    columns_grid_=col_grid;
     save_attitude_ = new QCheckBox("Attitude: roll / pitch / yaw", columns);
     save_reference_ = new QCheckBox("Reference: ref_roll / ref_pitch / ref_yaw", columns);
     save_error_ = new QCheckBox("Tracking error", columns);
@@ -188,6 +196,13 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
                             save_mag_, save_baro_, save_validity_, save_strategy_source_};
     for (int i = 0; i < boxes.size(); ++i) col_grid->addWidget(boxes[i], i / 2, i % 2);
     colv->addLayout(col_grid);
+    auto* motorNote = new QLabel("Always recorded: FMU DShot M1-M4, host DShot M1-M4, validity, MCU timestamp, armed/state, battery and quaternion. Missing values are blank; host/FMU equivalent RPM is calculated from the command map, not measured speed.", columns);
+    motorNote->setWordWrap(true);
+    motorNote->setObjectName("hint");
+    colv->addWidget(motorNote);
+    motor_input_status_=new QLabel("DShot / RPM: waiting for real telemetry",columns);
+    motor_input_status_->setWordWrap(true);
+    colv->addWidget(motor_input_status_);
     root->addWidget(columns);
 
     auto* status = new QFrame(contents);
@@ -197,19 +212,24 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     status_title->setObjectName("panelTitle");
     sv->addWidget(status_title);
     auto* stats = new QGridLayout;
+    stats_grid_=stats;
     state_label_ = new QLabel("IDLE", status);
     state_label_->setObjectName("metricValue");
     samples_label_ = new QLabel("0", status);
     duration_label_ = new QLabel("0.000 s", status);
     peaks_label_ = new QLabel("0", status);
     for (auto* metric : {samples_label_, duration_label_, peaks_label_}) metric->setObjectName("metricValue");
-    stats->addWidget(new QLabel("STATE", status), 0, 0);
+    stats_captions_[0]=new QLabel("STATE", status);
+    stats->addWidget(stats_captions_[0], 0, 0);
     stats->addWidget(state_label_, 0, 1);
-    stats->addWidget(new QLabel("SAMPLES", status), 0, 2);
+    stats_captions_[1]=new QLabel("SAMPLES", status);
+    stats->addWidget(stats_captions_[1], 0, 2);
     stats->addWidget(samples_label_, 0, 3);
-    stats->addWidget(new QLabel("ELAPSED", status), 0, 4);
+    stats_captions_[2]=new QLabel("ELAPSED", status);
+    stats->addWidget(stats_captions_[2], 0, 4);
     stats->addWidget(duration_label_, 0, 5);
-    stats->addWidget(new QLabel("PEAKS", status), 0, 6);
+    stats_captions_[3]=new QLabel("PEAKS", status);
+    stats->addWidget(stats_captions_[3], 0, 6);
     stats->addWidget(peaks_label_, 0, 7);
     sv->addLayout(stats);
     progress_bar_ = new QProgressBar(status);
@@ -250,6 +270,39 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     updateCaptureVisibility();
 }
 
+void RecordingDialog::setTypographyScale(double scale){
+    ui_scale_=scale;
+    notes_->setMaximumHeight(scaledPixels(100,scale));
+    if(!isVisible()){
+        const auto available=screen()->availableGeometry().size();
+        resize(std::min(scaledPixels(900,scale),available.width()-40),
+               std::min(scaledPixels(790,scale),available.height()-80));
+    }
+    reflowTypography();
+}
+void RecordingDialog::resizeEvent(QResizeEvent* event){
+    QDialog::resizeEvent(event);
+    QTimer::singleShot(0,this,[this]{reflowTypography();});
+}
+void RecordingDialog::reflowTypography(){
+    if(!columns_grid_||!stats_grid_)return;
+    const int logical=layoutWidth(width(),ui_scale_);
+    const int cols=logical>=800?2:1;
+    if(cols!=column_count_){
+        const QList<QCheckBox*> boxes{save_attitude_,save_reference_,save_error_,save_rates_,save_accel_,save_mag_,save_baro_,save_validity_,save_strategy_source_};
+        for(auto* box:boxes)columns_grid_->removeWidget(box);
+        for(int i=0;i<boxes.size();++i)columns_grid_->addWidget(boxes[i],i/cols,i%cols);
+        columns_grid_->setColumnStretch(0,1);columns_grid_->setColumnStretch(1,cols==2?1:0);
+        column_count_=cols;
+    }
+    const int groups=logical>=800?4:logical>=480?2:1;
+    if(groups!=stat_count_){
+        QLabel* values[]={state_label_,samples_label_,duration_label_,peaks_label_};
+        for(int i=0;i<4;++i){stats_grid_->removeWidget(stats_captions_[i]);stats_grid_->removeWidget(values[i]);}
+        for(int i=0;i<4;++i){stats_grid_->addWidget(stats_captions_[i],i/groups,2*(i%groups));stats_grid_->addWidget(values[i],i/groups,2*(i%groups)+1);}
+        stat_count_=groups;
+    }
+}
 void RecordingDialog::updateCaptureVisibility() {
     const int mode = capture_mode_->currentIndex();
     timing_panel_->setVisible(mode == 1 || mode == 2 || mode == 3);
@@ -322,6 +375,7 @@ void RecordingDialog::updateStatus(const QString& state, quint64 samples,
     if (estimate_label_) estimate_label_->setText(estimate_text.isEmpty() ? "Estimate: open-ended" : estimate_text);
 }
 void RecordingDialog::showError(const QString& message) { error_label_->setText(message); }
+void RecordingDialog::setMotorInputStatus(const QString& message){if(motor_input_status_)motor_input_status_->setText(message);}
 void RecordingDialog::setWaveformInformation(const QString& text) { waveform_label_->setText(text); }
 
 }  // namespace cefiro::gui
