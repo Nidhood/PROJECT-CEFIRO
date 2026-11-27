@@ -20,6 +20,8 @@ def generate_launch_description():
         DeclareLaunchArgument('allow_direct_dshot', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('protocol_mode', default_value='cf1',
                               choices=['legacy_text', 'cf1']),
+        DeclareLaunchArgument('allow_experimental_roll', default_value='false',
+                              choices=['true', 'false']),
         DeclareLaunchArgument('enable_command_tx', default_value='false',
                               choices=['true', 'false']),
         DeclareLaunchArgument('rpm_to_dshot_enabled', default_value='false',
@@ -38,6 +40,8 @@ def generate_launch_description():
                 'allow_direct_dshot': ParameterValue(LaunchConfiguration('allow_direct_dshot'), value_type=bool),
                 'transport': 'serial',
                 'protocol_mode': LaunchConfiguration('protocol_mode'),
+                'allow_experimental_roll': ParameterValue(
+                    LaunchConfiguration('allow_experimental_roll'), value_type=bool),
                 'enable_command_tx': ParameterValue(
                     LaunchConfiguration('enable_command_tx'), value_type=bool),
                 'rpm_to_dshot_enabled': ParameterValue(
