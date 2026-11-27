@@ -59,5 +59,6 @@ private:
     QElapsedTimer hover_timer_;
     QPoint hover_position_{};
     bool hovering_{false};
+    bool discrete_codes_{false};
 };
 }

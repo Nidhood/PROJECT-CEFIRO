@@ -6,9 +6,9 @@ def body(a,b):return s.split('void MainWindow::'+a,1)[1].split('void MainWindow:
 start=body('startEmbeddedRoll(){','serviceEmbeddedRoll(){')
 service=body('serviceEmbeddedRoll(){','finishEmbeddedRoll(')
 finish=body('finishEmbeddedRoll(','startOutput(){')
-for token in ('startRecording(&config)','publishSwingTuning(true,{kp,kd,duration,-1.,double(embedded_roll_token_),1.})','stat[2]=="1"','stat[20]=="1"','QMessageBox::No','swing_session_active','external_supply_policy_ready','firmware_fault_latched'):
+for token in ('startRecording(&config)','publishSwingTuning(true,request)','std::vector<double>{kp,kd,duration,-1.,double(embedded_roll_token_),1.}','std::vector<double>{2.,double(embedded_roll_token_)}','stat[2]=="1"','stat[20]=="1"','QMessageBox::No','swing_session_active','external_supply_policy_ready','firmware_fault_latched'):
     assert token in start,token
-assert start.index('startRecording(&config)')<start.index('publishSwingTuning(true,{kp')
+assert start.index('startRecording(&config)')<start.index('publishSwingTuning(true,request)')
 for block in (start,service,finish):
     for forbidden in ('publishReference(', 'publishMotorCommand(', 'setMotorArmed(', 'bridge_.setEnabled(true)', 'publishGains('):
         assert forbidden not in block,forbidden

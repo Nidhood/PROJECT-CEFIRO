@@ -1,0 +1,4 @@
+SHADOW,TORQUE_SATURATION
+FMU fault: 
+Bridge result: 
+Last ACK: 533,CMD_SWING_LEASE,OK

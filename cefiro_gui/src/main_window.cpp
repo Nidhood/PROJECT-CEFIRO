@@ -322,7 +322,7 @@ void MainWindow::buildDashboard(){
     // Every dashboard scope follows only the series that actually have data.
     // Minimum spans prevent a single stable sensor from collapsing the Y axis.
     const double minimum_span[]={4.0,4.0,5.0,8.0,3.0,5.0,2.0,3.0,100.0};
-    dash_[size_t(i)]->setAutoFitY(true,minimum_span[i]);
+    dash_[size_t(i)]->setAutoFitY(i != 8,minimum_span[i]);
     inner->addWidget(dash_[size_t(i)],1);
     panel->setMinimumHeight(308);
     // Each dashboard panel occupies exactly one cell in a 2-column grid.
@@ -472,7 +472,7 @@ void MainWindow::buildControl() {
     auto* ctrl = new QHBoxLayout;
     ctrl->addWidget(label("STRATEGY", "eyebrow"));
     controller_ = new QComboBox(architecture);
-    controller_->addItems({"OPEN LOOP", "PID", "LQR", "SWING-UP + LQR (SIM)", "CUSTOM", "SWING-UP + LQR (STM32)"});
+    controller_->addItems({"OPEN LOOP", "PID", "LQR", "SWING-UP + LQR (SIM)", "CUSTOM", "SWING-UP + LQR (STM32)", "ON HOVER / LQR (STM32)"});
     ctrl->addWidget(controller_, 1);
     arch->addLayout(ctrl);
     embedded_roll_panel_=new QWidget(architecture);
@@ -789,7 +789,9 @@ void MainWindow::buildControl() {
                     const QString warning=experimental?"UNVALIDATED Roll model. Requires guarded one-axis fixture, mechanical fall restraint, independent physical motor power cut, independently monitored/current-limited ESC supply. No free flight. May abort before capture. Confirm these safeguards are in place?":"Requires measured roll actuator/model calibration, protected one-axis fixture, independent physical E-stop and monitored power. Motor stop does not prevent a gravity-driven fall. No free flight. Continue only after bench safety review?";
                     if(QMessageBox::warning(&dialog,"POWERED BENCH TRIAL",warning,QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
                     if(experimental&&!recorder_active_){
-                        RecordingConfig config=recording_dialog_->configuration();config.prefix="cefiro_swing_lqr_experiment";config.mode=0;config.start_delay_s=0.;config.save_interval_ms=0;
+                        RecordingConfig config=recording_dialog_->configuration();
+                        config.prefix="cefiro_swing_lqr_experiment";
+                        config.mode=0;config.start_delay_s=0.;config.save_interval_ms=0;
                         config.metadata=config.save_attitude=config.save_rates=config.save_accel=config.save_validity=config.save_strategy_source=true;
                         config.notes+=QString(" | Experimental roll, provisional host model, Kp=%1 Kd=%2 T=%3 s, predictor=280ms, no physical validation").arg(v[0]).arg(v[1]).arg(v[2]);
                         startRecording(&config);if(!recorder_active_)return;ownTrialRecording=true;
@@ -1554,16 +1556,18 @@ void MainWindow::updateReferenceGate(){
 }
 void MainWindow::updateEmbeddedRollUi(){
     if(!embedded_roll_panel_ || !controller_ || !activate_btn_)return;
-    const bool selected=bridge_.isReal() && !manual_mode_ && controller_->currentText()=="SWING-UP + LQR (STM32)";
-    embedded_roll_panel_->setVisible(selected);
+    const bool selected=bridge_.isReal() && !manual_mode_ && (controller_->currentText()=="SWING-UP + LQR (STM32)" || controller_->currentText()=="ON HOVER / LQR (STM32)");
+    const bool hover=controller_->currentText()=="ON HOVER / LQR (STM32)";
+    embedded_roll_panel_->setVisible(selected && !hover);
     embedded_roll_panel_->setEnabled(!embedded_roll_active_);
-    if(!command_active_)activate_btn_->setText(selected?"START CONTROL / STM32":"APPLY / ACTIVATE");
+    if(!command_active_)activate_btn_->setText(selected?(hover?"AUTHORIZE ON HOVER / STM32":"START CONTROL / STM32"):"APPLY / ACTIVATE");
 }
 void MainWindow::startEmbeddedRoll(){
     if(!bridge_.isReal() || manual_mode_ || command_active_ || recorder_active_ || !output_enabled_->isChecked()){
         QMessageBox::warning(this,"STM32 control","Select REAL / AUTOMATIC, enable Output, and stop other commands and recordings first.");return;
     }
-    const auto precheck=[this]{
+    const bool hover=controller_->currentText()=="ON HOVER / LQR (STM32)";
+    const auto precheck=[this,hover]{
         QStringList failed;
         const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
         const auto stat=state.value("mcu_status").toString().split(',');
@@ -1587,6 +1591,7 @@ void MainWindow::startEmbeddedRoll(){
         require(!state.value("swing_session_active").toBool(true), "Swing session active or unknown");
         require(state.value("mcu_fmu_state").toInt(99)<=1, "FMU is not idle (state > 1 or unknown)");
         require(stat.size()>20 && stat[0]=="FMU_V3" && stat[2]=="1" && stat[20]=="1", "FMU STAT missing, calibration incomplete or AHRS not ready");
+        if(hover)require(stat.size()>26 && stat[26]=="1500", "Hover firmware V15 required");
         return failed;
     };
     const auto ready=[&precheck]{return precheck().isEmpty();};
@@ -1597,16 +1602,17 @@ void MainWindow::startEmbeddedRoll(){
         return;
     }
     if(QMessageBox::warning(this,"EXPERIMENTAL STM32 CONTROL",
-        "Unvalidated Roll-only profile. Confirm motor numbering and left/right pairs M1+M4 / M2+M3 individually with propellers removed before a powered run. The torque model is provisional after the pair change. Confirm a guarded one-axis fixture (Pitch/Yaw restrained), mechanical fall restraint, independent physical motor power cut and externally monitored/current-limited ESC supply. No free flight. The controller may abort; a motor stop does not prevent gravity-driven motion. Start inverted and stationary. Start once?",
+        hover ? "One-shot guarded roll capture: motors remain disarmed until within 5 deg and stationary for 550 ms. Keep the mechanical positioning fixture engaged through SPINUP and PRETRIM. Never use hands near energized propellers. Confirm independent physical power cut, pitch/yaw restraint, fall restraint and monitored supply. Experimental 5 s regulation, no swing-up or automatic rearm. Start once?" : "Unvalidated Roll-only profile. Confirm motor numbering and left/right pairs M1+M4 / M2+M3 individually with propellers removed before a powered run. The torque model is provisional after the pair change. Confirm a guarded one-axis fixture (Pitch/Yaw restrained), mechanical fall restraint, independent physical motor power cut and externally monitored/current-limited ESC supply. No free flight. The controller may abort; a motor stop does not prevent gravity-driven motion. Start inverted and stationary. Start once?",
         QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
-    if(!ready() || !output_enabled_->isChecked() || recorder_active_ || command_active_ || manual_mode_ || controller_->currentText()!="SWING-UP + LQR (STM32)")return;
+    if(!ready() || !output_enabled_->isChecked() || recorder_active_ || command_active_ || manual_mode_ || (controller_->currentText()!="SWING-UP + LQR (STM32)" && controller_->currentText()!="ON HOVER / LQR (STM32)"))return;
     const double kp=embedded_roll_kp_->value(),kd=embedded_roll_kd_->value(),duration=embedded_roll_duration_->value();
     RecordingConfig config=recording_dialog_->configuration();
-    config.prefix="cefiro_swing_lqr_experiment";config.mode=0;config.start_delay_s=0.;config.save_interval_ms=0;
+    config.prefix=hover?"cefiro_hover_lqr_experiment":"cefiro_swing_lqr_experiment";config.mode=0;config.start_delay_s=0.;config.save_interval_ms=0;
     config.metadata=config.save_attitude=config.save_rates=config.save_accel=config.save_validity=config.save_strategy_source=true;
     // The true reference is from FMU SWR telemetry, not the GUI reference pad.
     config.save_reference=config.save_error=false;
-    config.notes+=QString(" | STM32 experimental Roll map rev3 (left M1/M4, right M2/M3; model provisional), Kp=%1 Kd=%2 T=%3 s, LQR=[1.22401374668,0.259015155719], predictor=280ms hypothesis, unvalidated").arg(kp).arg(kd).arg(duration);
+    if(hover)config.notes+=" | STM32 local hover only, 0 deg reference, model provisional, 5 s hold";
+    else config.notes+=QString(" | STM32 experimental Roll map rev3 (left M1/M4, right M2/M3; model provisional), Kp=%1 Kd=%2 T=%3 s, LQR=[1.22401374668,0.259015155719], predictor=280ms hypothesis, unvalidated").arg(kp).arg(kd).arg(duration);
     startRecording(&config);if(!recorder_active_)return;
     embedded_roll_log_.setFileName(recording_path_+".swing.csv");
     if(!embedded_roll_log_.open(QIODevice::WriteOnly|QIODevice::Text|QIODevice::NewOnly)){
@@ -1618,7 +1624,8 @@ void MainWindow::startEmbeddedRoll(){
         embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();stopRecording();applied_value_->setText("Recording or precheck failed");return;
     }
     embedded_roll_token_=static_cast<unsigned>(QRandomGenerator::global()->bounded(1,65536));
-    if(!bridge_.publishSwingTuning(true,{kp,kd,duration,-1.,double(embedded_roll_token_),1.})){
+    const std::vector<double> request=hover?std::vector<double>{2.,double(embedded_roll_token_)}:std::vector<double>{kp,kd,duration,-1.,double(embedded_roll_token_),1.};
+    if(!bridge_.publishSwingTuning(true,request)){
         embedded_roll_token_=0;embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();stopRecording();applied_value_->setText("No hardware command subscriber");return;
     }
     QSettings saved("CEFIRO","EmbeddedRoll");saved.setValue("kp",kp);saved.setValue("kd",kd);saved.setValue("duration",duration);
@@ -1639,7 +1646,7 @@ void MainWindow::serviceEmbeddedRoll(){
         if(!hostReason.isEmpty()){finishEmbeddedRoll(hostReason);return;}
     }
     if(raw.startsWith("REJECTED:") || raw.startsWith("FAULT:") ||
-       (raw.startsWith("CMD_SWING_EXP:") && !raw.endsWith(": OK")) ||
+       ((raw.startsWith("CMD_SWING_EXP:") || raw.startsWith("CMD_SWING_HOVER:")) && !raw.endsWith(": OK")) ||
        (raw.startsWith("SHADOW,") && raw.split(',').size()==2) || raw.startsWith("CMD_SWING_STOP:")){
         finishEmbeddedRoll(raw);return;
     }
@@ -1654,10 +1661,10 @@ void MainWindow::serviceEmbeddedRoll(){
         embedded_roll_last_tick_=parts[12];embedded_roll_feedback_.start();
         // The acquisition queue writes phase rows. Here only supervise feedback.
         if(embedded_roll_stream_.status()!=QTextStream::Ok){finishEmbeddedRoll("Phase log write failed");return;}
-        const QString phase=parts[1].toDouble()==0.?"SPINUP":parts[1].toDouble()==2.?"LQR REGULATION":"SWING-UP";
+        const QString phase=parts[1].toDouble()==3.?"WAITING FOR POSE / DISARMED":parts[1].toDouble()==4.?"PRETRIM / FIXTURE HOLD":parts[1].toDouble()==0.?"SPINUP":parts[1].toDouble()==2.?"LQR REGULATION":"SWING-UP";
         activate_btn_->setText("STM32 CONTROL ACTIVE");
         applied_value_->setText(QString("%1 · Roll %2° / ref %3° · DShot %4 %5 %6 %7").arg(phase).arg(parts[2].toDouble()*57.295779513,0,'f',1).arg(parts[3].toDouble()*57.295779513,0,'f',1).arg(parts[8],parts[9],parts[10],parts[11]));
-    } else if(raw=="CMD_SWING_EXP: OK" && !embedded_roll_feedback_.isValid()){
+    } else if((raw=="CMD_SWING_EXP: OK" || raw=="CMD_SWING_HOVER: OK") && !embedded_roll_feedback_.isValid()){
         applied_value_->setText("FMU accepted: waiting for phase telemetry");
     }
     if((!embedded_roll_feedback_.isValid() && embedded_roll_clock_.elapsed()>1000) ||
@@ -1665,7 +1672,7 @@ void MainWindow::serviceEmbeddedRoll(){
         finishEmbeddedRoll("SAFE STOP: FMU phase telemetry timeout");return;
     }
     // Host ceiling follows the nominal trajectory plus FMU capture/hold budget.
-    const qint64 trial_budget_ms=static_cast<qint64>((embedded_roll_duration_->value()+16.0)*1000.0);
+    const qint64 trial_budget_ms=(controller_->currentText()=="ON HOVER / LQR (STM32)" ? 24000 : static_cast<qint64>((embedded_roll_duration_->value()+16.0)*1000.0));
     if(embedded_roll_clock_.elapsed()>trial_budget_ms){finishEmbeddedRoll("SAFE STOP: experiment wall-clock ceiling");return;}
     if(!embedded_roll_lease_.isValid() || embedded_roll_lease_.elapsed()>=80){
         if(!bridge_.publishSwingTuning(true,{double(embedded_roll_token_)})){finishEmbeddedRoll("Safety lease unavailable");return;}
@@ -1696,7 +1703,7 @@ void MainWindow::finishEmbeddedRoll(const QString& reason,bool emergency){
 }
 void MainWindow::startOutput(){
  if(command_active_) return; // ARM is an explicit edge, not an automatic retry.
- if(!manual_mode_ && controller_->currentText()=="SWING-UP + LQR (STM32)"){
+ if(!manual_mode_ && (controller_->currentText()=="SWING-UP + LQR (STM32)" || controller_->currentText()=="ON HOVER / LQR (STM32)")){
    startEmbeddedRoll();return;
  }
  if(bridge_.isReal() && manual_mode_) {
@@ -3230,7 +3237,7 @@ void MainWindow::refreshStepMetrics() {
 }
 
 void MainWindow::sendGains(){
- if(bridge_.isReal() && (embedded_roll_active_ || controller_->currentText()=="SWING-UP + LQR (STM32)")){
+ if(bridge_.isReal() && (embedded_roll_active_ || (controller_->currentText()=="SWING-UP + LQR (STM32)" || controller_->currentText()=="ON HOVER / LQR (STM32)"))){
    QMessageBox::information(this,"STM32 gains","Use the initial Swing-Up gains in CONTROL ARCHITECTURE. The experimental embedded LQR is fixed. No ROS gain matrix is sent to the real FMU.");return;
  }
  std::vector<double> pid,lqr;pid.reserve(9);lqr.reserve(18);

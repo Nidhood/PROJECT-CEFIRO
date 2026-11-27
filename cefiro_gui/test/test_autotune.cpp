@@ -55,6 +55,16 @@ int main(){
     assert(mapped.rows[0].valid&&std::abs(mapped.rows[0].u-.15)<1e-9&&mapped.rows[0].v==0.);
     assert(mapped.rows[1].valid&&mapped.rows[1].u==0.&&std::abs(mapped.rows[1].v-.2)<1e-9);
     assert(!mapped.rows[2].valid&&!mapped.rows[3].valid);
+    // Automatic trials retain DShot 48 on the inactive pair. Both idle
+    // and powered/idle records are admissible; simultaneous powered pairs are not.
+    auto idle=std::filesystem::temp_directory_path()/"cefiro_rev3_idle_test.csv";
+    {std::ofstream f(idle);f<<"ros_time_s,roll_deg,pitch_deg,p_deg_s,plant,quaternion_valid,motor_map_revision,fmu_dshot_valid,fmu_sample_ms,dshot_fmu_m1,dshot_fmu_m2,dshot_fmu_m3,dshot_fmu_m4\n";
+      for(int i=0;i<120;++i){f<<i*.04<<",-170,0,1,REAL,1,3,1,"<<1000+40*i<<',';
+       switch(i%4){case 0:f<<"48,500,500,48";break;case 1:f<<"600,48,48,600";break;case 2:f<<"48,48,48,48";break;default:f<<"500,600,600,500";break;}f<<'\n';}}
+    auto idleRun=read(idle.string());std::filesystem::remove(idle);
+    assert(idleRun.rows[0].valid&&idleRun.rows[1].valid&&idleRun.rows[2].valid&&!idleRun.rows[3].valid);
+    assert(std::abs(idleRun.rows[0].u-.048)<1e-12&&std::abs(idleRun.rows[0].v-.5)<1e-12);
+    std::cout<<"PASS: automatic idle code 48 retained for identification\n";
     std::cout<<"PASS: Rev3 pair provenance; rejects historical pairing and wrong revision\n";
     std::cout<<"PASS: MCU time, voltage hypothesis, no invented current, gap-aware energy\n";
     std::cout<<"PASS: 434 candidates, 12 cases each; known LQR and delay rejection; regression; CSV provenance; rejects unexcited axis.\n";

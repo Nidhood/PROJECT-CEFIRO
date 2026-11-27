@@ -9,7 +9,7 @@ namespace { volatile std::sig_atomic_t shutdown_signal=0; void signal_handler(in
 int main(int argc,char** argv){
     QApplication app(argc,argv);app.setApplicationName("CEFIRO HMI");app.setOrganizationName("CEFIRO");
     rclcpp::init(argc,argv,rclcpp::InitOptions(),rclcpp::SignalHandlerOptions::None);
-    RCLCPP_INFO(rclcpp::get_logger("cefiro_hmi"),"CEFIRO GUI v2.4.29 - synchronized roll trial and full-rate recorder");
+    RCLCPP_INFO(rclcpp::get_logger("cefiro_hmi"),"CEFIRO GUI v2.4.33 - local ON HOVER capture, full-rate recorder");
     std::signal(SIGINT,signal_handler);std::signal(SIGTERM,signal_handler);
     if(qEnvironmentVariableIsSet("CEFIRO_GUI_TRACE_STARTUP")) {
         std::fprintf(stderr,"[CEFIRO startup] Constructing GUI\n");

@@ -27,6 +27,7 @@
 #include <limits>
 namespace cefiro::gui {
 ScopePlot::ScopePlot(const QString& title,const QString& units,const QStringList& series,QWidget* parent):QFrame(parent){
+    discrete_codes_ = (units == QStringLiteral("DShot"));
     setObjectName("chartFrame");setMinimumHeight(170);
     auto* root=new QVBoxLayout(this);root->setContentsMargins(4,2,4,4);root->setSpacing(2);
     auto* header=new QHBoxLayout;header->setSpacing(3);
@@ -283,9 +284,12 @@ void ScopePlot::refresh(){
     for(auto& series:data_){
         if(!series.line->isVisible())continue;
         QList<QPointF> points;
-        points.reserve(static_cast<int>(series.points.size()));
+        points.reserve(static_cast<int>(series.points.size()) * (discrete_codes_ ? 2 : 1));
         for(const auto& point:series.points){
-            if(point.x()>=x_->min()-1.0)points.push_back(point);
+            if(point.x()<x_->min()-1.0)continue;
+            if(discrete_codes_ && !points.empty())
+                points.push_back(QPointF(point.x(),points.back().y()));
+            points.push_back(point);
         }
         series.line->replace(points);
         // A single topic publication should still be visibly marked.
@@ -367,6 +371,9 @@ void ScopePlot::updateCursor(const QPoint& pos) {
             y = points.back().y();
         } else if (upper == points.begin()) {
             y = upper->y();
+        } else if (discrete_codes_) {
+            // DShot is an integer setpoint; hold the last reported code.
+            y = (upper->x() == t) ? upper->y() : std::prev(upper)->y();
         } else {
             const auto lower = std::prev(upper);
             const double dt = upper->x() - lower->x();
@@ -384,7 +391,7 @@ void ScopePlot::updateCursor(const QPoint& pos) {
         marker->setVisible(plot_area.contains(chart_->mapFromScene(marker_scene)));
         tooltip += QString("<br><span style=\"color:%1\">●</span> %2: <b>%3</b>")
             .arg(color.name(), data_[i].line->name())
-            .arg(y, 0, 'f', 3);
+            .arg(y, 0, 'f', discrete_codes_ ? 0 : 3);
         has_values = true;
     }
     if (!has_values) {

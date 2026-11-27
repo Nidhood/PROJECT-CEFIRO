@@ -1,0 +1,28 @@
+CEFIRO ATTITUDE EXPERIMENT SUMMARY
+CSV: /home/nidhood/cefiro_ws/src/cefiro/data/LQR/test_def_20261127_064010_073.csv
+Notes: 
+Controller selection: SWING-UP + LQR (STM32)
+Source: AUTOMATIC
+Samples written to disk: 208
+Event CSV: /home/nidhood/cefiro_ws/src/cefiro/data/LQR/test_def_20261127_064010_073.csv.events.csv
+Events written: 534
+Unmatched real IMU rows: 0
+Intentionally decimated IMU rows: 0
+IMU queue drops: 0
+Event queue drops: 0
+Write error: no
+Host DShot valid rows: 0
+FMU DShot valid rows: 208
+Samples with valid orientation: 208
+Capture time [wall seconds]: 8.25
+Detected local maxima: 0
+Note: controller actuation is not guaranteed without an external controller.
+ROLL RMSE=179.35deg MAE=179.35deg Peak=179.61deg
+PITCH RMSE=3.50deg MAE=3.50deg Peak=3.83deg
+YAW RMSE=159.74deg MAE=159.74deg Peak=160.21deg
+
+LATEST STEP RESPONSES DURING THIS RECORDING
+ROLL: no step recorded in this acquisition
+PITCH: no step recorded in this acquisition
+YAW: no step recorded in this acquisition
+Step metrics are estimated from the last step commanded on each axis.

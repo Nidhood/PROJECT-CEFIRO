@@ -51,7 +51,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.8.17";
+constexpr const char* kHardwareVersion = "0.8.18";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -214,7 +214,7 @@ public:
           std_msgs::msg::String msg; msg.data=text; pub_shadow_->publish(msg);
         };
         if(v.size()!=1){
-          const char* kind=v.empty()?"STOP":v.size()==4?"SHADOW (no motors)":v.size()==5?"POWERED":v.size()==6?"EXPERIMENT":"INVALID";
+          const char* kind=v.empty()?"STOP":v.size()==4?"SHADOW (no motors)":v.size()==2?"HOVER":v.size()==5?"POWERED":v.size()==6?"EXPERIMENT":"INVALID";
           RCLCPP_INFO(get_logger(), "GUI swing request: %s (%zu fields)",kind,v.size());
         }
         if (!can_tx_ || !sessionReady()) { report("REJECTED: CF1 connection unavailable"); return; }
@@ -234,6 +234,20 @@ public:
           std::erase_if(tx_queue_,[](const std::string& x){return x.find("|CMD_SWING_LEASE|")!=std::string::npos;});
           if(swing_confirmed_)(void)queueCommand("CMD_SWING_LEASE",{std::to_string(swing_token_)});
           return;
+        }
+        if (v.size()==2 && v[0]==2.0) {
+          if(!std::isfinite(v[1])||v[1]<1.||v[1]>65535.||std::floor(v[1])!=v[1]){report("REJECTED: invalid hover token");return;}
+          if(swing_token_||controller_enabled_||arm_requested_||arm_confirmed_||fault_latched_||
+             !allow_experimental_roll_||!power_gate_.external_manual||motor_map_revision_!=3U||
+             !manual_mode_confirmed_||!mcu_status_seen_||mcu_fmu_state_>1||!last_mcu_stat_||
+             Clock::now()-*last_mcu_stat_>750ms||!manualPowerReason(Clock::now()).empty()){
+            report("REJECTED: idle guarded hover session required");return;
+          }
+          swing_start_sequence_=queueCommand("CMD_SWING_HOVER",{std::to_string(static_cast<unsigned>(v[1]))});
+          if(!swing_start_sequence_){report("REJECTED: hover start not queued");return;}
+          swing_result_.clear();fmu_fault_reason_.clear();swing_token_=static_cast<unsigned>(v[1]);
+          swing_confirmed_=false;swing_last_gui_=Clock::now();swing_last_feedback_=swing_last_gui_;
+          RCLCPP_INFO(get_logger(),"Queued CMD_SWING_HOVER; awaiting STM32 ACK");return;
         }
         if (v.size()==5 || v.size()==6) {
           const bool experimental=v.size()==6;
@@ -1071,11 +1085,11 @@ private:
         emergencyStop();
         std_msgs::msg::String msg;msg.data="FAULT: MCU rejected swing lease";pub_shadow_->publish(msg);
       }
-      if(fields[1]=="CMD_SWING_REAL" || fields[1]=="CMD_SWING_EXP" || fields[1]=="CMD_SWING_SHADOW" || fields[1]=="CMD_SWING_STOP") {
+      if(fields[1]=="CMD_SWING_REAL" || fields[1]=="CMD_SWING_EXP" || fields[1]=="CMD_SWING_HOVER" || fields[1]=="CMD_SWING_SHADOW" || fields[1]=="CMD_SWING_STOP") {
         if(fields[2]=="OK") RCLCPP_INFO(get_logger(), "STM32 %s: %s (seq=%u)",fields[1].c_str(),fields[2].c_str(),static_cast<unsigned>(*ack));
         else RCLCPP_WARN(get_logger(), "STM32 %s: %s (seq=%u)",fields[1].c_str(),fields[2].c_str(),static_cast<unsigned>(*ack));
       }
-      if(fields[1]=="CMD_SWING_REAL" || fields[1]=="CMD_SWING_EXP") {
+      if(fields[1]=="CMD_SWING_REAL" || fields[1]=="CMD_SWING_EXP" || fields[1]=="CMD_SWING_HOVER") {
         if(swing_start_sequence_ && *ack==*swing_start_sequence_) {
           swing_start_sequence_.reset();swing_confirmed_=fields[2]=="OK";
           if(!swing_confirmed_)swing_token_=0;
