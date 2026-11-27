@@ -16,6 +16,9 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <sstream>
+#include <iomanip>
+#include <locale>
 using namespace std::chrono_literals;
 namespace cefiro::gui {
 namespace {
@@ -132,22 +135,22 @@ RosBridge::RosBridge() {
     auto mode_topic=node_->declare_parameter<std::string>("mode_topic","/cefiro/control/mode");
     auto strategy_topic=node_->declare_parameter<std::string>("strategy_topic","/cefiro/control/strategy");
     auto status_topic=node_->declare_parameter<std::string>("status_topic","/cefiro/control/status");
-    sub_imu_=node_->create_subscription<Imu>(imu_topic_,rclcpp::SensorDataQoS(),[this](const Imu::SharedPtr m){onImu(*m,false);});
+    sub_imu_=node_->create_subscription<Imu>(imu_topic_,rclcpp::SensorDataQoS().keep_last(512),[this](const Imu::SharedPtr m){onImu(*m,false);});
  auto real_imu_topic=node_->declare_parameter<std::string>("real_imu_topic","/real/imu/data");
  // Always subscribe to the original IMU stream, even when the optional
  // identification publisher is unavailable or uses an older firmware.
- sub_real_imu_=node_->create_subscription<Imu>(real_imu_topic,rclcpp::SensorDataQoS(),[this](const Imu::SharedPtr m){onImu(*m,true);});
+ sub_real_imu_=node_->create_subscription<Imu>(real_imu_topic,rclcpp::SensorDataQoS().keep_last(512),[this](const Imu::SharedPtr m){onImu(*m,true);});
  if(node_->declare_parameter<bool>("real_identification_input",true)) {
    const auto topic=node_->declare_parameter<std::string>("real_identification_topic","/real/cefiro/hardware/identification_sample");
-   sub_identification_=node_->create_subscription<cefiro_msgs::msg::IdentificationSample>(topic,rclcpp::SensorDataQoS(),
+   sub_identification_=node_->create_subscription<cefiro_msgs::msg::IdentificationSample>(topic,rclcpp::SensorDataQoS().keep_last(512),
       [this](const cefiro_msgs::msg::IdentificationSample::SharedPtr m){onIdentification(*m);});
  }
-    sub_mag_=node_->create_subscription<Mag>(mag_topic_,rclcpp::SensorDataQoS(),[this](const Mag::SharedPtr m){onMag(*m,false);});
+    sub_mag_=node_->create_subscription<Mag>(mag_topic_,rclcpp::SensorDataQoS().keep_last(512),[this](const Mag::SharedPtr m){onMag(*m,false);});
  auto real_mag_topic=node_->declare_parameter<std::string>("real_magnetometer_topic","/real/magnetometer/data");
- sub_real_mag_=node_->create_subscription<Mag>(real_mag_topic,rclcpp::SensorDataQoS(),[this](const Mag::SharedPtr m){onMag(*m,true);});
-    sub_baro_=node_->create_subscription<Baro>(baro_topic_,rclcpp::SensorDataQoS(),[this](const Baro::SharedPtr m){onBaro(*m,false);});
+ sub_real_mag_=node_->create_subscription<Mag>(real_mag_topic,rclcpp::SensorDataQoS().keep_last(512),[this](const Mag::SharedPtr m){onMag(*m,true);});
+    sub_baro_=node_->create_subscription<Baro>(baro_topic_,rclcpp::SensorDataQoS().keep_last(512),[this](const Baro::SharedPtr m){onBaro(*m,false);});
  auto real_baro_topic=node_->declare_parameter<std::string>("real_barometer_topic","/real/bmp581/air_pressure");
- sub_real_baro_=node_->create_subscription<Baro>(real_baro_topic,rclcpp::SensorDataQoS(),[this](const Baro::SharedPtr m){onBaro(*m,true);});
+ sub_real_baro_=node_->create_subscription<Baro>(real_baro_topic,rclcpp::SensorDataQoS().keep_last(512),[this](const Baro::SharedPtr m){onBaro(*m,true);});
     sub_status_=node_->create_subscription<std_msgs::msg::String>(status_topic,10,
         [this](const std_msgs::msg::String::SharedPtr m){onStatus(*m,false);});
     const auto real_status_topic=node_->declare_parameter<std::string>(
@@ -188,7 +191,7 @@ RosBridge::RosBridge() {
         const std::string prefix=i==0?"/cefiro/control/":"/real/cefiro/control/";
         pub_swing_[i]=node_->create_publisher<std_msgs::msg::Float64MultiArray>(prefix+"swing_tuning",10);
         sub_swing_[i]=node_->create_subscription<std_msgs::msg::String>(prefix+"swing_tuning_status",10,
-            [this,i](std_msgs::msg::String::ConstSharedPtr msg){std::lock_guard<std::mutex> lock(mutex_); swing_status_[i]=msg->data;});
+            [this,i](std_msgs::msg::String::ConstSharedPtr msg){std::lock_guard<std::mutex> lock(mutex_); swing_status_[i]=msg->data;recordEventLocked(i==1,"swing_status",msg->data);});
     }
     pub_motor_rpm_=node_->create_publisher<cefiro_msgs::msg::MotorRpm>(motor_rpm_topic_,10);
  pub_real_motor_rpm_=node_->create_publisher<cefiro_msgs::msg::MotorRpm>("/real/cefiro_actuators/target_rpm",10);
@@ -238,6 +241,15 @@ void RosBridge::pushMotorLocked(MotorEvent event){
     // Sending a command alone does not mean the plant is connected.
     if(event.kind==MotorEventKind::MeasuredRpm || event.kind==MotorEventKind::Telemetry){
         motor_rx_[index]=std::chrono::steady_clock::now();
+    }
+    if(capture_recording_&&capture_real_==event.from_real){
+        std::ostringstream out;out.imbue(std::locale::classic());out<<std::setprecision(17)<<int(event.kind);
+        const auto k=event.kind;
+        for(auto code:event.dshot){out<<',';if(k==MotorEventKind::DirectDshot||k==MotorEventKind::HostCommandedDshot||k==MotorEventKind::FmuDshot||k==MotorEventKind::Telemetry)out<<code;}
+        for(auto value:event.requested_rpm){out<<',';if(k==MotorEventKind::TargetRpm||k==MotorEventKind::Telemetry)out<<value;}
+        for(auto value:event.measured_rpm){out<<',';if(k==MotorEventKind::MeasuredRpm||k==MotorEventKind::Telemetry)out<<value;}
+        out<<','<<int(event.command_source)<<','<<originName(event.host_origin);
+        recordEventLocked(event.from_real,"motor",out.str());
     }
     if(motor_queue_.size()>=2000)motor_queue_.pop_front();
     motor_queue_.push_back(std::move(event));
@@ -310,6 +322,7 @@ void RosBridge::onImu(const Imu& msg,bool real){
         (real?real_imu_rx_:imu_rx_)=std::chrono::steady_clock::now();
     }
     s.ros_time_s=stampSeconds(msg.header.stamp);
+    s.ros_stamp_ns=std::int64_t(msg.header.stamp.sec)*1000000000LL+msg.header.stamp.nanosec;
     s.fmu_dshot_valid=false;
     s.host_dshot_valid=false;
     s.battery_valid=false;
@@ -349,7 +362,7 @@ void RosBridge::onImu(const Imu& msg,bool real){
             s.host_dshot_valid=true;s.host_dshot=host->codes;
             s.host_dshot_age_s=host->age(now);s.host_origin=host->origin;
         }
-        if(fresh(hardware_status_rx_,1.0))s.nominal_map=nominal_map_;else s.nominal_map={};
+        if(fresh(hardware_status_rx_,1.0)){s.nominal_map=nominal_map_;s.motor_map_revision=motor_map_revision_;}else {s.nominal_map={};s.motor_map_revision=0;}
         if(fresh(battery_rx_,1.0)){s.battery_valid=true;s.battery_voltage_v=battery_voltage_;}
     }
     // Independent display fallback. Never change orientation_valid or the FMU quaternion.
@@ -382,9 +395,10 @@ void RosBridge::onImu(const Imu& msg,bool real){
         roll_torque_rx_=now;
     }else s.roll_torque={};
     (real ? latest_real_ : latest_)=s;
-    if(real && real_recording_){
-        const auto& t=msg.header.stamp;
-        recording_join_.pushImu(std::int64_t(t.sec)*1000000000LL+t.nanosec,s,RecordingJoin::Clock::now());
+    if(capture_recording_ && real==capture_real_){
+        const auto now=RecordingJoin::Clock::now();
+        s.capture_elapsed_s=std::chrono::duration<double>(now-capture_started_).count();
+        recording_join_.pushImu(real?s.ros_stamp_ns:0,s,now);
     }
     if(queue_.size()>=5000)queue_.pop_front();
     queue_.push_back(std::move(s));
@@ -411,7 +425,7 @@ void RosBridge::onIdentification(const cefiro_msgs::msg::IdentificationSample& i
             event.host_origin=HostOrigin::Identification;event.dshot=id.host_dshot;pushMotorLocked(std::move(event));
         }
     }
-    if(!real_recording_)return;
+    if(!capture_recording_ || !capture_real_)return;
     IdentificationFields f;
     f.fmu_dshot_valid=id.fmu_dshot_valid && validCodes(id.fmu_dshot); f.fmu_dshot=id.fmu_dshot;
     f.fmu_sample_ms=id.fmu_sample_ms; f.fmu_armed=id.fmu_armed; f.fmu_state=id.fmu_state;
@@ -426,16 +440,38 @@ void RosBridge::onIdentification(const cefiro_msgs::msg::IdentificationSample& i
     f.orientation={imu.orientation.w,imu.orientation.x,imu.orientation.y,imu.orientation.z};
     f.orientation_valid=imu.orientation_covariance[0]!=-1.0 && f.orientation.normalize();
     const auto& t=imu.header.stamp;
+    // Retain the original identification message even if its primary IMU row
+    // was missing or its arrival was too late for the synchronized join.
+    std::ostringstream raw;raw.imbue(std::locale::classic());raw<<std::setprecision(17)
+        <<std::int64_t(t.sec)*1000000000LL+t.nanosec<<','<<int(f.fmu_dshot_valid)<<','<<f.fmu_sample_ms<<','<<int(f.fmu_armed)<<','<<int(f.fmu_state);
+    for(auto code:f.fmu_dshot){raw<<',';if(f.fmu_dshot_valid)raw<<code;}
+    raw<<','<<int(f.host_dshot_valid)<<','<<f.host_dshot_age_s;
+    for(auto code:f.host_dshot){raw<<',';if(f.host_dshot_valid)raw<<code;}
+    raw<<','<<int(f.battery_valid)<<','<<f.battery_voltage_v<<','<<int(f.power_tick_valid)<<','<<f.power_sample_ms<<','<<f.power_age_s
+       <<','<<int(f.current_valid)<<','<<f.esc_current_a<<','<<int(f.esc_sense_valid)<<','<<f.esc_current_sense_v<<','<<f.adc_voltage_raw<<','<<f.adc_current_raw
+       <<','<<int(f.orientation_valid);
+    for(auto v:{imu.orientation.w,imu.orientation.x,imu.orientation.y,imu.orientation.z,imu.angular_velocity.x,imu.angular_velocity.y,imu.angular_velocity.z,imu.linear_acceleration.x,imu.linear_acceleration.y,imu.linear_acceleration.z})raw<<','<<v;
+    recordEventLocked(true,"identification",raw.str());
     recording_join_.pushId(std::int64_t(t.sec)*1000000000LL+t.nanosec,f,RecordingJoin::Clock::now());
 }
-void RosBridge::beginRealRecording(){
+void RosBridge::beginRecording(bool real){
     std::lock_guard<std::mutex> g(mutex_);
-    recording_join_.clear();real_recording_=true;
+    recording_join_.clear();capture_events_.clear();capture_event_dropped_=0;
+    capture_real_=real;capture_started_=RecordingJoin::Clock::now();capture_recording_=true;
 }
-std::vector<Telemetry> RosBridge::drainRealRecording(bool finish){
+void RosBridge::recordEventLocked(bool real,const std::string& kind,std::string payload){
+    if(!capture_recording_ || capture_real_!=real)return;
+    if(capture_events_.size()>=32768){++capture_event_dropped_;return;}
+    capture_events_.push_back({std::chrono::duration<double>(RecordingJoin::Clock::now()-capture_started_).count(),kind,std::move(payload)});
+}
+RosBridge::RecordingBatch RosBridge::drainRecording(bool finish){
     std::lock_guard<std::mutex> g(mutex_);
-    auto result=recording_join_.drain(RecordingJoin::Clock::now(),finish);
-    if(finish){real_recording_=false;recording_join_.clear();}
+    RecordingBatch result;
+    result.rows=recording_join_.drain(RecordingJoin::Clock::now(),finish);
+    result.dropped=recording_join_.dropped();result.unmatched=recording_join_.unmatched();result.event_dropped=capture_event_dropped_;
+    result.events.reserve(capture_events_.size());
+    while(!capture_events_.empty()){result.events.push_back(std::move(capture_events_.front()));capture_events_.pop_front();}
+    if(finish){capture_recording_=false;recording_join_.clear();}
     return result;
 }
 void RosBridge::onMag(const Mag& msg,bool real){
@@ -453,6 +489,11 @@ void RosBridge::onMag(const Mag& msg,bool real){
     Telemetry sample=latest;
     sample.from_real=real;
     sample.kind=SampleKind::Magnetometer;
+    if(capture_recording_&&capture_real_==real){
+        std::ostringstream out;out.imbue(std::locale::classic());out<<std::setprecision(17)<<stampSeconds(msg.header.stamp);
+        for(double value:sample.mag_uT)out<<','<<value;
+        recordEventLocked(real,"mag_uT",out.str());
+    }
     if (queue_.size()>=5000) queue_.pop_front();
     queue_.push_back(std::move(sample));
 }
@@ -476,6 +517,10 @@ void RosBridge::onBaro(const Baro& msg,bool real){
     Telemetry sample=latest;
     sample.from_real=real;
     sample.kind=SampleKind::Barometer;
+    if(capture_recording_&&capture_real_==real){
+        std::ostringstream out;out.imbue(std::locale::classic());out<<std::setprecision(17)<<stampSeconds(msg.header.stamp)<<','<<sample.pressure_hPa<<','<<sample.relative_alt_m;
+        recordEventLocked(real,"baro_hPa_alt_m",out.str());
+    }
     if (queue_.size()>=5000) queue_.pop_front();
     queue_.push_back(std::move(sample));
 }
@@ -483,16 +528,20 @@ void RosBridge::onBaro(const Baro& msg,bool real){
 void RosBridge::onStatus(const std_msgs::msg::String& msg,bool real){
     std::lock_guard<std::mutex> g(mutex_);
     (real ? real_status_ : status_)=msg.data;
+    recordEventLocked(real,"control_status",msg.data);
     (real ? real_status_rx_ : status_rx_)=std::chrono::steady_clock::now();
 }
 void RosBridge::onHardwareStatus(const std_msgs::msg::String& msg){
     std::lock_guard<std::mutex> g(mutex_);
     hardware_status_=msg.data;hardware_status_rx_=MotorClock::now();
+    recordEventLocked(true,"hardware_status",msg.data);
+    motor_map_revision_=0;
     const auto doc=QJsonDocument::fromJson(QByteArray::fromStdString(msg.data));
     if(!doc.isObject()){nominal_map_={};host_status_={};battery_rx_={};return;}
     const auto state=doc.object();
     const bool linked=state.contains("transport_connected")?state.value("transport_connected").toBool(false):state.value("serial_connected").toBool(false);
     if(!linked){nominal_map_={};host_status_={};host_topic_={};fmu_dshot_rx_={};battery_rx_={};return;}
+    motor_map_revision_=state.value("motor_map_revision").toInt(0);
     nominal_map_={state.value("configured_dshot_min").toInt(-1),state.value("configured_dshot_max").toInt(-1),
         state.value("nominal_rpm_full_scale").toDouble(-1.0),state.value("rpm_deadband").toDouble(nominal_deadband_)};
     battery_rx_={};

@@ -92,6 +92,7 @@ private:
     void startManualTrial();
     void stopRecording();
     void saveRecord(const Telemetry& sample);
+    void drainRecording(bool finish=false);
     void exportSummary();
     void sendGains();
     void refreshStepMetrics();
@@ -264,6 +265,7 @@ private:
     bool wave_running_{false};
     bool e_stop_{false};
     bool recorder_active_{false};
+    bool output_owned_recording_{false};
     bool manual_trial_active_{false};
     bool shutting_down_{false};
     bool control_tab_active_{false};
@@ -275,6 +277,11 @@ private:
     QLabel* ui_scale_label_{nullptr};
     std::uint64_t collected_{0};
     QFile recording_file_;
+    QFile recording_event_file_;
+    QTextStream recording_event_stream_;
+    quint64 recording_dropped_{0},recording_unmatched_{0},recording_event_dropped_{0},recorded_events_{0};
+    bool recording_write_error_{false};
+    quint64 recording_decimated_{0};
     QTextStream recording_stream_;
     QString recording_path_;
     QElapsedTimer publish_clock_{};

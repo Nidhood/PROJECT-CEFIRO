@@ -52,10 +52,12 @@ public:
     using Time=Clock::time_point;
     using Key=std::int64_t;
     static constexpr auto wait=std::chrono::milliseconds(120);
-    static constexpr std::size_t capacity=512;
-    void clear(){samples_.clear();extras_.clear();}
+    static constexpr std::size_t capacity=32768;
+    std::size_t dropped() const noexcept {return dropped_;}
+    std::size_t unmatched() const noexcept {return unmatched_;}
+    void clear(){samples_.clear();extras_.clear();dropped_=unmatched_=0;}
     void pushImu(Key key, const Telemetry& sample, Time now) {
-        if(samples_.size()>=capacity)samples_.pop_front();
+        if(samples_.size()>=capacity){++dropped_;return;}
         samples_.push_back({key,sample,now,false});
         if(key==0)return; // No unique timestamp; never claim synchronization.
         auto it=std::find_if(extras_.begin(),extras_.end(),[key](const Extra& e){return e.key==key;});
@@ -79,6 +81,7 @@ public:
         while(!samples_.empty()){
             const auto& front=samples_.front();
             if(!force && !front.matched && now-front.received<wait)break;
+            if(front.sample.from_real&&!front.matched)++unmatched_;
             out.push_back(front.sample);samples_.pop_front();
         }
         while(!extras_.empty()&&now-extras_.front().received>wait)extras_.pop_front();
@@ -87,6 +90,7 @@ public:
 private:
     struct Pending{Key key;Telemetry sample;Time received;bool matched;};
     struct Extra{Key key;IdentificationFields fields;Time received;};
+    std::size_t dropped_{0},unmatched_{0};
     std::deque<Pending> samples_;
     std::deque<Extra> extras_;
 };

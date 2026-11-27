@@ -31,7 +31,7 @@ struct RecordingConfig {
     double peak_separation_s{0.2};
     int peak_count{5};
     bool absolute_peaks{true};
-    int time_unit{1};  // 0 = ms, 1 = s, 2 = min
+    int time_unit{1};  // 0 = ms, 1 = s, 2 = min, 3 = h
     bool save_attitude{true};
     bool save_reference{true};
     bool save_error{true};
@@ -75,7 +75,12 @@ private:
     QTextEdit* notes_{nullptr};
     QCheckBox* metadata_{nullptr};
     QComboBox* capture_mode_{nullptr};
-    QSpinBox* interval_{nullptr};
+    QDoubleSpinBox* interval_{nullptr};
+    QCheckBox* full_rate_{nullptr};
+    QComboBox* interval_unit_{nullptr};
+    QComboBox* duration_unit_{nullptr};
+    int previous_duration_unit_{1};
+    int previous_interval_unit_{0};
     QDoubleSpinBox* delay_{nullptr};
     QDoubleSpinBox* duration_{nullptr};
     QSpinBox* periods_{nullptr};

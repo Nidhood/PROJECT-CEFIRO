@@ -53,8 +53,10 @@ public:
     void resetTelemetry(bool real);
     void stop();
     std::vector<Telemetry> drain();
-    void beginRealRecording();
-    std::vector<Telemetry> drainRealRecording(bool finish=false);
+    struct RecordingEvent {double elapsed_s; std::string kind; std::string payload;};
+    struct RecordingBatch {std::vector<Telemetry> rows;std::vector<RecordingEvent> events;std::size_t dropped{},unmatched{},event_dropped{};};
+    void beginRecording(bool real);
+    RecordingBatch drainRecording(bool finish=false);
     std::vector<MotorEvent> drainMotor();
     bool motorFreshFor(bool real,double timeout_s=2.0) const;
     bool fmuDshotFresh() const;
@@ -134,7 +136,12 @@ private:
     mutable std::mutex mutex_;
     std::deque<Telemetry> queue_;
     RecordingJoin recording_join_;
-    bool real_recording_{false};
+    bool capture_recording_{false}, capture_real_{false};
+    RecordingJoin::Time capture_started_{};
+    std::deque<RecordingEvent> capture_events_;
+    std::size_t capture_event_dropped_{0};
+    int motor_map_revision_{0};
+    void recordEventLocked(bool real,const std::string& kind,std::string payload);
     std::deque<MotorEvent> motor_queue_;
     HostDshotSample host_topic_{},host_status_{};
     NominalMotorMap nominal_map_{};

@@ -1,0 +1,57 @@
+CEFIRO GUI 2.4.28 | Native C++20 checks
+--- test_accel_calibration
+--- test_accel_calibration_wizard
+--- test_autotune
+PASS: Rev3 pair provenance; rejects historical pairing and wrong revision
+PASS: MCU time, voltage hypothesis, no invented current, gap-aware energy
+PASS: 434 candidates, 12 cases each; known LQR and delay rejection; regression; CSV provenance; rejects unexcited axis.
+--- test_display_attitude_filter
+Stationary synthetic noise RMS raw=0.429473 filtered=0.0596342 deg
+PASS: movement, FMU priority, gap and invalid sample rejection, stationary start
+--- test_gimbal_accel_calibration
+coverage 14 RMS 0.00186243
+guided calibration: 14 directions, RMS 0.000507513
+--- test_models
+--- test_motor_observation
+PASS: nominal inverse, both caps, invalid codes, source priority, age, explicit zero, host-only recording, exact FMU join and fallback retention
+--- test_numeric_parameter
+PASS: locale-independent numeric parsing and invalid-map gating
+--- test_predictive_roll
+candidates=234 robust=0 all=0 max swing/reg/track=12/12/6
+best: 0 1.1 8 -1 predictor=14 K=1.22401,0.259015 linear=17/72 phases=12,12,6 upper=8,6 nominal=1,1,1
+--- test_recording_join
+PASS: IMU-only, both arrival orders, no unmatched/late/zero stamp pairing, reset, strict orientation, no duplicate rows
+--- test_recording_time
+PASS: duration conversion, capture boundaries, full rate, interval, render stall, overflow accounting and unmatched rows
+--- test_roll_torque_observer
+--- test_step_response
+
+Static checks:
+--- check_adaptive_typography_v244.py
+PASS: adaptive typography integration, all themes, chart fonts, dialog reflow, accessible reset
+--- check_auto_fit_toggle_v2_1.py
+Independent AUTO Y toggle contract passed
+--- check_embedded_roll_strategy.py
+Embedded strategy static routing, recording and stop contracts: PASS
+--- check_interactive_features.py
+CEFIRO INTERACTIVE GUI STATIC CHECKS PASSED
+--- check_layout_v1_3.py
+FAILED check_layout_v1_3.py
+--- check_motor_signals_v2.py
+Motor signal routing, semantics, and 13-panel layout checks passed
+--- check_package.py
+PACKAGE CHECKS PASSED: 24 headers, 9 source files, six Qt themes
+--- check_plot_visibility_v1_8.py
+CEFIRO v1.8 VISIBLE SERIES / AUTO FIT STATIC CHECKS PASSED
+--- check_reference_envelope_v2_2.py
+GUI SIM/REAL envelope and full-heading yaw contracts PASSED
+--- check_responsive_tron_ares.py
+FAILED check_responsive_tron_ares.py
+--- check_stable_readout_v246.py
+PASS: stable readout geometry, single writer, explicit rows, source validity and typography reapplication
+--- check_startup_safe_cast_v2_3_3.py
+PASS: safe Qt subclass cast and locale-independent yaw
+--- check_uniform_dashboard_v1_9.py
+Uniform 12-panel responsive dashboard checks passed
+
+Both failed historical checks also fail on the prior Rev3 package: layout_v1_3 expects GUI v2.3, responsive_tron_ares expects an earlier layout expression. No Qt6/ROS build performed.

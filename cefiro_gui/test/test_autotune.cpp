@@ -23,8 +23,9 @@ int main(){
     auto b=regress(w);assert(b);for(int j=0;j<4;++j)assert(std::abs((*b)[j]-expected[j])<1e-8);
     // Real CSV schema. GUI estimates are never treated as firmware AHRS.
     auto path=std::filesystem::temp_directory_path()/"cefiro_autotune_schema_test.csv";
-    {std::ofstream f(path);f<<"ros_time_s,roll_deg,pitch_deg,p_deg_s,plant,quaternion_valid,host_dshot_valid,host_dshot_age_s,dshot_host_m1,dshot_host_m2,dshot_host_m3,dshot_host_m4,gui_fusion_valid,gui_roll_deg,gui_pitch_deg\n";for(int i=0;i<120;++i)f<<i*.04<<",0,0,1,REAL,0,1,0.02,150,150,0,0,1,-173,-7\n";}
+    {std::ofstream f(path);f<<"ros_time_s,roll_deg,pitch_deg,p_deg_s,plant,quaternion_valid,motor_map_revision,host_dshot_valid,host_dshot_age_s,dshot_host_m1,dshot_host_m2,dshot_host_m3,dshot_host_m4,gui_fusion_valid,gui_roll_deg,gui_pitch_deg\n";for(int i=0;i<120;++i)f<<i*.04<<",0,0,1,REAL,0,3,1,0.02,150,0,0,150,1,-173,-7\n";}
     auto run=read(path.string());std::filesystem::remove(path);
+    assert(std::abs(run.rows[2].u-.15)<1e-9 && run.rows[2].v==0.);
     assert(run.diagnostic && !run.fmu && run.rows[2].valid && std::abs(run.rows[2].angle+173*rad)<1e-12);
     bool rejected=false;try{(void)fit({run});}catch(const std::runtime_error&){rejected=true;}assert(rejected);
     Run power; Row row;row.voltage_valid=true;row.voltage=12.;row.power_valid=true;row.power=24.;
@@ -42,9 +43,19 @@ int main(){
     for(auto& rr:input.rows)rr.voltage_valid=false;
     assert(windows({input},0.,0.,true).empty());
     auto local=std::filesystem::temp_directory_path()/"cefiro_autotune_local_test.csv";
-    {std::ofstream f(local);f<<"ros_time_s,roll_deg,pitch_deg,p_deg_s,plant,quaternion_valid,fmu_dshot_valid,fmu_sample_ms,dshot_fmu_m1,dshot_fmu_m2,dshot_fmu_m3,dshot_fmu_m4,esc_power_tick_valid,battery_valid,battery_voltage_v,esc_power_age_s,esc_power_sample_ms,esc_current_valid,esc_current_a\n";
-     for(int i=0;i<120;++i)f<<i*.05<<",-170,0,1,REAL,1,1,"<<1000+40*i<<",150,150,0,0,1,1,12,0.04,"<<960+40*i<<",0,\n";}
-    auto localRun=read(local.string());std::filesystem::remove(local);assert(localRun.fmu&&localRun.rows[10].voltage_valid&&!localRun.rows[10].power_valid&&std::abs(localRun.rows[10].t-.4)<1e-9);
+    {std::ofstream f(local);f<<"ros_time_s,roll_deg,pitch_deg,p_deg_s,plant,quaternion_valid,motor_map_revision,fmu_dshot_valid,fmu_sample_ms,dshot_fmu_m1,dshot_fmu_m2,dshot_fmu_m3,dshot_fmu_m4,esc_power_tick_valid,battery_valid,battery_voltage_v,esc_power_age_s,esc_power_sample_ms,esc_current_valid,esc_current_a\n";
+     for(int i=0;i<120;++i)f<<i*.05<<",-170,0,1,REAL,1,3,1,"<<1000+40*i<<",150,0,0,150,1,1,12,0.04,"<<960+40*i<<",0,\n";}
+    auto localRun=read(local.string());std::filesystem::remove(local);assert(localRun.rows[10].valid && std::abs(localRun.rows[10].u-.15)<1e-9 && localRun.rows[10].v==0.);assert(localRun.fmu&&localRun.rows[10].voltage_valid&&!localRun.rows[10].power_valid&&std::abs(localRun.rows[10].t-.4)<1e-9);
+    // The same historical pair must not enter a Rev3 model; accept both new pairs.
+    auto rev=std::filesystem::temp_directory_path()/"cefiro_rev3_pair_test.csv";
+    {std::ofstream f(rev); f<<"ros_time_s,roll_deg,pitch_deg,p_deg_s,plant,quaternion_valid,motor_map_revision,fmu_dshot_valid,fmu_sample_ms,dshot_fmu_m1,dshot_fmu_m2,dshot_fmu_m3,dshot_fmu_m4\n";
+      for(int i=0;i<120;++i){f<<i*.04<<",-170,0,1,REAL,1,"<<(i==3?2:3)<<",1,"<<1000+40*i<<',';
+        if(i==2)f<<"150,150,0,0";else if(i%2==0)f<<"150,0,0,150";else f<<"0,200,200,0";f<<'\n';}}
+    auto mapped=read(rev.string());std::filesystem::remove(rev);
+    assert(mapped.rows[0].valid&&std::abs(mapped.rows[0].u-.15)<1e-9&&mapped.rows[0].v==0.);
+    assert(mapped.rows[1].valid&&mapped.rows[1].u==0.&&std::abs(mapped.rows[1].v-.2)<1e-9);
+    assert(!mapped.rows[2].valid&&!mapped.rows[3].valid);
+    std::cout<<"PASS: Rev3 pair provenance; rejects historical pairing and wrong revision\n";
     std::cout<<"PASS: MCU time, voltage hypothesis, no invented current, gap-aware energy\n";
     std::cout<<"PASS: 434 candidates, 12 cases each; known LQR and delay rejection; regression; CSV provenance; rejects unexcited axis.\n";
 }

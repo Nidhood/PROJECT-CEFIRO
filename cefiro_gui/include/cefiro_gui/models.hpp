@@ -44,6 +44,9 @@ struct Telemetry {
     SampleKind kind{SampleKind::Imu};
  bool from_real{false};
     double ros_time_s{0.0};
+    std::int64_t ros_stamp_ns{0};
+    double capture_elapsed_s{-1.0}; // Steady-clock time at receipt, relative to recording start.
+    int motor_map_revision{0};
     bool fmu_dshot_valid{false},fmu_armed{false},host_dshot_valid{false},battery_valid{false};
     std::uint32_t fmu_sample_ms{0};
     std::uint8_t fmu_state{0};

@@ -1,0 +1,21 @@
+CEFIRO ATTITUDE EXPERIMENT SUMMARY
+CSV: /home/nidhood/cefiro_ws/src/cefiro/data/LQR/test_manual_20261127_054526_863.csv
+Notes: 
+Controller selection: SWING-UP + LQR (STM32)
+Source: MANUAL
+Samples written to disk: 13
+Host DShot valid rows: 11
+FMU DShot valid rows: 13
+Samples with valid orientation: 13
+Capture time [wall seconds]: 75.888
+Detected local maxima: 0
+Note: controller actuation is not guaranteed without an external controller.
+ROLL RMSE=176.07deg MAE=175.94deg Peak=179.88deg
+PITCH RMSE=7.13deg MAE=6.89deg Peak=10.88deg
+YAW RMSE=158.66deg MAE=158.65deg Peak=162.74deg
+
+LATEST STEP RESPONSES DURING THIS RECORDING
+ROLL: no step recorded in this acquisition
+PITCH: no step recorded in this acquisition
+YAW: no step recorded in this acquisition
+Step metrics are estimated from the last step commanded on each axis.

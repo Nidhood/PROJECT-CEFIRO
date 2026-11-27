@@ -51,7 +51,7 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.8.15";
+constexpr const char* kHardwareVersion = "0.8.17";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
@@ -251,7 +251,7 @@ public:
               (v[3]!=1.0 && v[3]!=-1.0) || v[4]<1.0 || v[4]>65535.0 || std::floor(v[4])!=v[4]) {
             report("REJECTED: invalid real trial parameters");return;
           }
-          if(experimental&&(v[0]<.6||v[0]>1.1||v[1]<.4||v[1]>.6||v[2]>12.||v[3]!=-1.)){report("REJECTED: experimental parameter envelope");return;}
+          if(experimental&&(v[0]<.6||v[0]>1.1||v[1]<.4||v[1]>.6||v[2]>15.||v[3]!=-1.)){report("REJECTED: experimental parameter envelope");return;}
           auto fields=floatFields(std::vector<double>(v.begin(),v.begin()+4));
           fields.push_back(std::to_string(static_cast<unsigned>(v[4])));
           swing_start_sequence_=queueCommand(experimental?"CMD_SWING_EXP":"CMD_SWING_REAL",fields);

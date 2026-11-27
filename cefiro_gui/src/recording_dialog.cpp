@@ -1,5 +1,7 @@
 #include "cefiro_gui/recording_dialog.hpp"
 #include "cefiro_gui/ui_scale.hpp"
+#include "cefiro_gui/recording_time.hpp"
+#include <QSignalBlocker>
 #include <QResizeEvent>
 #include <QTimer>
 #include <QScreen>
@@ -39,7 +41,8 @@ QDoubleSpinBox* makeDouble(QWidget* parent, double lo, double hi,
 QString formatTime(double seconds, int unit) {
     switch (unit) {
         case 0: return QString::number(seconds * 1000.0, 'f', 1) + " ms";
-        case 2: return QString::number(seconds / 60.0, 'f', 3) + " min";
+        case 2: return QString::number(seconds / 60.0, 'f', 4) + " min";
+        case 3: return QString::number(seconds / 3600.0, 'f', 6) + " h";
         default: return QString::number(seconds, 'f', 3) + " s";
     }
 }
@@ -56,7 +59,7 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     auto* heading = new QLabel("EXPERIMENT RECORDING", this);
     heading->setObjectName("pageTitle");
     outer->addWidget(heading);
-    auto* subtitle = new QLabel("Configure capture rules, exported columns and recording progress", this);
+    auto* subtitle = new QLabel("Set total recording time independently of the optional save interval. Full-rate capture is enabled by default.", this);
     subtitle->setObjectName("pageSubtitle");
     subtitle->setWordWrap(true);
     heading->setWordWrap(true);
@@ -115,19 +118,23 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     auto* config_form = new QGridLayout;
     capture_mode_ = new QComboBox(capture);
     capture_mode_->addItems({"Manual / continuous", "Time window", "N waveform periods", "Threshold events"});
-    interval_ = new QSpinBox(capture);
-    interval_->setRange(0, 10000);
-    interval_->setSuffix(" ms");
-    interval_->setToolTip("0 = preserve all received IMU samples. Larger values decimate saved rows, not displayed telemetry.");
+    full_rate_ = new QCheckBox("Save every received IMU sample (recommended)", capture);
+    full_rate_->setChecked(true);
+    interval_ = makeDouble(capture, 1, 86400000, 10, 0);
+    interval_unit_ = new QComboBox(capture);
+    interval_unit_->addItems({"ms", "s", "min", "h"});
+    interval_->setToolTip("Optional decimation of the main CSV only. Does not change sensor sampling or the raw event log.");
     time_unit_ = new QComboBox(capture);
-    time_unit_->addItems({"Milliseconds", "Seconds", "Minutes"});
+    time_unit_->addItems({"Milliseconds", "Seconds", "Minutes", "Hours"});
     time_unit_->setCurrentIndex(1);
     config_form->addWidget(new QLabel("Capture mode", capture), 0, 0);
     config_form->addWidget(capture_mode_, 0, 1);
-    config_form->addWidget(new QLabel("Min. save interval", capture), 0, 2);
-    config_form->addWidget(interval_, 0, 3);
-    config_form->addWidget(new QLabel("Display time as", capture), 1, 0);
-    config_form->addWidget(time_unit_, 1, 1);
+    config_form->addWidget(full_rate_, 1, 0, 1, 4);
+    config_form->addWidget(new QLabel("Optional save interval", capture), 2, 0);
+    config_form->addWidget(interval_, 2, 1);
+    config_form->addWidget(interval_unit_, 2, 2);
+    config_form->addWidget(new QLabel("Display time as", capture), 3, 0);
+    config_form->addWidget(time_unit_, 3, 1);
     cv->addLayout(config_form);
     waveform_label_ = new QLabel("Waveform: --", capture);
     waveform_label_->setObjectName("pageSubtitle");
@@ -135,17 +142,23 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     timing_panel_ = new QWidget(capture);
     auto* timing = new QGridLayout(timing_panel_);
     timing->setContentsMargins(0, 0, 0, 0);
-    delay_ = makeDouble(timing_panel_, 0, 3600, 0, 2);
-    duration_ = makeDouble(timing_panel_, 0.01, 86400, 10, 2);
+    delay_ = makeDouble(timing_panel_, 0, 86400, 0, 3);
+    duration_ = makeDouble(timing_panel_, .001, 86400, 10, 3);
+    duration_unit_ = new QComboBox(timing_panel_);
+    duration_unit_->addItems({"ms", "s", "min", "h"});
+    duration_unit_->setCurrentIndex(1);
+    duration_unit_->setToolTip("Units for both start delay and capture duration. Changing units preserves the selected time.");
     periods_ = new QSpinBox(timing_panel_);
     periods_->setRange(1, 100000);
     periods_->setValue(10);
-    timing->addWidget(new QLabel("Start delay [s]", timing_panel_), 0, 0);
+    timing->addWidget(new QLabel("Start delay", timing_panel_), 0, 0);
     timing->addWidget(delay_, 0, 1);
-    timing->addWidget(new QLabel("Duration [s]", timing_panel_), 0, 2);
-    timing->addWidget(duration_, 0, 3);
-    timing->addWidget(new QLabel("Periods", timing_panel_), 1, 0);
-    timing->addWidget(periods_, 1, 1);
+    timing->addWidget(new QLabel("Duration", timing_panel_), 1, 0);
+    timing->addWidget(duration_, 1, 1);
+    timing->addWidget(new QLabel("Time unit", timing_panel_), 0, 2);
+    timing->addWidget(duration_unit_, 0, 3);
+    timing->addWidget(new QLabel("Periods", timing_panel_), 2, 0);
+    timing->addWidget(periods_, 2, 1);
     cv->addWidget(timing_panel_);
 
     peak_panel_ = new QWidget(capture);
@@ -267,6 +280,20 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
     connect(close, &QPushButton::clicked, this, &QDialog::hide);
     connect(capture_mode_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int) { updateCaptureVisibility(); });
+    auto convert = [](QDoubleSpinBox* field, int old_unit, int unit, double min_s){
+        const double seconds=field->value()*recordingUnitSeconds(old_unit);
+        const double scale=recordingUnitSeconds(unit);
+        const QSignalBlocker blocker(field);
+        field->setDecimals(unit==0?0:unit==1?3:unit==2?6:7);
+        field->setRange(min_s/scale,86400./scale);
+        field->setSingleStep(unit==0?1.:unit==1?.1:unit==2?.1:.01);
+        field->setValue(seconds/scale);
+    };
+    connect(duration_unit_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+        [this,convert](int unit){convert(delay_,previous_duration_unit_,unit,0.);convert(duration_,previous_duration_unit_,unit,.001);previous_duration_unit_=unit;});
+    connect(interval_unit_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+        [this,convert](int unit){convert(interval_,previous_interval_unit_,unit,.001);previous_interval_unit_=unit;});
+    connect(full_rate_, &QCheckBox::toggled, this, [this](bool){updateCaptureVisibility();});
     updateCaptureVisibility();
 }
 
@@ -307,6 +334,8 @@ void RecordingDialog::updateCaptureVisibility() {
     const int mode = capture_mode_->currentIndex();
     timing_panel_->setVisible(mode == 1 || mode == 2 || mode == 3);
     duration_->setEnabled(mode == 1);
+    interval_->setEnabled(!full_rate_->isChecked());
+    interval_unit_->setEnabled(!full_rate_->isChecked());
     periods_->setEnabled(mode == 2);
     peak_panel_->setVisible(mode == 3);
 }
@@ -318,9 +347,9 @@ RecordingConfig RecordingDialog::configuration() const {
     c.notes = notes_->toPlainText();
     c.metadata = metadata_->isChecked();
     c.mode = capture_mode_->currentIndex();
-    c.save_interval_ms = interval_->value();
-    c.start_delay_s = delay_->value();
-    c.duration_s = duration_->value();
+    c.save_interval_ms = full_rate_->isChecked()?0:std::max(1,int(std::llround(interval_->value()*recordingUnitSeconds(interval_unit_->currentIndex())*1000.)));
+    c.start_delay_s = c.mode==0?0.:delay_->value()*recordingUnitSeconds(duration_unit_->currentIndex());
+    c.duration_s = duration_->value()*recordingUnitSeconds(duration_unit_->currentIndex());
     c.periods = periods_->value();
     c.peak_axis = peak_axis_->currentIndex();
     c.peak_threshold_deg = peak_threshold_->value();
@@ -343,7 +372,7 @@ void RecordingDialog::setRecordingState(bool active) {
     start_btn_->setEnabled(!active);
     stop_btn_->setEnabled(active);
     for (QWidget* field : QList<QWidget*>{directory_, prefix_, notes_,
-                           metadata_, capture_mode_, interval_, delay_, duration_,
+                           metadata_, capture_mode_, full_rate_, interval_, interval_unit_, duration_unit_, delay_, duration_,
                            periods_, peak_axis_, peak_threshold_, peak_separation_,
                            peak_target_, peak_absolute_, time_unit_, save_attitude_,
                            save_reference_, save_error_, save_rates_, save_accel_,

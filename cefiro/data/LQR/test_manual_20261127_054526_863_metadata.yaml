@@ -1,0 +1,40 @@
+cefiro_experiment:
+  created_at: "2026-11-27T05:45:26"
+  data_file: "/home/nidhood/cefiro_ws/src/cefiro/data/LQR/test_manual_20261127_054526_863.csv"
+  notes: ""
+  strategy: "SWING-UP + LQR (STM32)"
+  source: "MANUAL"
+  capture_mode: "Continuous"
+  start_delay_s: 0
+  save_interval_ms: 5900
+  duration_s: 10
+  requested_periods: 10
+  waveform_frequency_hz: 0.25
+  peak_axis: "ROLL"
+  peak_threshold_deg: 10
+  peak_target: 5
+  peak_min_separation_s: 0.2
+  controller_acknowledgement: available
+  time_unit: "s"
+  plant: REAL
+  motor_input_schema: fmu_imu_snapshot_v1
+  motor_order: [M1, M2, M3, M4] # logical, after firmware remap
+  fmu_input: accepted throttle setpoint at IMU processing, not measured RPM
+  missing_motor_values: blank
+  host_time: ROS receive timestamp; fmu_sample_ms is MCU uptime
+  host_dshot_age_semantics: reception_age_for_topic_or_reported_tx_age_plus_reception_for_status
+  rpm_equivalent: inverse_nominal_host_map_not_measured_speed
+  roll_torque_observer: provisional_real_imu_inverse_dynamics_read_only_with_source
+  roll_torque_parameters: {J_kg_m2: 0.03378, kg_Nm: 0.820915, b_Nm_s_rad: 0.020867, offset_deg: 6.5, filter_tau_s: 0.12, max_pitch_deg: 15, max_cross_rate_deg_s: 30}
+  gui_fusion_columns: diagnostic_only_yaw_relative_not_fmu_orientation
+  saved_groups:
+    motor_input: true
+    attitude: true
+    reference: true
+    error: true
+    rates: true
+    acceleration: true
+    magnetic_field: true
+    barometer: true
+    validity_flags: true
+    strategy_source: true

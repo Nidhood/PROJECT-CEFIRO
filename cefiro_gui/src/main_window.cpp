@@ -12,6 +12,7 @@
 #include "cefiro_gui/ares_chrome.hpp"
 #include <QSignalBlocker>
 #include "cefiro_gui/recording_dialog.hpp"
+#include "cefiro_gui/recording_time.hpp"
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -60,6 +61,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QRegularExpression>
 #include <QRandomGenerator>
 #include <QSettings>
@@ -478,15 +480,15 @@ void MainWindow::buildControl() {
     rollForm->setContentsMargins(0,0,0,0);
     embedded_roll_kp_=spin(.6,1.1,.7,.05,3);
     embedded_roll_kd_=spin(.4,.6,.4,.02,3);
-    embedded_roll_duration_=spin(8.,12.,11.5,.25,2);
+    embedded_roll_duration_=spin(8.,15.,11.5,.25,2);
     QSettings saved("CEFIRO","EmbeddedRoll");
     embedded_roll_kp_->setValue(saved.value("kp",.7).toDouble());
     embedded_roll_kd_->setValue(saved.value("kd",.4).toDouble());
     embedded_roll_duration_->setValue(saved.value("duration",11.5).toDouble());
     rollForm->addRow("Initial Swing-Up Kp",embedded_roll_kp_);
     rollForm->addRow("Initial Swing-Up Kd",embedded_roll_kd_);
-    rollForm->addRow("Duration [s]",embedded_roll_duration_);
-    rollForm->addRow(label("STM32 · Roll: M1+M4 (CH2/CH1) / M2+M3 (CH4/CH3) · LQR fixed · auto-record · 3 s hold", "hint"));
+    rollForm->addRow("Nominal trajectory [s]",embedded_roll_duration_);
+    rollForm->addRow(label("STM32 · Roll: M1+M4 (CH2/CH1) / M2+M3 (CH4/CH3) · LQR 0° · auto-record · 5 s hold", "hint"));
     arch->addWidget(embedded_roll_panel_);
     embedded_roll_panel_->hide();
     auto* tuneSwing=new QPushButton("SWING-UP TUNING",architecture);
@@ -781,6 +783,7 @@ void MainWindow::buildControl() {
                 if(trialMode->currentIndex()!=0){
                     const bool experimental=trialMode->currentIndex()==2;
                     if(duration->value()<8.){status->setText("Real pilot requires >=8 seconds");return;}
+                    if(experimental&&duration->value()>15.){status->setText("Experimental nominal trajectory: 8–15 seconds (model screened only)");return;}
                     if((!experimental||recorder_active_) && (!recorder_active_ || recording_config_.mode!=0 || recording_config_.start_delay_s>0. || recording_config_.save_interval_ms!=0 || !recording_config_.save_rates || !recording_config_.save_attitude)){status->setText("Start a continuous full-rate recording with attitude and rates, zero start delay before opening this panel");return;}
                     if(!bridge_.imuFresh(0.5) || !have_sample_ || !last_sample_.from_real || !bridge_.fmuDshotFresh() || !last_sample_.orientation_valid){status->setText("Valid real IMU / FMU DShot snapshot required");return;}
                     const QString warning=experimental?"UNVALIDATED Roll model. Requires guarded one-axis fixture, mechanical fall restraint, independent physical motor power cut, independently monitored/current-limited ESC supply. No free flight. May abort before capture. Confirm these safeguards are in place?":"Requires measured roll actuator/model calibration, protected one-axis fixture, independent physical E-stop and monitored power. Motor stop does not prevent a gravity-driven fall. No free flight. Continue only after bench safety review?";
@@ -1610,7 +1613,7 @@ void MainWindow::startEmbeddedRoll(){
         stopRecording();applied_value_->setText("Cannot open FMU phase log");return;
     }
     embedded_roll_stream_.setDevice(&embedded_roll_log_);embedded_roll_stream_.resetStatus();
-    embedded_roll_stream_<<"phase,roll_rad,reference_rad,rate_rad_s,requested_torque_nm,raw_torque_nm,elapsed_s,m1,m2,m3,m4,mcu_ms\n";embedded_roll_stream_.flush();
+    embedded_roll_stream_<<"phase,roll_rad,reference_rad,rate_rad_s,requested_torque_nm,raw_torque_nm,elapsed_s,m1,m2,m3,m4,mcu_ms,capture_elapsed_s\n";embedded_roll_stream_.flush();
     if(embedded_roll_stream_.status()!=QTextStream::Ok || !ready()){
         embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();stopRecording();applied_value_->setText("Recording or precheck failed");return;
     }
@@ -1649,7 +1652,7 @@ void MainWindow::serviceEmbeddedRoll(){
     const auto parts=raw.split(',');
     if(parts.size()==13 && parts[0]=="SWING_REAL" && parts[12]!=embedded_roll_last_tick_){
         embedded_roll_last_tick_=parts[12];embedded_roll_feedback_.start();
-        embedded_roll_stream_<<QStringList(parts.mid(1)).join(',')<<'\n';embedded_roll_stream_.flush();
+        // The acquisition queue writes phase rows. Here only supervise feedback.
         if(embedded_roll_stream_.status()!=QTextStream::Ok){finishEmbeddedRoll("Phase log write failed");return;}
         const QString phase=parts[1].toDouble()==0.?"SPINUP":parts[1].toDouble()==2.?"LQR REGULATION":"SWING-UP";
         activate_btn_->setText("STM32 CONTROL ACTIVE");
@@ -1661,7 +1664,9 @@ void MainWindow::serviceEmbeddedRoll(){
        (embedded_roll_feedback_.isValid() && embedded_roll_feedback_.elapsed()>450)){
         finishEmbeddedRoll("SAFE STOP: FMU phase telemetry timeout");return;
     }
-    if(embedded_roll_clock_.elapsed()>22000){finishEmbeddedRoll("SAFE STOP: experiment duration ceiling");return;}
+    // Host ceiling follows the nominal trajectory plus FMU capture/hold budget.
+    const qint64 trial_budget_ms=static_cast<qint64>((embedded_roll_duration_->value()+16.0)*1000.0);
+    if(embedded_roll_clock_.elapsed()>trial_budget_ms){finishEmbeddedRoll("SAFE STOP: experiment wall-clock ceiling");return;}
     if(!embedded_roll_lease_.isValid() || embedded_roll_lease_.elapsed()>=80){
         if(!bridge_.publishSwingTuning(true,{double(embedded_roll_token_)})){finishEmbeddedRoll("Safety lease unavailable");return;}
         embedded_roll_lease_.start();
@@ -1672,7 +1677,7 @@ void MainWindow::finishEmbeddedRoll(const QString& reason,bool emergency){
     embedded_roll_active_=false;command_active_=false;embedded_roll_token_=0;e_stop_=emergency;
     (void)bridge_.publishSwingTuning(true,{});
     if(emergency)bridge_.emergencyStop();
-    embedded_roll_stream_.flush();embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();
+    // The phase file remains open until stopRecording drains its final batch.
     // Store end reason separately: the companion YAML is written at start.
     QSaveFile summary(recording_path_+".swing_status.txt");
     if(summary.open(QIODevice::WriteOnly|QIODevice::Text)){
@@ -1683,6 +1688,7 @@ void MainWindow::finishEmbeddedRoll(const QString& reason,bool emergency){
         summary.write(details.toUtf8());summary.commit();
     }
     if(recorder_active_)stopRecording();
+    embedded_roll_stream_.flush();embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();
     controller_->setEnabled(true);plant_selector_->setEnabled(true);embedded_roll_panel_->setEnabled(true);
     {QSignalBlocker hold(output_enabled_);output_enabled_->setChecked(false);}
     resetEquilibriumReference();updateEmbeddedRollUi();
@@ -1780,7 +1786,7 @@ void MainWindow::startOutput(){
  updateReferenceGate();
  if (manual_mode_) bridge_.setMotorArmed(true);
  activate_btn_->setText("COMMANDS ENABLED");
- if(auto_record_->isChecked()&&!recorder_active_)startRecording();
+ if(auto_record_->isChecked()&&!recorder_active_){startRecording();output_owned_recording_=recorder_active_;}
  if(manual_mode_){
    wave_running_=false;
    publishMotorCommand();
@@ -1823,7 +1829,7 @@ void MainWindow::stopOutput(bool emergency){
     if(emergency)bridge_.emergencyStop();else bridge_.setEnabled(false);
     activate_btn_->setText("APPLY / ACTIVATE");
     applied_value_->setText(emergency?"EMERGENCY STOP requested · disabled":"Command output: DISABLED");
-    if((end_manual_trial || auto_record_->isChecked()) && recorder_active_)stopRecording();
+    if((end_manual_trial || output_owned_recording_) && recorder_active_)stopRecording();
 }
 void MainWindow::tickWaveform(){
  if(!wave_running_||!command_active_)return;
@@ -1994,17 +2000,15 @@ void MainWindow::tick(){
                 s.ros_time_s, s.attitude_deg[std::size_t(axis)]);
         }
     }
-    if(selected && !s.from_real && s.kind==SampleKind::Imu && recorder_active_)saveRecord(s);
+    // Recording uses a separate receive-time queue for both plants.
     const bool last_in_source=last_event[s.from_real ? 1 : 0]
                                     [static_cast<std::size_t>(s.kind)]==i;
     onSample(s,last_in_source);
  }
- if(recorder_active_ && bridge_.isReal()){
-     for(const auto& sample:bridge_.drainRealRecording())saveRecord(sample);
- }
+ if(recorder_active_)drainRecording();
  updateSourceConnections();
  if (recorder_active_ && recording_end_s_ > 0.0 &&
-     recording_clock_.elapsed() / 1000.0 >= recording_end_s_) {
+     recording_clock_.elapsed() / 1000.0 >= recording_end_s_ + (manual_trial_active_ || embedded_roll_active_ ? 0.0 : 0.12)) {
      recording_should_stop_ = true;
  }
  if (recorder_active_ && recording_should_stop_) stopRecording();
@@ -2016,8 +2020,10 @@ void MainWindow::tick(){
      QString estimate_text("Estimate: open-ended / continuous capture");
      if (recording_config_.mode == 1 && recording_end_s_ > 0.0) {
          progress_fraction = std::clamp(elapsed_s / recording_end_s_, 0.0, 1.0);
-         estimate_text = QString("Estimate: %1 s total · remaining %2 s")
-             .arg(f(recording_end_s_,2)).arg(f(std::max(0.0, recording_end_s_ - elapsed_s),2));
+         const double unit=recordingUnitSeconds(recording_config_.time_unit);
+         const QString unit_name=QStringList{"ms","s","min","h"}[recording_config_.time_unit];
+         estimate_text = QString("Total %1 %3 · remaining %2 %3")
+             .arg(QString::number(recording_end_s_/unit,'g',7)).arg(QString::number(std::max(0.0, recording_end_s_ - elapsed_s)/unit,'g',7)).arg(unit_name);
      } else if (recording_config_.mode == 2 && recording_end_s_ > 0.0) {
          progress_fraction = std::clamp(elapsed_s / recording_end_s_, 0.0, 1.0);
          estimate_text = QString("Estimate: %1 waveform periods · remaining %2 s")
@@ -2033,7 +2039,7 @@ void MainWindow::tick(){
          elapsed_s,
          recording_events_, recording_path_, progress_fraction, estimate_text);
      if(bridge_.isReal())recording_dialog_->setMotorInputStatus(QString::fromStdString(bridge_.recordingInputsStatus())+
-         QString(" | CSV valid rows HOST %1 / FMU %2").arg(recorded_host_rows_).arg(recorded_fmu_rows_));
+         QString(" | CSV valid rows HOST %1 / FMU %2 | events %3 | drops %4").arg(recorded_host_rows_).arg(recorded_fmu_rows_).arg(recorded_events_).arg(recording_dropped_+recording_event_dropped_));
  }
  // Motor monitoring is independent of the IMU and of the selected control plant.
  // Plot actual transport/plant messages, not the GUI slider value as feedback.
@@ -2812,6 +2818,15 @@ void MainWindow::startRecording(const RecordingConfig* override_config) {
         QMessageBox::critical(recording_dialog_, "Data recorder", recording_file_.errorString());
         return;
     }
+    recording_event_file_.setFileName(recording_path_+".events.csv");
+    if(!recording_event_file_.open(QIODevice::WriteOnly|QIODevice::Text|QIODevice::NewOnly)){
+        recording_file_.close();recording_file_.remove();
+        recording_dialog_->showError("Cannot open event CSV: "+recording_event_file_.errorString());return;
+    }
+    recording_event_stream_.setDevice(&recording_event_file_);recording_event_stream_.resetStatus();recording_event_stream_.setLocale(QLocale::c());
+    recording_event_stream_.setRealNumberNotation(QTextStream::FixedNotation);recording_event_stream_.setRealNumberPrecision(9);
+    recording_event_stream_<<"capture_elapsed_s,event,payload\n";recording_event_stream_.flush();
+    recording_dropped_=recording_unmatched_=recording_event_dropped_=recorded_events_=0;recording_write_error_=false;recording_decimated_=0;
     recording_config_ = config;
     recording_start_ros_s_ = have_sample_ ? last_sample_.ros_time_s : 0.0;
     recording_end_s_ = -1.0;
@@ -2832,6 +2847,7 @@ void MainWindow::startRecording(const RecordingConfig* override_config) {
     peak_have_2_ = false;
     recording_stats_.reset();
     recording_stream_.setDevice(&recording_file_);
+    recording_stream_.resetStatus();recording_stream_.setLocale(QLocale::c());
     QStringList columns{"ros_time_s", "sequence"};
     if (recording_config_.save_attitude) columns << "roll_deg" << "pitch_deg" << "yaw_deg";
     if (recording_config_.save_reference) columns << "ref_roll_deg" << "ref_pitch_deg" << "ref_yaw_deg";
@@ -2856,11 +2872,17 @@ void MainWindow::startRecording(const RecordingConfig* override_config) {
             << "gui_fusion_valid" << "gui_roll_deg" << "gui_pitch_deg" << "gui_yaw_relative_deg"
             << "esc_power_tick_valid" << "esc_power_sample_ms" << "esc_power_age_s"
             << "esc_current_valid" << "esc_current_a" << "esc_power_w"
-            << "esc_sense_valid" << "esc_current_sense_v" << "esc_adc_v_raw" << "esc_adc_i_raw";
-    recording_stream_ << columns.join(',') << "\n";
+            << "esc_sense_valid" << "esc_current_sense_v" << "esc_adc_v_raw" << "esc_adc_i_raw"
+            << "motor_map_revision" << "capture_elapsed_s" << "capture_elapsed_ms" << "ros_stamp_ns";
+    recording_stream_ << columns.join(',') << "\n";recording_stream_.flush();
+    if(recording_stream_.status()!=QTextStream::Ok || recording_event_stream_.status()!=QTextStream::Ok){
+        recording_stream_.setDevice(nullptr);recording_event_stream_.setDevice(nullptr);
+        recording_file_.close();recording_event_file_.close();recording_dialog_->showError("Cannot write CSV headers");return;
+    }
+    bridge_.beginRecording(bridge_.isReal());
     recording_clock_.start();
     recorder_active_ = true;
-    if(bridge_.isReal())bridge_.beginRealRecording();
+    output_owned_recording_=false;
     record_btn_->setText("RECORDER ●");
     status_rec_->setText("REC: ACTIVE");
     recording_dialog_->setRecordingState(true);
@@ -2880,6 +2902,10 @@ void MainWindow::startRecording(const RecordingConfig* override_config) {
             yaml << "cefiro_experiment:\n";
             yaml << "  created_at: " << quoteYaml(QDateTime::currentDateTime().toString(Qt::ISODate)) << '\n';
             yaml << "  data_file: " << quoteYaml(recording_path_) << '\n';
+            yaml << "  events_file: " << quoteYaml(recording_path_+".events.csv") << '\n';
+            yaml << "  recorder_schema: full_rate_v2\n";
+            yaml << "  capture_clock: steady_clock_receipt_time\n";
+            yaml << "  save_every_received_imu: " << (config.save_interval_ms==0?"true":"false") << '\n';
             yaml << "  notes: " << quoteYaml(config.notes) << '\n';
             yaml << "  strategy: " << quoteYaml(controller_->currentText()) << '\n';
             yaml << "  source: " << quoteYaml(manual_mode_ ? "MANUAL" : "AUTOMATIC") << '\n';
@@ -2896,7 +2922,7 @@ void MainWindow::startRecording(const RecordingConfig* override_config) {
             yaml << "  peak_min_separation_s: " << config.peak_separation_s << '\n';
             yaml << "  controller_acknowledgement: "
                  << (bridge_.feedbackFresh() ? "available" : "not_confirmed") << '\n';
-            yaml << "  time_unit: " << quoteYaml(QStringList{"ms","s","min"}[config.time_unit]) << '\n';
+            yaml << "  time_unit: " << quoteYaml(QStringList{"ms","s","min","h"}[config.time_unit]) << '\n';
             yaml << "  plant: " << (bridge_.isReal()?"REAL":"SIM") << '\n';
             yaml << "  motor_input_schema: fmu_imu_snapshot_v1\n";
             yaml << "  motor_order: [M1, M2, M3, M4] # logical, after firmware remap\n";
@@ -2940,31 +2966,72 @@ void MainWindow::stopRecording() {
         return;
     }
     if (!recorder_active_) return;
-    if(bridge_.isReal()){
-        for(const auto& sample:bridge_.drainRealRecording(true))saveRecord(sample);
-    }
+    drainRecording(true);
     recorder_active_ = false;
+    output_owned_recording_=false;
     recording_should_stop_ = false;
-    recording_stream_.flush();
-    recording_file_.close();
+    recording_stream_.flush();recording_event_stream_.flush();
+    recording_write_error_=recording_write_error_ || recording_stream_.status()!=QTextStream::Ok || recording_event_stream_.status()!=QTextStream::Ok || !recording_file_.flush() || !recording_event_file_.flush();
+    recording_stream_.setDevice(nullptr);recording_event_stream_.setDevice(nullptr);
+    recording_file_.close();recording_event_file_.close();
     record_btn_->setText("DATA RECORDER");
     status_rec_->setText("REC: IDLE");
     if (recording_dialog_) {
         recording_dialog_->setRecordingState(false);
-        recording_dialog_->updateStatus("COMPLETE", recorded_samples_,
-            recording_clock_.elapsed() / 1000.0, recording_events_, recording_path_, 1.0, "Estimate: completed");
+        const bool incomplete=recording_write_error_ || recording_dropped_ || recording_event_dropped_ || !recorded_samples_;
+        const double total_elapsed=recording_clock_.elapsed()/1000.0;
+        const double captured_elapsed=std::max(0.0,std::min(total_elapsed,recording_end_s_>0.?recording_end_s_:total_elapsed)-recording_config_.start_delay_s);
+        recording_dialog_->updateStatus(incomplete?"INCOMPLETE":"COMPLETE", recorded_samples_,
+            captured_elapsed, recording_events_, recording_path_, 1.0,
+            QString("Events: %1 | unmatched IMU: %2 | queue drops: %3").arg(recorded_events_).arg(recording_unmatched_).arg(recording_dropped_+recording_event_dropped_));
+        if(incomplete)recording_dialog_->showError("Capture incomplete: no IMU rows, queue overflow or disk write failure. Inspect CSV and summary.");
     }
     if (recording_config_.metadata) exportSummary();
 }
 
+void MainWindow::drainRecording(bool finish){
+    auto batch=bridge_.drainRecording(finish);
+    recording_dropped_=batch.dropped;recording_unmatched_=batch.unmatched;recording_event_dropped_=batch.event_dropped;
+    for(const auto& sample:batch.rows){
+        if(recording_write_error_)break;
+        saveRecord(sample);
+    }
+    for(const auto& event:batch.events){
+        if(!captureTimeContains(event.elapsed_s,recording_config_.start_delay_s,recording_end_s_))continue;
+        QString payload=QString::fromStdString(event.payload);payload.replace("\"","\"\"");
+        recording_event_stream_<<event.elapsed_s<<','<<QString::fromStdString(event.kind)<<",\""<<payload<<"\"\n";
+        if(embedded_roll_log_.isOpen() && event.kind=="swing_status"){
+            const auto parts=QString::fromStdString(event.payload).split(',');
+            if(parts.size()==13 && parts[0]=="SWING_REAL"){
+                embedded_roll_stream_<<QStringList(parts.mid(1)).join(',')<<','<<QString::number(event.elapsed_s,'f',9)<<'\n';
+            }
+        }
+        ++recorded_events_;
+    }
+    // Flush complete batches, including short captures and final partial batches.
+    recording_stream_.flush();recording_event_stream_.flush();
+    if(embedded_roll_log_.isOpen()){
+        embedded_roll_stream_.flush();
+        if(embedded_roll_stream_.status()!=QTextStream::Ok || !embedded_roll_log_.flush()){
+            recording_write_error_=recording_should_stop_=true;
+            if(recording_dialog_)recording_dialog_->showError("Phase CSV write failed; stopping acquisition.");
+        }
+    }
+    if(recording_stream_.status()!=QTextStream::Ok||recording_event_stream_.status()!=QTextStream::Ok||!recording_file_.flush()||!recording_event_file_.flush()){
+        recording_write_error_=recording_should_stop_=true;
+        if(recording_dialog_)recording_dialog_->showError("CSV write failed; stopping acquisition.");
+    }
+    if(recording_dropped_||recording_event_dropped_){
+        recording_should_stop_=true;
+        if(recording_dialog_)recording_dialog_->showError("Recorder queue overflow; capture incomplete.");
+    }
+}
 void MainWindow::saveRecord(const Telemetry& sample) {
     if (!recorder_active_) return;
-    const double elapsed = recording_clock_.elapsed() / 1000.0;
-    if (elapsed < recording_config_.start_delay_s) return;
-    // Use the measurement timestamp for interval/peak filters. A UI tick may
-    // contain many IMU samples, all sharing the same wall-clock processing time.
-    const double sample_time = std::isfinite(sample.ros_time_s) && sample.ros_time_s > 0.0
-        ? sample.ros_time_s : elapsed;
+    const double elapsed = sample.capture_elapsed_s;
+    if (!captureTimeContains(elapsed,recording_config_.start_delay_s,recording_end_s_)) return;
+    // Receipt-time monotonic clock: no loss when a batch is processed late or ROS time jumps.
+    const double sample_time = elapsed;
     if (sample_time < last_saved_s_) last_saved_s_ = -1.e9;
     if (sample_time < last_peak_s_) last_peak_s_ = -1.e9;
 
@@ -2977,7 +3044,7 @@ void MainWindow::saveRecord(const Telemetry& sample) {
             sample_time - last_peak_s_ >= recording_config_.peak_separation_s) {
             ++recording_events_;
             last_peak_s_ = sample_time;
-            if (recording_events_ >= recording_config_.peak_count) recording_should_stop_ = true;
+            if (recording_events_ >= recording_config_.peak_count) {recording_should_stop_ = true;recording_end_s_=std::nextafter(elapsed, INFINITY);}
         }
         peak_prev2_ = peak_prev1_;
         peak_prev1_ = value;
@@ -2985,8 +3052,7 @@ void MainWindow::saveRecord(const Telemetry& sample) {
         peak_have_1_ = true;
     }
 
-    if (recording_config_.save_interval_ms > 0 &&
-        (sample_time - last_saved_s_) * 1000.0 < recording_config_.save_interval_ms) return;
+    if (!captureIntervalAllows(sample_time,last_saved_s_,recording_config_.save_interval_ms)){++recording_decimated_;return;}
     last_saved_s_ = sample_time;
     recording_stats_.add(sample);
     auto& out = recording_stream_;
@@ -2994,27 +3060,27 @@ void MainWindow::saveRecord(const Telemetry& sample) {
     out.setRealNumberPrecision(7);
     out << sample.ros_time_s << ',' << sample.sequence;
     if (recording_config_.save_attitude) {
-        for (double v : sample.attitude_deg) out << ',' << v;
+        for (double v : sample.attitude_deg) {out << ',';if(sample.orientation_valid && std::isfinite(v))out<<v;}
     }
     if (recording_config_.save_reference) {
         for (double v : sample.setpoint_deg) out << ',' << v;
     }
     if (recording_config_.save_error) {
         for (int i = 0; i < 3; ++i) {
-            out << ',' << (sample.orientation_valid ? angleErrorDeg(sample.setpoint_deg[i], sample.attitude_deg[i]) : 0.0);
+            out << ',';if(sample.orientation_valid)out<<angleErrorDeg(sample.setpoint_deg[i],sample.attitude_deg[i]);
         }
     }
     if (recording_config_.save_rates) {
-        for (double v : sample.angular_rate_deg_s) out << ',' << v;
+        for (double v : sample.angular_rate_deg_s) {out<<',';if(std::isfinite(v))out<<v;}
     }
     if (recording_config_.save_accel) {
-        for (double v : sample.accel_m_s2) out << ',' << v;
+        for (double v : sample.accel_m_s2) {out<<',';if(std::isfinite(v))out<<v;}
     }
     if (recording_config_.save_mag) {
-        for (double v : sample.mag_uT) out << ',' << v;
+        for (double v : sample.mag_uT) {out << ',';if(sample.magnetometer_valid&&std::isfinite(v))out<<v;}
     }
     if (recording_config_.save_baro) {
-        out << ',' << sample.pressure_hPa << ',' << sample.relative_alt_m;
+        out << ',';if(sample.barometer_valid)out<<sample.pressure_hPa;out<<',';if(sample.barometer_valid)out<<sample.relative_alt_m;
     }
     if (recording_config_.save_validity) {
         out << ',' << int(sample.orientation_valid)
@@ -3066,13 +3132,15 @@ void MainWindow::saveRecord(const Telemetry& sample) {
     out<<','<<int(sense)<<',';if(sense)out<<sample.esc_current_sense_v;
     out<<',';if(sense)out<<sample.adc_voltage_raw;
     out<<',';if(sense)out<<sample.adc_current_raw;
+    out<<',';if(sample.motor_map_revision>0)out<<sample.motor_map_revision;
+    out<<','<<elapsed<<','<<elapsed*1000.<<','<<sample.ros_stamp_ns;
     out << "\n";
     if(sample.host_dshot_valid)++recorded_host_rows_;
     if(sample.fmu_dshot_valid)++recorded_fmu_rows_;
     ++recorded_samples_;
     if (recorded_samples_ % 128 == 0) out.flush();
     if (out.status() != QTextStream::Ok) {
-        recording_should_stop_ = true;
+        recording_write_error_ = recording_should_stop_ = true;
         if (recording_dialog_) recording_dialog_->showError("CSV write failed; stopping acquisition.");
     }
 }
@@ -3089,6 +3157,13 @@ void MainWindow::exportSummary() {
     out << "Controller selection: " << controller_->currentText() << '\n';
     out << "Source: " << (manual_mode_ ? "MANUAL" : "AUTOMATIC") << '\n';
     out << "Samples written to disk: " << recorded_samples_ << '\n';
+    out << "Event CSV: " << recording_path_ << ".events.csv\n";
+    out << "Events written: " << recorded_events_ << '\n';
+    out << "Unmatched real IMU rows: " << recording_unmatched_ << '\n';
+    out << "Intentionally decimated IMU rows: " << recording_decimated_ << '\n';
+    out << "IMU queue drops: " << recording_dropped_ << '\n';
+    out << "Event queue drops: " << recording_event_dropped_ << '\n';
+    out << "Write error: " << (recording_write_error_?"yes":"no") << '\n';
     out << "Host DShot valid rows: " << recorded_host_rows_ << '\n';
     out << "FMU DShot valid rows: " << recorded_fmu_rows_ << '\n';
     out << "Samples with valid orientation: " << recording_stats_.count << '\n';

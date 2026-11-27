@@ -188,3 +188,7 @@ Every graph now has its own `AUTO Y: ON/OFF` toggle (on the graph toolbar).
 - Dashboard and RPM plots default to auto-fit ON. The reference preview starts manual with the original ±190° range; AUTO Y can be toggled on.
 
 The toggle changes only visualization; it does not change ROS topics, commands, feedback, or telemetry retention.
+
+## Full-rate timed recorder (2.4.28)
+
+See [RECORDING_V2428_ES.md](RECORDING_V2428_ES.md) for duration/interval controls (ms, s, min, h), CSV schema, event logs, and acquisition quality diagnostics.

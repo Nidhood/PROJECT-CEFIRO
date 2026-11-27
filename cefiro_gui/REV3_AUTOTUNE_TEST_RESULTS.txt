@@ -1,0 +1,3 @@
+PASS: Rev3 pair provenance; rejects historical pairing and wrong revision
+PASS: MCU time, voltage hypothesis, no invented current, gap-aware energy
+PASS: 434 candidates, 12 cases each; known LQR and delay rejection; regression; CSV provenance; rejects unexcited axis.
