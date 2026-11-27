@@ -20,7 +20,7 @@ Build: `colcon build --symlink-install --packages-up-to cefiro_hardware_interfac
 | wifi_rx_timeout_s | 3.0 | CF1 receive timeout |
 | enable_command_tx | false | Explicit opt-in only |
 | rpm_to_dshot_enabled | false | Explicit opt-in only |
-| dshot_max | 300 | Conservative host cap |
+| dshot_max | 2047 | Manual protocol ceiling; lower cap configurable |
 
 Examples:
 

@@ -1,3 +1,14 @@
+# v0.8.8 — Manual range restore
+
+- Restore 0 or 48..2047 for MANUAL in constructor, YAML and both launch files.
+- Keep Swing-Up bridge, IMU parser, power gates and keepalive unchanged.
+
+## 0.8.7 — Swing-up and compatible IMU bridge
+
+- Add real swing tuning subscription, CF1 feedback and guarded trial lifecycle.
+- Restore IMU 7/8/14 and optional IMX reception independently of actuator metadata.
+- Match current firmware manual cap (300); no powered profile changes.
+
 # 0.8.2 — Companion USB–USART / verified CF1 sessions
 
 - Both Wi-Fi modes preserved; default auto, explicit network/direct.

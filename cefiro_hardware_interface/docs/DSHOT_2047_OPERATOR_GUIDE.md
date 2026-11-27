@@ -2,7 +2,7 @@
 
 The STM32H743 accepts DShot **throttle codes** 0 (stop) and 48..2047 (active); codes 1..47 are ESC special commands and are never emitted by the manual-RPM adapter. DShot300 is the serial protocol **bitrate** (300 kbit/s), NOT the throttle ceiling.
 
-The Raspberry bridge's separate `dshot_max` ceiling **defaults to 300** to protect commissioning. It can be changed **only at node startup** using `dshot_max:=...` (integer 48..2047, no propellers, measured current/temperature, restrained frame). The GUI slider's 0..12000 "RPM" is *nominal uncalibrated command scale*, never measured RPM. `12000 nominal` maps to configured `dshot_max`.
+The Raspberry bridge's separate `dshot_max` ceiling **defaults to 2047 in v0.8.8** to protect commissioning. It can be changed **only at node startup** using `dshot_max:=...` (integer 48..2047, no propellers, measured current/temperature, restrained frame). The GUI slider's 0..12000 "RPM" is *nominal uncalibrated command scale*, never measured RPM. `12000 nominal` maps to configured `dshot_max`.
 
 ## Receive-only smoke test
 ```bash
@@ -11,7 +11,7 @@ ros2 launch cefiro_hardware_interface hardware.launch.py \
   enable_command_tx:=false rpm_to_dshot_enabled:=false
 ```
 
-## Supervised low-limit bench mode (default 300)
+## Supervised low-limit bench mode (explicit cap 300)
 ```bash
 ros2 launch cefiro_hardware_interface hardware.launch.py \
   port:=/dev/ttyUSB1 protocol_mode:=cf1 \

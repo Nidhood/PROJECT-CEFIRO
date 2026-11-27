@@ -35,9 +35,10 @@ AttitudeView::AttitudeView(QWidget* parent) : QWidget(parent) {
     setCursor(Qt::OpenHandCursor);
     setToolTip("Drag to orbit the camera · Double-click to reset · Fixed auto-fit scale");
 }
-void AttitudeView::setAttitude(const Quaternion& quaternion, bool valid) {
+void AttitudeView::setAttitude(const Quaternion& quaternion, bool valid, bool diagnostic) {
     q_ = quaternion;
     valid_ = valid;
+    diagnostic_ = valid && diagnostic;
     update();
 }
 void AttitudeView::setTheme(const QColor& bg, const QColor& fg,
@@ -263,7 +264,7 @@ void AttitudeView::paintEvent(QPaintEvent*) {
     const int line_h=text_metrics.height()+4;
     painter.setPen(fg_.darker(145));
     painter.drawText(QRectF(10,7,width()-20,line_h),Qt::AlignLeft,
-                     text_metrics.elidedText("DRAG TO ORBIT  ·  DOUBLE-CLICK TO RESET",Qt::ElideRight,width()-20));
+                     text_metrics.elidedText(diagnostic_?"GUI DIAGNOSTIC / RELATIVE YAW — NOT FMU AHRS":"DRAG TO ORBIT  ·  DOUBLE-CLICK TO RESET",Qt::ElideRight,width()-20));
     painter.drawText(QRectF(10,height()-2*line_h-4,width()-20,line_h),Qt::AlignLeft,
                      QString("CAM  %1° / %2°")
                          .arg(azimuth_ * 180.0 / kPi, 0, 'f', 0)

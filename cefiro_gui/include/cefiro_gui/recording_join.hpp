@@ -13,6 +13,10 @@ struct IdentificationFields {
     std::uint8_t fmu_state{};
     std::array<std::uint16_t,4> fmu_dshot{}, host_dshot{};
     double host_dshot_age_s{}, battery_voltage_v{};
+    bool power_tick_valid{},current_valid{},esc_sense_valid{};
+    std::uint32_t power_sample_ms{};
+    double power_age_s{},esc_current_a{},esc_current_sense_v{};
+    std::uint16_t adc_voltage_raw{},adc_current_raw{};
     // Strict orientation validity supplied by the co-sampled message.
     bool orientation_valid{};
     Quaternion orientation{};
@@ -26,8 +30,19 @@ struct IdentificationFields {
             s.host_dshot_age_s=host_dshot_age_s; s.host_origin=HostOrigin::Identification;
         }
         if(battery_valid){s.battery_valid=true;s.battery_voltage_v=battery_voltage_v;}
+        s.power_tick_valid=power_tick_valid;s.power_sample_ms=power_sample_ms;s.power_age_s=power_age_s;
+        // A power row must not use a fallback battery voltage from another source.
+        if(power_tick_valid){s.battery_valid=battery_valid;s.battery_voltage_v=battery_voltage_v;}
+        s.current_valid=power_tick_valid&&current_valid;s.esc_current_a=esc_current_a;
+        s.esc_sense_valid=power_tick_valid&&esc_sense_valid;s.esc_current_sense_v=esc_current_sense_v;
+        s.adc_voltage_raw=adc_voltage_raw;s.adc_current_raw=adc_current_raw;
         s.orientation_valid=orientation_valid; s.orientation=orientation;
         if(orientation_valid)s.attitude_deg=orientation.eulerDeg();
+        // The observer used the primary IMU. Never attach a valid estimate to
+        // a row with an unavailable or inconsistent strict orientation.
+        if(s.roll_torque.valid() && s.roll_torque.source==TorqueSource::FmuAhrs && (!orientation_valid ||
+            std::abs(angleErrorDeg(s.attitude_deg[0],s.roll_torque.roll_rad*rad2deg))>0.1))
+            s.roll_torque={TorqueQuality::InvalidOrientation};
     }
 };
 // Call under RosBridge mutex. The live IMU queue never waits for this join.

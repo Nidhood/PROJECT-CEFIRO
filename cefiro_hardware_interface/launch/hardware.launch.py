@@ -24,9 +24,8 @@ def generate_launch_description():
                               choices=['true', 'false']),
         DeclareLaunchArgument('rpm_to_dshot_enabled', default_value='false',
                               choices=['true', 'false']),
-        # Explicit host-side upper throttle code. The STM32 protocol cap is 2047.
-        # Leave at 300 until motor, ESC, power and mounting are validated.
-        DeclareLaunchArgument('dshot_max', default_value='300'),
+        # Manual protocol ceiling is 2047. A lower startup cap can be selected.
+        DeclareLaunchArgument('dshot_max', default_value='2047'),
         Node(
             package='cefiro_hardware_interface',
             executable='hardware_node',

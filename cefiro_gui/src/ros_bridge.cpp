@@ -352,6 +352,35 @@ void RosBridge::onImu(const Imu& msg,bool real){
         if(fresh(hardware_status_rx_,1.0))s.nominal_map=nominal_map_;else s.nominal_map={};
         if(fresh(battery_rx_,1.0)){s.battery_valid=true;s.battery_voltage_v=battery_voltage_;}
     }
+    // Independent display fallback. Never change orientation_valid or the FMU quaternion.
+    s.display_attitude={};
+    if(real){
+        const auto& stamp=msg.header.stamp;
+        s.display_attitude=display_attitude_filter_.update(
+            std::int64_t(stamp.sec)*1000000000LL+stamp.nanosec,s.accel_m_s2,
+            {msg.angular_velocity.x,msg.angular_velocity.y,msg.angular_velocity.z},
+            msg.linear_acceleration_covariance[0]!=-1.0 && msg.angular_velocity_covariance[0]!=-1.0,
+            s.orientation_valid);
+    }
+    // Diagnostic only: process every primary real IMU sample once. Do not
+    // alter the IMU/ATT, DShot, command, or identification publication paths.
+    if(real){
+        const auto& stamp=msg.header.stamp;
+        const auto now=MotorClock::now();
+        if(!fresh(roll_torque_rx_,RollTorqueObserver::stale_s))roll_torque_observer_.reset();
+        auto angles=s.attitude_deg;
+        auto source=s.orientation_valid?TorqueSource::FmuAhrs:TorqueSource::None;
+        if(!s.orientation_valid && s.display_attitude.valid){
+            const auto& q=s.display_attitude.q;
+            Quaternion diagnostic{q[0],q[1],q[2],q[3]};
+            if(diagnostic.normalize()){angles=diagnostic.eulerDeg();source=TorqueSource::GuiFusion;}
+        }
+        s.roll_torque=roll_torque_observer_.update(
+            std::int64_t(stamp.sec)*1000000000LL+stamp.nanosec,source!=TorqueSource::None,
+            angles[0],angles[1],s.angular_rate_deg_s[0],
+            s.angular_rate_deg_s[1],s.angular_rate_deg_s[2],source);
+        roll_torque_rx_=now;
+    }else s.roll_torque={};
     (real ? latest_real_ : latest_)=s;
     if(real && real_recording_){
         const auto& t=msg.header.stamp;
@@ -389,6 +418,10 @@ void RosBridge::onIdentification(const cefiro_msgs::msg::IdentificationSample& i
     f.host_dshot_valid=id.host_dshot_valid; f.host_dshot=id.host_dshot;
     f.host_dshot_age_s=id.host_dshot_age_s; f.battery_valid=id.battery_valid;
     f.battery_voltage_v=id.battery_voltage_v;
+    f.power_tick_valid=id.power_tick_valid;f.power_sample_ms=id.power_sample_ms;f.power_age_s=id.power_age_s;
+    f.current_valid=id.current_valid;f.esc_current_a=id.esc_current_a;
+    f.esc_sense_valid=id.esc_sense_valid;f.esc_current_sense_v=id.esc_current_sense_v;
+    f.adc_voltage_raw=id.adc_voltage_raw;f.adc_current_raw=id.adc_current_raw;
     const auto& imu=id.imu;
     f.orientation={imu.orientation.w,imu.orientation.x,imu.orientation.y,imu.orientation.z};
     f.orientation_valid=imu.orientation_covariance[0]!=-1.0 && f.orientation.normalize();
@@ -502,6 +535,11 @@ std::string RosBridge::recordingInputsStatus() const{
         " | FMU: "+(fresh(fmu_dshot_rx_,0.30)?"ONLINE":"NO DATA")+
         " | RPM map: "+(fresh(hardware_status_rx_,1.0)&&nominal_map_.valid()?"VALID":"UNAVAILABLE");
 }
+RollTorqueEstimate RosBridge::latestRollTorque() const{
+    std::lock_guard<std::mutex> g(mutex_);
+    if(!fresh(roll_torque_rx_,RollTorqueObserver::stale_s))return {TorqueQuality::Stale};
+    return latest_real_.roll_torque;
+}
 bool RosBridge::hardwareStatusFresh(double t)const{std::lock_guard<std::mutex>g(mutex_);return fresh(hardware_status_rx_,t);}
 std::string RosBridge::hardwareStatus()const{std::lock_guard<std::mutex>g(mutex_);return hardware_status_;}
 std::vector<Telemetry> RosBridge::drain(){
@@ -533,7 +571,7 @@ void RosBridge::resetTelemetry(bool real){
     auto& latest=real ? latest_real_ : latest_;
     latest=Telemetry{};
     latest.from_real=real;
-    if(real){host_topic_={};host_status_={};fmu_dshot_rx_={};battery_rx_={};nominal_map_={};}
+    if(real){host_topic_={};host_status_={};fmu_dshot_rx_={};battery_rx_={};nominal_map_={};roll_torque_observer_.reset();roll_torque_rx_={};display_attitude_filter_.reset();}
     (real ? real_initial_pressure_ : first_pressure_pa_)=0.0;
 }
 bool RosBridge::imuFresh(double t)const{return imuFreshFor(isReal(),t);}

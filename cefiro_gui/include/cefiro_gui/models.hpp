@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 #include "cefiro_gui/motor_observation.hpp"
+#include "cefiro_gui/roll_torque_observer.hpp"
+#include "cefiro_gui/display_attitude_filter.hpp"
 
 namespace cefiro::gui {
 constexpr double pi = 3.14159265358979323846;
@@ -47,11 +49,17 @@ struct Telemetry {
     std::uint8_t fmu_state{0};
     std::array<std::uint16_t,4> fmu_dshot{},host_dshot{};
     double host_dshot_age_s{0.},battery_voltage_v{0.};
+    bool power_tick_valid{},current_valid{},esc_sense_valid{};
+    std::uint32_t power_sample_ms{};
+    double power_age_s{},esc_current_a{},esc_current_sense_v{};
+    std::uint16_t adc_voltage_raw{},adc_current_raw{};
     HostOrigin host_origin{HostOrigin::None};
     NominalMotorMap nominal_map{};
     std::int64_t sequence{0};
     Quaternion orientation{};
     bool orientation_valid{false};
+    DisplayAttitude display_attitude{}; // GUI diagnostic only; never FMU feedback.
+    RollTorqueEstimate roll_torque{}; // Real IMU; source-labelled read-only diagnostic.
     Vec3 attitude_deg{};
     Vec3 angular_rate_deg_s{};
     Vec3 accel_m_s2{};

@@ -1,6 +1,8 @@
 #include "cefiro_gui/main_window.hpp"
+#include "cefiro_gui/autotune_dialog.hpp"
 #include "cefiro_gui/ui_scale.hpp"
 #include <QFontMetrics>
+#include "cefiro_gui/stable_readout.hpp"
 #include <QKeySequence>
 #include <QShortcut>
 #include <QScreen>
@@ -17,8 +19,14 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDialog>
+#include <QInputDialog>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QSaveFile>
+#include <QElapsedTimer>
+#include "cefiro_gui/accel_calibration_wizard.hpp"
+#include "cefiro_gui/gimbal_accel_calibration.hpp"
+#include <QProgressBar>
 #include <QEvent>
 #include <QtGlobal>
 #include <QGridLayout>
@@ -30,6 +38,7 @@
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QList>
+#include <QStringList>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
@@ -53,6 +62,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QRandomGenerator>
+#include <QSettings>
 #include <QPen>
 #include <algorithm>
 #include <cmath>
@@ -183,12 +193,14 @@ void MainWindow::shutdown(){if(shutting_down_)return;shutting_down_=true;
     }
     if (manual_publish_timer_) manual_publish_timer_->stop();
     wave_running_ = false;
+    if (embedded_roll_active_) finishEmbeddedRoll("GUI closed",false);
     if (command_active_) {
         bridge_.publishMotorCommand({0.0,0.0,0.0,0.0}, motor_command_direction_);
         bridge_.setMotorArmed(false);
         bridge_.emergencyStop();
     }
     command_active_ = false;
+    manual_trial_active_ = false;
  stopRecording();bridge_.stop();
 }
 void MainWindow::buildToolbar(){
@@ -239,6 +251,7 @@ void MainWindow::buildToolbar(){
      if(command_active_)return;
      if(recorder_active_)stopRecording(); // Never mix SIM and REAL in one CSV.
      bridge_.selectReal(index==1);
+     updateEmbeddedRollUi();
      resetSelectedFeedback();
      refreshReferenceLimits();
      setTheme(theme_index_);
@@ -278,7 +291,7 @@ void MainWindow::buildDashboard(){
     else if(i==7)magnitude_value_=metric;
     else if(i==8)dshot_value_=metric;
     inner->addWidget(metric);
-    QStringList keys=i<3?QStringList{"SIM REF","SIM","REAL REF","REAL"}:
+    QStringList keys=i<3?QStringList{"SIM REF","SIM","REAL REF","REAL",i==2?"GUI FUSION / REL YAW":"GUI FUSION / DIAG"}:
        i==3?QStringList{"SIM p","SIM q","SIM r","REAL p","REAL q","REAL r"}:
        i==4?QStringList{"SIM ax","SIM ay","SIM az","REAL ax","REAL ay","REAL az"}:
        i==5?QStringList{"SIM Bx","SIM By","SIM Bz","REAL Bx","REAL By","REAL Bz"}:
@@ -291,6 +304,7 @@ void MainWindow::buildDashboard(){
     if(i<3){
        dash_[size_t(i)]->setDashed(0);
        dash_[size_t(i)]->setDashed(2);
+       dash_[size_t(i)]->setDashed(4);
        dash_[size_t(i)]->setYRange(i==1?-95:-185,i==1?95:185);
      }
     if(i==3)dash_[size_t(i)]->setYRange(-30,30);
@@ -456,11 +470,33 @@ void MainWindow::buildControl() {
     auto* ctrl = new QHBoxLayout;
     ctrl->addWidget(label("STRATEGY", "eyebrow"));
     controller_ = new QComboBox(architecture);
-    controller_->addItems({"OPEN LOOP", "PID", "LQR", "SWING-UP + LQR (SIM)", "CUSTOM"});
+    controller_->addItems({"OPEN LOOP", "PID", "LQR", "SWING-UP + LQR (SIM)", "CUSTOM", "SWING-UP + LQR (STM32)"});
     ctrl->addWidget(controller_, 1);
     arch->addLayout(ctrl);
+    embedded_roll_panel_=new QWidget(architecture);
+    auto* rollForm=new QFormLayout(embedded_roll_panel_);
+    rollForm->setContentsMargins(0,0,0,0);
+    embedded_roll_kp_=spin(.6,1.1,.7,.05,3);
+    embedded_roll_kd_=spin(.4,.6,.4,.02,3);
+    embedded_roll_duration_=spin(8.,12.,11.5,.25,2);
+    QSettings saved("CEFIRO","EmbeddedRoll");
+    embedded_roll_kp_->setValue(saved.value("kp",.7).toDouble());
+    embedded_roll_kd_->setValue(saved.value("kd",.4).toDouble());
+    embedded_roll_duration_->setValue(saved.value("duration",11.5).toDouble());
+    rollForm->addRow("Initial Swing-Up Kp",embedded_roll_kp_);
+    rollForm->addRow("Initial Swing-Up Kd",embedded_roll_kd_);
+    rollForm->addRow("Duration [s]",embedded_roll_duration_);
+    rollForm->addRow(label("STM32 · Roll: M1+M4 (CH2/CH1) / M2+M3 (CH4/CH3) · LQR fixed · auto-record · 3 s hold", "hint"));
+    arch->addWidget(embedded_roll_panel_);
+    embedded_roll_panel_->hide();
     auto* tuneSwing=new QPushButton("SWING-UP TUNING",architecture);
     tuneSwing->setObjectName("secondary");arch->addWidget(tuneSwing);
+    auto* autoLab=new QPushButton("AUTO-TUNING LAB / OFFLINE",architecture);
+    autoLab->setObjectName("secondary");arch->addWidget(autoLab);
+    connect(autoLab,&QPushButton::clicked,this,[this]{
+        if(command_active_||recorder_active_){QMessageBox::warning(this,"Auto-tuning","Stop command output and recording first.");return;}
+        showAutoTuneDialog(this);
+    });
     auto* resetSafety=new QPushButton("RESET SAFETY FAULT (SIM)",architecture);
     resetSafety->setObjectName("secondary");arch->addWidget(resetSafety);
     connect(resetSafety,&QPushButton::clicked,this,[this]{
@@ -474,7 +510,7 @@ void MainWindow::buildControl() {
     connect(tuneSwing,&QPushButton::clicked,this,[this]{
         if(command_active_){QMessageBox::warning(this,"Swing-up tuning","Deactivate command output first.");return;}
         const bool real=bridge_.isReal();
-        QDialog dialog(this);dialog.setWindowTitle(real?"REAL / SWING-UP PILOT":"SIM / SWING-UP TUNING");
+        QDialog dialog(this);dialog.setWindowTitle(real?"REAL / SWING-UP PILOT — GUI 2.4.25":"SIM / SWING-UP TUNING");
         auto* outer=new QVBoxLayout(&dialog);
         auto* scroll=new QScrollArea(&dialog);scroll->setWidgetResizable(true);
         auto* content=new QWidget(scroll);scroll->setWidget(content);outer->addWidget(scroll,1);
@@ -483,7 +519,7 @@ void MainWindow::buildControl() {
         const auto available=screen()->availableGeometry().size();
         dialog.resize(std::min(scaledPixels(680,ui_scale_),available.width()-40),
                       std::min(scaledPixels(520,ui_scale_),available.height()-60));
-        layout->addWidget(label(real?"SHADOW calculates torque only. POWERED requires measured calibration, monitored power, mechanical protection and a constrained roll fixture. Start inverted and stationary. Direction is mathematical roll, not ESC CW/CCW.":"URDF joint order: yaw / pitch / roll. Apply while output is OFF. Torque and RPM limits are unchanged.","hint"));
+        layout->addWidget(label(real?"Select a trial type explicitly. SHADOW does not move motors. EXPERIMENT runs the provisional Roll Swing-Up + LQR and records data. Guarded one-axis fixture and independent power supervision required. Start inverted, stationary. No automatic retry. POWERED calibrated remains separate.":"URDF joint order: yaw / pitch / roll. Apply while output is OFF. Torque and RPM limits are unchanged.","hint"));
         std::array<QDoubleSpinBox*,3> kp{},kd{};
         const std::array<double,3> defaultsP=real?std::array<double,3>{1.1,0.,0.}:std::array<double,3>{.12,.65,.90};
         const std::array<double,3> defaultsD=real?std::array<double,3>{.4,0.,0.}:std::array<double,3>{.14,.32,.32};
@@ -494,24 +530,214 @@ void MainWindow::buildControl() {
         }
         auto* duration=spin(5.,30.,real?12.:11.,.5,2);form->addRow("Trajectory duration [s]",duration);
         QComboBox* trialMode=nullptr;
-        if(real){trialMode=new QComboBox(&dialog);trialMode->addItems({"SHADOW / no motors","POWERED / calibrated roll only"});form->addRow("Trial type",trialMode);}
+        if(real){trialMode=new QComboBox(&dialog);trialMode->addItems({"SHADOW / no motors","POWERED / calibrated roll only","EXPERIMENT / powered roll (external safety)"});trialMode->setPlaceholderText("SELECT TRIAL TYPE");trialMode->setCurrentIndex(-1);form->addRow("Trial type",trialMode);}
         unsigned trialToken=0;
         bool leaseActive=false;
         QComboBox* direction=nullptr;
         if(real){direction=new QComboBox(&dialog);direction->addItems({"Positive roll (+)","Negative roll (-)"});form->addRow("Roll direction",direction);}
+        if(real)connect(trialMode,QOverload<int>::of(&QComboBox::currentIndexChanged),&dialog,[&](int index){
+            if(index==2){kp[0]->setValue(.70);kd[0]->setValue(.40);duration->setValue(11.5);direction->setCurrentIndex(1);}
+            else if(index>=0){kp[0]->setValue(1.1);kd[0]->setValue(.4);duration->setValue(12.);direction->setCurrentIndex(0);}
+        });
         layout->addLayout(form);
         auto* status=label("Not applied","hint");layout->addWidget(status);
-        auto* apply=new QPushButton(real?"START SELECTED TRIAL":"APPLY SIM GAINS",&dialog);outer->addWidget(apply);
+        if(real){
+            auto* loadCandidate=new QPushButton("LOAD SAVED PD / SHADOW ONLY",content);
+            loadCandidate->setObjectName("secondary");layout->addWidget(loadCandidate);
+            connect(loadCandidate,&QPushButton::clicked,&dialog,[&,this]{
+                if(command_active_||leaseActive||!kp[0]->isEnabled()||!bridge_.isReal()){status->setText("Stop trial and reopen tuning before loading");return;}
+                const auto candidate=loadShadowCandidate(&dialog);
+                if(!candidate)return;
+                trialMode->setCurrentIndex(0);
+                kp[0]->setValue(candidate->kp);kd[0]->setValue(candidate->kd);
+                duration->setValue(candidate->duration);direction->setCurrentIndex(candidate->direction>0?0:1);
+                status->setText("Saved offline PD loaded for SHADOW only. No command sent; no LQR or powered profile changed.");
+            });
+        }
+        // Independent read-only diagnostics. No commands, arm requests, leases
+        // or control computations are sent by this timer.
+        QTimer torqueTimer(&dialog);torqueTimer.setInterval(80);
+        if(real){
+            auto* observer=new QGroupBox("ROLL TORQUE OBSERVER / GUI DIAGNOSTIC",content);
+            auto* values=new QFormLayout(observer);
+            values->setRowWrapPolicy(QFormLayout::WrapLongRows);
+            auto* quality=label("Waiting for IMU","hint");
+            quality->setWordWrap(false);
+            quality->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);
+            values->addRow("Quality",quality);
+            std::array<QLabel*,5> readings{};
+            const QStringList names={"Roll gravity [Nm]","Damping [Nm]","Net external torque [Nm]","Roll rate p [rad/s]","Filtered dp/dt [rad/s²]"};
+            for(int i=0;i<5;++i){
+                auto* reading=new QLabel("--",observer);
+                reading->setAlignment(Qt::AlignRight|Qt::AlignVCenter);
+                reading->setWordWrap(false);
+                // Values must not resize the tuning panel as digits change.
+                reading->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);
+                reading->setMinimumWidth(scaledPixels(110,ui_scale_));
+                readings[std::size_t(i)]=reading;values->addRow(names[i],reading);
+            }
+            auto* note=label("Read-only provisional roll model. No voltage required for this estimate. Net external torque includes friction/model errors; not measured motor torque. STM32 retains all actuation and safety checks.","hint");
+            values->addRow(note);layout->addWidget(observer);
+            const auto refresh=[this,quality,readings]{
+                const auto e=bridge_.isReal()?bridge_.latestRollTorque():RollTorqueEstimate{};
+                QString text;
+                switch(e.quality){
+                case TorqueQuality::Valid: text=e.source==TorqueSource::GuiFusion?"GUI FUSION / DIAGNOSTIC":"FMU AHRS / MODEL";break;
+                case TorqueQuality::OutsideRollModel: text="OUTSIDE ROLL MODEL";break;
+                case TorqueQuality::InvalidTime: text="INVALID TIMESTAMP";break;
+                case TorqueQuality::InvalidOrientation: text="NO VALID ORIENTATION";break;
+                case TorqueQuality::WarmingUp: text="FILTER WARM-UP";break;
+                case TorqueQuality::Stale: text="IMU STALE";break;
+                default: text="WAITING FOR REAL IMU";break;
+                }
+                quality->setText(text);quality->setToolTip(text);
+                const std::array<double,5> data{e.gravity_nm,e.damping_nm,e.external_nm,e.rate_rad_s,e.acceleration_rad_s2};
+                for(std::size_t i=0;i<readings.size();++i)readings[i]->setText(e.valid()?QString::number(data[i],'f',3):QString("--"));
+            };
+            connect(&torqueTimer,&QTimer::timeout,&dialog,refresh);
+            refresh();torqueTimer.start();
+            auto* calibrate=new QPushButton("CALIBRATE EXTERNAL ACCEL / GIMBAL",content);
+            calibrate->setObjectName("secondary");layout->addWidget(calibrate);
+            connect(calibrate,&QPushButton::clicked,&dialog,[this,&dialog,&leaseActive]{
+                if(command_active_||leaseActive||!bridge_.isReal()||recorder_active_){QMessageBox::warning(&dialog,"Accelerometer calibration","Stop output, trial and recording first.");return;}
+                if(QMessageBox::question(&dialog,"External accelerometer calibration",
+                    "Physically disconnect ESC power and remove propellers. Secure the frame. Move only the unpowered motor assembly / sensor fixture; never force the gimbal stops. Keep the STM32 and IMU powered. Proceed?",
+                    QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
+                QDialog cal(&dialog);cal.setWindowTitle("CEFIRO / CALIBRACION VISUAL DEL ACELEROMETRO");
+                auto* outerCal=new QVBoxLayout(&cal);
+                auto* scrollCal=new QScrollArea(&cal);scrollCal->setWidgetResizable(true);outerCal->addWidget(scrollCal,1);
+                auto* body=new QWidget(scrollCal);scrollCal->setWidget(body);auto* v=new QVBoxLayout(body);
+                v->addWidget(label("Mueve el drone lentamente por distintas inclinaciones del gimbal. No necesitas nivelarlo ni detenerlo por completo. El modelo indica una direccion sugerida; incluye diagonales y ambas caras de cada eje. Verde = datos aceptados. No se envian comandos a los motores.","hint"));
+                const std::array<QString,6> poseNames{"NORMAL","INVERTIDO","NARIZ ARRIBA","NARIZ ABAJO","DERECHA ABAJO","IZQUIERDA ABAJO"};
+                const std::array<QString,6> sensorNames{"+X","-X","+Y","-Y","+Z","-Z"};
+                // Map the requested body-frame specific force onto world +Z.
+                const auto targetPose=[](const CalVec& d){
+                    if(d[2]<-0.999999)return Quaternion{0,1,0,0};
+                    const double w=std::sqrt((1.+d[2])/2.);
+                    Quaternion q{w,d[1]/(2.*w),-d[0]/(2.*w),0.};q.normalize();return q;
+                };
+                auto* grid=new QGridLayout;std::array<QLabel*,6> tiles{};
+                for(unsigned i=0;i<6;++i){tiles[i]=label(poseNames[i],"hint");tiles[i]->setAlignment(Qt::AlignCenter);tiles[i]->setWordWrap(true);grid->addWidget(tiles[i],int(i/3),int(i%3));}v->addLayout(grid);
+                auto* title=label("","panelTitle");title->setAlignment(Qt::AlignCenter);v->addWidget(title);
+                auto* poseView=new AttitudeView(body);poseView->setMinimumHeight(245);poseView->setMaximumHeight(330);poseView->setToolTip(QString());v->addWidget(poseView,1);
+                auto* instruction=label("","hint");instruction->setAlignment(Qt::AlignCenter);v->addWidget(instruction);
+                auto* readings=label("Esperando IMU REAL...","hint");v->addWidget(readings);
+                auto* state=label("Pulsa INICIAR para comenzar.","hint");state->setAlignment(Qt::AlignCenter);v->addWidget(state);
+                auto* progress=new QProgressBar(body);progress->setRange(0,100);progress->setValue(0);v->addWidget(progress);
+                auto* total=label("0 / 6 posiciones","hint");v->addWidget(total);
+                auto* actions=new QHBoxLayout;auto* start=new QPushButton("INICIAR / REINICIAR",body);auto* pause=new QPushButton("PAUSAR",body);pause->setEnabled(false);actions->addWidget(start);actions->addWidget(pause);v->addLayout(actions);
+                auto* exportButton=new QPushButton("EXPORT STM32 CALIBRATION HEADER",&cal);exportButton->setEnabled(false);outerCal->addWidget(exportButton);
+                auto* closeCal=new QPushButton("CLOSE",&cal);outerCal->addWidget(closeCal);
+                GimbalAccelCalibration wizard;bool running=false;std::int64_t previous=-1;
+                QTimer captureTimer(&cal);captureTimer.setInterval(20);
+                auto paintState=[&](const QString& message,const QString& color){state->setText(message);state->setStyleSheet("QLabel { color: "+color+"; font-weight: bold; border: 1px solid "+color+"; border-radius: 5px; padding: 8px; }");};
+                auto refreshPose=[&]{
+                    const auto bin=wizard.suggestedBin();
+                    const auto suggested=wizard.suggestedFace();
+                    for(unsigned i=0;i<6;++i){const unsigned n=wizard.sectorCount(kWizardFaces[i]);const bool active=kWizardFaces[i]==suggested;
+                        const QString color=n?"#39d98a":active?"#e8b956":"#8795a1";
+                        tiles[i]->setText(poseNames[i]+QString(" / %1").arg(n));
+                        tiles[i]->setStyleSheet("QLabel { color: "+color+"; border: 1px solid "+color+"; padding: 5px; border-radius: 4px; }");}
+                    total->setText(QString("%1 / 26 direcciones | minimo 14, cobertura y ajuste validos").arg(wizard.count()));
+                    if(wizard.result()){title->setText("CALIBRACION COMPLETA");instruction->setText(QString("Error validacion RMS: %1 m/s² | max: %2 m/s². Exporta al STM32.").arg(wizard.rms(),0,'f',3).arg(wizard.result()->max_residual,0,'f',3));}
+                    else if(bin<GimbalAccelCalibration::bins_count){
+                        const auto d=wizard.direction(bin);
+                        QStringList axes;
+                        for(unsigned j=0;j<3;++j)if(std::abs(d[j])>.1)axes.append(sensorNames[2*j+(d[j]<0.?1:0)]);
+                        title->setText("DIRECCION PENDIENTE — "+axes.join(" / "));
+                        instruction->setText(QString("Orienta como el modelo. Accel objetivo aprox. [%1, %2, %3] m/s². Gira despacio, sin forzar el soporte.")
+                            .arg(9.80665*d[0],0,'f',1).arg(9.80665*d[1],0,'f',1).arg(9.80665*d[2],0,'f',1));
+                        poseView->setAttitude(targetPose(d),true);
+                    }else{title->setText("COBERTURA COMPLETA — AJUSTE PENDIENTE");instruction->setText("Todas las direcciones registradas. Si el ajuste sigue fuera de tolerancia, repite la adquisicion suavemente.");}
+                    exportButton->setEnabled(wizard.result().has_value());progress->setValue(int(100*wizard.progress()));
+                };
+                auto safe=[&]{
+                    if(command_active_||leaseActive||recorder_active_||!bridge_.isReal()||!bridge_.hardwareStatusFresh(1.0)||!bridge_.imuFreshFor(true,.25))return false;
+                    const auto hw=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+                    const auto stat=hw.value("mcu_status").toString().split(',');
+                    return hw.value("transport_connected").toBool(false)&&hw.value("mcu_fmu_state").toInt(-1)==0&&
+                        !hw.value("armed_requested").toBool(true)&&!hw.value("armed_acknowledged").toBool(true)&&
+                        !hw.value("gui_output_enabled").toBool(true)&&!hw.value("mcu_auto_enabled").toBool(true)&&
+                        stat.size()>=25&&stat[0]=="FMU_V3"&&stat[18]=="2";
+                };
+                auto stopCapture=[&]{running=false;captureTimer.stop();pause->setEnabled(false);wizard.interrupt();};
+                connect(start,&QPushButton::clicked,&cal,[&]{
+                    if(!safe()){paintState("Se requiere IMU REAL externa I2C, FMU desarmado, estado actualizado y salida OFF.","#ff656f");return;}
+                    wizard={};previous=have_sample_?last_sample_.sequence:-1;running=true;pause->setText("PAUSAR");pause->setEnabled(true);refreshPose();paintState("Gira lentamente por distintas orientaciones.","#e8b956");captureTimer.start();
+                });
+                connect(pause,&QPushButton::clicked,&cal,[&]{
+                    if(running){running=false;wizard.interrupt();captureTimer.stop();progress->setValue(int(100*wizard.progress()));pause->setText("CONTINUAR");paintState("Pausado. Se conservan las direcciones capturadas.","#e8b956");}
+                    else if(safe()){previous=have_sample_?last_sample_.sequence:-1;running=true;pause->setText("PAUSAR");captureTimer.start();}
+                    else paintState("No hay condiciones seguras / IMU actualizada.","#ff656f");
+                });
+                connect(&captureTimer,&QTimer::timeout,&cal,[&]{
+                    if(!running)return;
+                    if(!safe()){wizard.interrupt();progress->setValue(0);paintState("Esperando IMU externa I2C actualizada y FMU desarmado. No se captura.","#ff656f");return;}
+                    if(!have_sample_||!last_sample_.from_real||last_sample_.sequence==previous)return;
+                    const auto& s=last_sample_;previous=s.sequence;
+                    const int detected=detectedAccelFace(s.accel_m_s2);
+                    readings->setText(QString("Accel: [%1, %2, %3] m/s² | norma %4 | detectado %5 | giro %6 °/s")
+                        .arg(s.accel_m_s2[0],0,'f',2).arg(s.accel_m_s2[1],0,'f',2).arg(s.accel_m_s2[2],0,'f',2)
+                        .arg(std::hypot(s.accel_m_s2[0],s.accel_m_s2[1],s.accel_m_s2[2]),0,'f',2)
+                        .arg(detected>=0?sensorNames[unsigned(detected)]:QString("--"))
+                        .arg(std::hypot(s.angular_rate_deg_s[0],s.angular_rate_deg_s[1],s.angular_rate_deg_s[2]),0,'f',1));
+                    const auto phase=wizard.update(s.accel_m_s2,s.angular_rate_deg_s,s.ros_time_s);
+                    progress->setValue(int(100*wizard.progress()));
+                    using Phase=GimbalAccelCalibration::State;
+                    refreshPose();
+                    switch(phase){
+                    case Phase::Motion:paintState("Movimiento rapido o aceleracion variable. Gira mas lentamente (max. 12 grados/s).","#ff656f");break;
+                    case Phase::InvalidTime:paintState("Muestras discontinuas. Se conservan las direcciones anteriores.","#e8b956");break;
+                    case Phase::Collecting:paintState("Recibiendo muestras; sigue girando suavemente.","#e8b956");break;
+                    case Phase::Captured:paintState("DIRECCION CAPTURADA — continua hacia otra inclinacion.","#39d98a");break;
+                    case Phase::NeedCoverage:paintState("Busca la direccion PENDIENTE del modelo (no una cara ya registrada).","#e8b956");break;
+                    case Phase::FitFailed:paintState("Ajuste aun no valido. Conservamos datos: explora otras direcciones lentamente.","#e8b956");break;
+                    case Phase::Complete:stopCapture();paintState("CALIBRACION VALIDA — exporta el encabezado.","#39d98a");break;
+                    }
+                });
+                connect(exportButton,&QPushButton::clicked,&cal,[&]{
+                    const auto& result=wizard.result();if(!result)return;
+                    const auto path=QFileDialog::getSaveFileName(&cal,"Save STM32/Core/Inc coefficients",QDir::homePath()+"/cf_accel_calibration_values.h","C header (*.h)");
+                    if(path.isEmpty())return;
+                    if(QFileInfo(path).fileName()!="cf_accel_calibration_values.h"){paintState("Usa el nombre exacto cf_accel_calibration_values.h","#ff656f");return;}
+                    QSaveFile file(path);if(!file.open(QIODevice::WriteOnly|QIODevice::Text)){paintState("No se pudo abrir el archivo.","#ff656f");return;}
+                    QTextStream out(&file);
+                    auto vec=[](const CalVec& a){return QString("{%1,%2,%3}").arg(QString::number(a[0],'g',17),QString::number(a[1],'g',17),QString::number(a[2],'g',17));};
+                    out<<"#ifndef CF_ACCEL_CALIBRATION_VALUES_H\n#define CF_ACCEL_CALIBRATION_VALUES_H\n"
+                       <<"/* CEFIRO GUI measured multi-orientation external I2C accel calibration. */\n"
+                       <<"#define CF_ACCEL_CAL_ENABLED 1U\n#define CF_ACCEL_CAL_OFFSET "<<vec(result->offset)<<"\n#define CF_ACCEL_CAL_SCALE "<<vec(result->scale)<<"\n#endif\n";
+                    out.flush();if(out.status()!=QTextStream::Ok||!file.commit()){paintState("Error al exportar.","#ff656f");return;}
+                    paintState("Guardado. Copia a STM32/MDK-ARM/Core/Inc, recompila y verifica ATT con ESC desconectados.","#39d98a");
+                });
+                connect(closeCal,&QPushButton::clicked,&cal,&QDialog::accept);
+                refreshPose();const auto availableCal=screen()->availableGeometry().size();cal.resize(std::min(760,availableCal.width()-40),std::min(740,availableCal.height()-60));cal.exec();captureTimer.stop();
+            });
+        }
+        auto* apply=new QPushButton(real?"SELECT TRIAL TYPE FIRST":"APPLY SIM GAINS",&dialog);outer->addWidget(apply);
+        if(real){
+            apply->setEnabled(false);
+            connect(trialMode,QOverload<int>::of(&QComboBox::currentIndexChanged),&dialog,[apply,status](int index){
+                apply->setEnabled(index>=0 && index<=2);
+                if(index==0){apply->setText("START SHADOW / NO MOTORS");status->setText("Selected: SHADOW — diagnostic only");}
+                else if(index==1){apply->setText("START CALIBRATED POWERED TRIAL");status->setText("Selected: calibrated powered profile");}
+                else if(index==2){apply->setText("START EXPERIMENTAL SWING-UP + LQR");status->setText("Selected: experimental powered Roll — requires protected bench confirmation");}
+                else {apply->setText("SELECT TRIAL TYPE FIRST");status->setText("No trial selected");}
+            });
+        }
         auto* close=new QPushButton(real?"STOP TRIAL / CLOSE":"CLOSE",&dialog);outer->addWidget(close);
         if(real){
             auto* emergency=new QPushButton("EMERGENCY STOP / LATCH",&dialog);outer->addWidget(emergency);
-            connect(emergency,&QPushButton::clicked,&dialog,[&,this]{leaseActive=false;bridge_.emergencyStop();apply->setEnabled(false);status->setText("Emergency stop requested; verify FMU state");});
+            connect(emergency,&QPushButton::clicked,&dialog,[&,this]{leaseActive=false;bridge_.emergencyStop();apply->setEnabled(false);trialMode->setEnabled(false);status->setText("Emergency stop requested; verify FMU state");});
         }
+        bool ownTrialRecording=false;
+        QFile trialLog;
+        QTextStream trialLogStream;
+        QString lastTrialTick;
         QTimer timer(&dialog);timer.setInterval(80);
         connect(&timer,&QTimer::timeout,&dialog,[&,this]{
             const QString raw=QString::fromStdString(bridge_.swingTuningStatus(real));
             if(leaseActive){
-                if((raw.startsWith("CMD_SWING_REAL:") && !raw.endsWith(": OK")) || raw.startsWith("REJECTED:") || raw.startsWith("FAULT:"))leaseActive=false;
+                if(((raw.startsWith("CMD_SWING_REAL:") || raw.startsWith("CMD_SWING_EXP:")) && !raw.endsWith(": OK")) || raw.startsWith("REJECTED:") || raw.startsWith("FAULT:"))leaseActive=false;
                 if(raw.startsWith("SHADOW,") && (raw.split(',').size()==2))leaseActive=false;
                 if(!bridge_.hardwareStatusFresh(1.0) || bridge_.isReal()!=real || !recorder_active_) {
                     leaseActive=false;
@@ -521,6 +747,16 @@ void MainWindow::buildControl() {
             }
             if(raw.isEmpty())return;
             const auto parts=raw.split(',');
+            if(trialLog.isOpen()&&parts.size()==13&&parts[0]=="SWING_REAL"&&parts[12]!=lastTrialTick){
+                lastTrialTick=parts[12];trialLogStream<<QStringList(parts.mid(1)).join(',')<<'\n';trialLogStream.flush();
+                if(trialLogStream.status()!=QTextStream::Ok){leaseActive=false;(void)bridge_.publishSwingTuning(true,{});}
+            }
+            if(ownTrialRecording&&!leaseActive){
+                recording_config_.notes += " | End status: "+raw;
+                if(recorder_active_){stopRecording();}
+                ownTrialRecording=false;
+            }
+            if(!leaseActive&&trialLog.isOpen()){trialLogStream.flush();trialLog.close();}
             if(parts.size()==9 && parts[0]=="SHADOW"){
                 constexpr double r2d=57.29577951308232;
                 status->setText(QString("%1 | roll %2 deg / ref %3 deg | p %4 deg/s | torque %5 Nm (proposal only) | t %6 s")
@@ -531,6 +767,8 @@ void MainWindow::buildControl() {
                   .arg(parts[1].toDouble()==0.?"SPINUP":(parts[1].toDouble()==2.?"LQR":"SWING-UP"))
                   .arg(parts[2].toDouble()*r2d,0,'f',1).arg(parts[3].toDouble()*r2d,0,'f',1).arg(parts[4].toDouble()*r2d,0,'f',1)
                   .arg(parts[5]).arg(parts[8]).arg(parts[9]).arg(parts[10]).arg(parts[11]));
+            }else if(real && raw=="SHADOW,TORQUE_SATURATION"){
+                status->setText("STM32 Shadow stopped: torque saturation. Read-only GUI observer remains active.");
             }else status->setText(raw);
         });
         bool shadowRequested=false;
@@ -538,25 +776,44 @@ void MainWindow::buildControl() {
             if(command_active_||bridge_.isReal()!=real){status->setText("Rejected: output/source changed");return;}
             std::vector<double> v;
             if(real){
+                if(trialMode->currentIndex()<0 || trialMode->currentIndex()>2){status->setText("Select a trial type explicitly");return;}
                 v={kp[0]->value(),kd[0]->value(),duration->value(),direction->currentIndex()==0?1.:-1.};
-                if(trialMode->currentIndex()==1){
+                if(trialMode->currentIndex()!=0){
+                    const bool experimental=trialMode->currentIndex()==2;
                     if(duration->value()<8.){status->setText("Real pilot requires >=8 seconds");return;}
-                    if(!recorder_active_ || recording_config_.mode!=0 || recording_config_.start_delay_s>0. || recording_config_.save_interval_ms!=0 || !recording_config_.save_rates || !recording_config_.save_attitude){status->setText("Start a continuous full-rate recording with attitude and rates, zero start delay before opening this panel");return;}
+                    if((!experimental||recorder_active_) && (!recorder_active_ || recording_config_.mode!=0 || recording_config_.start_delay_s>0. || recording_config_.save_interval_ms!=0 || !recording_config_.save_rates || !recording_config_.save_attitude)){status->setText("Start a continuous full-rate recording with attitude and rates, zero start delay before opening this panel");return;}
                     if(!bridge_.imuFresh(0.5) || !have_sample_ || !last_sample_.from_real || !bridge_.fmuDshotFresh() || !last_sample_.orientation_valid){status->setText("Valid real IMU / FMU DShot snapshot required");return;}
-                    if(QMessageBox::warning(&dialog,"POWERED BENCH TRIAL","Requires measured roll actuator/model calibration, protected one-axis fixture, independent physical E-stop and monitored power. Motor stop does not prevent a gravity-driven fall. No free flight. Continue only after bench safety review?",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
-                    trialToken=static_cast<unsigned>(QRandomGenerator::global()->bounded(1,65536));v.push_back(double(trialToken));
+                    const QString warning=experimental?"UNVALIDATED Roll model. Requires guarded one-axis fixture, mechanical fall restraint, independent physical motor power cut, independently monitored/current-limited ESC supply. No free flight. May abort before capture. Confirm these safeguards are in place?":"Requires measured roll actuator/model calibration, protected one-axis fixture, independent physical E-stop and monitored power. Motor stop does not prevent a gravity-driven fall. No free flight. Continue only after bench safety review?";
+                    if(QMessageBox::warning(&dialog,"POWERED BENCH TRIAL",warning,QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
+                    if(experimental&&!recorder_active_){
+                        RecordingConfig config=recording_dialog_->configuration();config.prefix="cefiro_swing_lqr_experiment";config.mode=0;config.start_delay_s=0.;config.save_interval_ms=0;
+                        config.metadata=config.save_attitude=config.save_rates=config.save_accel=config.save_validity=config.save_strategy_source=true;
+                        config.notes+=QString(" | Experimental roll, provisional host model, Kp=%1 Kd=%2 T=%3 s, predictor=280ms, no physical validation").arg(v[0]).arg(v[1]).arg(v[2]);
+                        startRecording(&config);if(!recorder_active_)return;ownTrialRecording=true;
+                    }
+                    if(experimental){
+                        trialLog.setFileName(recording_path_+".swing.csv");
+                        if(!trialLog.open(QIODevice::WriteOnly|QIODevice::Text|QIODevice::NewOnly)){
+                            if(ownTrialRecording){stopRecording();ownTrialRecording=false;}status->setText("Cannot open trial phase log");return;
+                        }
+                        trialLogStream.setDevice(&trialLog);trialLogStream<<"phase,roll_rad,reference_rad,rate_rad_s,requested_torque_nm,raw_torque_nm,elapsed_s,m1,m2,m3,m4,mcu_ms\n";trialLogStream.flush();
+                    }
+                    trialToken=static_cast<unsigned>(QRandomGenerator::global()->bounded(1,65536));v.push_back(double(trialToken));if(experimental)v.push_back(1.);
                 }
             }
             else{for(auto* k:kp)v.push_back(k->value());for(auto* k:kd)v.push_back(k->value());v.push_back(duration->value());}
-            if(!bridge_.publishSwingTuning(real,v)){status->setText("Controller not connected");return;}
-            shadowRequested=shadowRequested||real;status->setText("Waiting for acknowledgement...");
+            if(!bridge_.publishSwingTuning(real,v)){if(ownTrialRecording){stopRecording();ownTrialRecording=false;}if(trialLog.isOpen())trialLog.close();status->setText("Controller not connected");return;}
+            shadowRequested=shadowRequested||real;
+            status->setText(real?(trialMode->currentIndex()==2?"CMD_SWING_EXP: waiting for ACK":trialMode->currentIndex()==1?"CMD_SWING_REAL: waiting for ACK":"CMD_SWING_SHADOW: waiting for ACK"):"Waiting for acknowledgement...");
             leaseActive=real && trialToken!=0;timer.start();
             if(real){apply->setEnabled(false);trialMode->setEnabled(false);kp[0]->setEnabled(false);kd[0]->setEnabled(false);duration->setEnabled(false);direction->setEnabled(false);}
 
         });
         connect(close,&QPushButton::clicked,&dialog,&QDialog::accept);
-        dialog.exec();timer.stop();
+        dialog.exec();timer.stop();torqueTimer.stop();
         if(shadowRequested)(void)bridge_.publishSwingTuning(true,{});
+        if(ownTrialRecording&&recorder_active_){recording_config_.notes += " | Operator closed trial";stopRecording();}
+        if(trialLog.isOpen()){trialLogStream.flush();trialLog.close();}
     });
     auto* source = new QHBoxLayout;
     automatic_btn_ = new QPushButton("AUTOMATIC", architecture);
@@ -720,6 +977,8 @@ void MainWindow::buildControl() {
     select_row->addWidget(master_select_label_);
     for(int i=0;i<4;++i){
         motor_master_select_[size_t(i)]=new QCheckBox(QString("M%1").arg(i+1), master_select_widget_);
+        static const char* realPositions[]={"Front left / Roll left / CH2","Front right / Roll right / CH4","Rear right / Roll right / CH3","Rear left / Roll left / CH1"};
+        motor_master_select_[size_t(i)]->setToolTip(QString("REAL rev3 (verify physical position): %1").arg(realPositions[i]));
         motor_master_select_[size_t(i)]->setChecked(true);
         select_row->addWidget(motor_master_select_[size_t(i)]);
     }
@@ -740,8 +999,9 @@ void MainWindow::buildControl() {
     master_motor_slider_->setValue(0);
     master_motor_slider_->setObjectName("masterMotorSlider");
     master_layout->addWidget(master_motor_slider_, 3, 0, 1, 5);
-    master_motor_label_ = label("0 nominal RPM · DShot cap: awaiting bridge", "hint");
-    master_motor_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    master_motor_label_ = label("Req 0 RPM\nDShot cap -- · Awaiting bridge\n", "hint");
+    master_motor_label_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    reserveReadout(master_motor_label_,3);
     master_layout->addWidget(master_motor_label_, 4, 0, 1, 5);
     master_layout->setColumnStretch(0, 1);
     master_layout->setColumnStretch(1, 1);
@@ -749,6 +1009,13 @@ void MainWindow::buildControl() {
     master_layout->setColumnStretch(3, 0);
     master_layout->setColumnStretch(4, 0);
     manual_layout->addWidget(master_panel);
+    manual_trial_btn_ = new QPushButton("START RECORDED MANUAL TRIAL", manual_page);
+    manual_trial_btn_->setToolTip("Timed manual identification trial: record first, arm at zero, use existing motor controls, stop and save automatically.");
+    manual_layout->addWidget(manual_trial_btn_);
+    connect(manual_trial_btn_, &QPushButton::clicked, this, [this]{
+        if (manual_trial_active_) stopOutput(false);
+        else startManualTrial();
+    });
 
     motor_panels_grid_=new QGridLayout;
     auto* motors=motor_panels_grid_;
@@ -760,6 +1027,8 @@ void MainWindow::buildControl() {
         mv->setContentsMargins(6,4,6,4);
         mv->setSpacing(3);
         auto* name = label(QString("MOTOR %1").arg(i+1), "panelTitle");
+        static const char* realMotorPositions[]={"Front left / CH2","Front right / CH4","Rear right / CH3","Rear left / CH1"};
+        name->setToolTip(QString("REAL rev3 (verify physical position): %1. SIM numbering unchanged.").arg(realMotorPositions[i]));
         name->setAlignment(Qt::AlignCenter);
         mv->addWidget(name);
         motor_sliders_[std::size_t(i)] = new QSlider(Qt::Vertical, motor_panel);
@@ -778,9 +1047,11 @@ void MainWindow::buildControl() {
         motor_direction_[std::size_t(i)]->setToolTip("Direction determined by physical motor phases.");
         motor_direction_[std::size_t(i)]->setEnabled(false);
         mv->addWidget(motor_direction_[std::size_t(i)]);
-        motor_labels_[std::size_t(i)] = label("0 nominal RPM · DShot TX 0", "hint");
-        motor_labels_[std::size_t(i)]->setAlignment(Qt::AlignCenter);
-        mv->addWidget(motor_labels_[std::size_t(i)]);
+        motor_labels_[std::size_t(i)] = label("Req 0 RPM\nDShot --\nEq -- RPM", "hint");
+        motor_labels_[std::size_t(i)]->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        reserveReadout(motor_labels_[std::size_t(i)],3,true,
+                       {"Req 88888 RPM","DShot 8888","Eq 88888 RPM"});
+        mv->addWidget(motor_labels_[std::size_t(i)],0,Qt::AlignHCenter);
         motors->addWidget(motor_panel,i/2,i%2);
         motor_panels_.append(motor_panel);
     }
@@ -891,6 +1162,8 @@ void MainWindow::buildControl() {
     for (auto* b : {start_btn_,stop_btn_,emergency_btn_}) commands->addWidget(b);
     ref->addLayout(commands);
     command_value_ = label("Reference: R 0.00° · P 0.00° · Y 0.00°","hint");
+    reserveReadout(command_value_,2);
+    command_value_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     ref->addWidget(command_value_);
     left->addWidget(ref_panel,1);
 
@@ -991,6 +1264,7 @@ void MainWindow::connectUi(){
              if(command_active_)stopOutput(false);
              resetEquilibriumReference();
              updateReferenceGate();
+             updateEmbeddedRollUi();
          });
  connect(manual_btn_,&QPushButton::clicked,this,[this]{setManual(true);});
  connect(automatic_btn_,&QPushButton::clicked,this,[this]{setManual(false);});
@@ -1017,21 +1291,7 @@ void MainWindow::connectUi(){
        if (command_active_ && publish_clock_.elapsed() > 45) publishCommand();
    }
  });}
- auto updateMotorLabel = [this](int idx) {
-   if (idx < 0 || idx >= 4) return;
-   motor_labels_[size_t(idx)]->setText(
-       QString("Req %1 RPM · dir %2")
-           .arg(f(motor_command_rpm_[size_t(idx)],0))
-           .arg(motor_command_direction_[size_t(idx)] >= 0 ? "+1" : "-1"));
- };
- auto updateMasterLabel = [this]() {
-   if (!master_motor_label_) return;
-   const int dir = master_motor_direction_ && master_motor_direction_->currentIndex() == 0 ? 1 : -1;
-   master_motor_label_->setText(QString("Req %1 RPM · dir %2")
-       .arg(f(master_motor_speed_ ? master_motor_speed_->value() : 0.0,0))
-       .arg(dir >= 0 ? "+1" : "-1"));
- };
- auto syncSelectedMotors = [this, updateMotorLabel](double rpm, int direction_index, bool sync_direction) {
+ auto syncSelectedMotors = [this](double rpm, int direction_index, bool sync_direction) {
    const bool apply_selected = link_all_motors_ && link_all_motors_->isChecked();
    for (int i = 0; i < 4; ++i) {
      const bool selected = !motor_master_select_[size_t(i)] || motor_master_select_[size_t(i)]->isChecked();
@@ -1048,8 +1308,8 @@ void MainWindow::connectUi(){
        motor_direction_[size_t(i)]->setCurrentIndex(direction_index);
        motor_command_direction_[size_t(i)] = direction_index == 0 ? 1 : -1;
      }
-     updateMotorLabel(i);
    }
+   refreshMotorReadouts();
    if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
  };
  auto refreshMotorSelectionUi = [this]() {
@@ -1068,46 +1328,49 @@ void MainWindow::connectUi(){
    }
  };
  for(int i=0;i<4;++i){
-   connect(motor_sliders_[size_t(i)], &QSlider::valueChanged, this, [this,i,updateMotorLabel](int value){
+   connect(motor_sliders_[size_t(i)], &QSlider::valueChanged, this, [this,i](int value){
        QSignalBlocker block(motor_speed_[size_t(i)]);
        motor_speed_[size_t(i)]->setValue(value);
        motor_command_rpm_[size_t(i)] = value;
-       updateMotorLabel(i);
+       refreshMotorReadouts();
        if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
    });
-   connect(motor_speed_[size_t(i)], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,i,updateMotorLabel](double value){
+   connect(motor_speed_[size_t(i)], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,i](double value){
        QSignalBlocker block(motor_sliders_[size_t(i)]);
        motor_sliders_[size_t(i)]->setValue(int(std::round(value)));
        motor_command_rpm_[size_t(i)] = value;
-       updateMotorLabel(i);
+       refreshMotorReadouts();
        if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
    });
-   connect(motor_direction_[size_t(i)], QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,i,updateMotorLabel](int idx){
+   connect(motor_direction_[size_t(i)], QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,i](int idx){
        motor_command_direction_[size_t(i)] = idx == 0 ? 1 : -1;
-       updateMotorLabel(i);
+       refreshMotorReadouts();
        if (command_active_ && manual_mode_ && publish_clock_.elapsed() > 45) publishMotorCommand();
    });
  }
- connect(master_motor_slider_, &QSlider::valueChanged, this, [this,syncSelectedMotors,updateMasterLabel](int value){
+ connect(master_motor_slider_, &QSlider::valueChanged, this, [this,syncSelectedMotors](int value){
      QSignalBlocker block(master_motor_speed_);
      master_motor_speed_->setValue(value);
-     updateMasterLabel();
      if (link_all_motors_ && link_all_motors_->isChecked()) {
          syncSelectedMotors(value, master_motor_direction_->currentIndex(), false);
+     }else{
+         refreshMotorReadouts();
      }
  });
- connect(master_motor_speed_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,syncSelectedMotors,updateMasterLabel](double value){
+ connect(master_motor_speed_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this,syncSelectedMotors](double value){
      QSignalBlocker block(master_motor_slider_);
      master_motor_slider_->setValue(int(std::round(value)));
-     updateMasterLabel();
      if (link_all_motors_ && link_all_motors_->isChecked()) {
          syncSelectedMotors(value, master_motor_direction_->currentIndex(), false);
+     }else{
+         refreshMotorReadouts();
      }
  });
- connect(master_motor_direction_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,syncSelectedMotors,updateMasterLabel](int idx){
-     updateMasterLabel();
+ connect(master_motor_direction_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this,syncSelectedMotors](int idx){
      if (link_all_motors_ && link_all_motors_->isChecked()) {
          syncSelectedMotors(master_motor_speed_->value(), idx, true);
+     }else{
+         refreshMotorReadouts();
      }
  });
  connect(link_all_motors_, &QCheckBox::toggled, this, [this,syncSelectedMotors,refreshMotorSelectionUi](bool on){
@@ -1135,7 +1398,7 @@ void MainWindow::connectUi(){
      for (auto* box : motor_master_select_) if (box) { QSignalBlocker hold(box); box->setChecked(false); }
      refreshMotorSelectionUi();
  });
- updateMasterLabel();
+ refreshMotorReadouts();
  refreshMotorSelectionUi();
  connect(activate_btn_,&QPushButton::clicked,this,[this]{startOutput();});
  connect(deactivate_btn_,&QPushButton::clicked,this,[this]{stopOutput(false);});
@@ -1206,6 +1469,7 @@ void MainWindow::setManual(bool yes){
     std::clamp(manual_[size_t(i)]->value(),-reference_limits_deg_[size_t(i)],
                reference_limits_deg_[size_t(i)]);
  updateReferenceGate();
+ updateEmbeddedRollUi();
  if(command_active_){ if(manual_mode_) publishMotorCommand(); else publishCommand(); }
 }
 void MainWindow::resetEquilibriumReference(){
@@ -1262,7 +1526,7 @@ void MainWindow::updateReferenceGate(){
     // state transition. An enabled button does NOT prove balance.
     const bool balanced = bridge_.feedbackFresh(1.2) &&
                           bridge_.controllerStatus()=="BALANCE: CAPTURED";
-    const bool ready = is_lqr && !manual_mode_ && command_active_ &&
+    const bool ready = is_lqr && !embedded_roll_active_ && !manual_mode_ && command_active_ &&
                        !e_stop_ && bridge_.imuFresh(0.5) && balanced;
     if(reference_pad_unlocked_ && !ready){
         resetEquilibriumReference();
@@ -1285,8 +1549,131 @@ void MainWindow::updateReferenceGate(){
                 .arg(f(reference_limits_deg_[0],1),f(reference_limits_deg_[1],1),f(reference_limits_deg_[2],1)));
     }
 }
+void MainWindow::updateEmbeddedRollUi(){
+    if(!embedded_roll_panel_ || !controller_ || !activate_btn_)return;
+    const bool selected=bridge_.isReal() && !manual_mode_ && controller_->currentText()=="SWING-UP + LQR (STM32)";
+    embedded_roll_panel_->setVisible(selected);
+    embedded_roll_panel_->setEnabled(!embedded_roll_active_);
+    if(!command_active_)activate_btn_->setText(selected?"START CONTROL / STM32":"APPLY / ACTIVATE");
+}
+void MainWindow::startEmbeddedRoll(){
+    if(!bridge_.isReal() || manual_mode_ || command_active_ || recorder_active_ || !output_enabled_->isChecked()){
+        QMessageBox::warning(this,"STM32 control","Select REAL / AUTOMATIC, enable Output, and stop other commands and recordings first.");return;
+    }
+    const auto ready=[this]{
+        const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+        const auto stat=state.value("mcu_status").toString().split(',');
+        return bridge_.hardwareStatusFresh(1.0) && bridge_.imuFreshFor(true,.25) && bridge_.fmuDshotFresh() &&
+            have_sample_ && last_sample_.from_real && last_sample_.orientation_valid &&
+            state.value("transport_connected").toBool(false) && state.value("command_tx_enabled").toBool(false) &&
+            state.value("motor_map_revision").toInt(0)==3 && state.value("experimental_roll_allowed").toBool(false) && state.value("external_supply_policy_ready").toBool(false) &&
+            state.value("manual_mode_acknowledged").toBool(false) && state.value("orientation_available").toBool(false) &&
+            !state.value("firmware_fault_latched").toBool(true) && !state.value("armed_requested").toBool(true) &&
+            !state.value("armed_acknowledged").toBool(true) && !state.value("gui_output_enabled").toBool(true) &&
+            !state.value("mcu_auto_enabled").toBool(true) && !state.value("swing_session_active").toBool(true) &&
+            state.value("mcu_fmu_state").toInt(99)<=1 && stat.size()>20 && stat[0]=="FMU_V3" && stat[2]=="1" && stat[20]=="1";
+    };
+    if(!ready()){QMessageBox::warning(this,"STM32 precheck","Require STM32 motor map revision 3, live calibrated FMU AHRS, DShot snapshot, cleared faults, idle CF1 session and external monitored bench opt-in. Check hardware status.");return;}
+    if(QMessageBox::warning(this,"EXPERIMENTAL STM32 CONTROL",
+        "Unvalidated Roll-only profile. Confirm motor numbering and left/right pairs M1+M4 / M2+M3 individually with propellers removed before a powered run. The torque model is provisional after the pair change. Confirm a guarded one-axis fixture (Pitch/Yaw restrained), mechanical fall restraint, independent physical motor power cut and externally monitored/current-limited ESC supply. No free flight. The controller may abort; a motor stop does not prevent gravity-driven motion. Start inverted and stationary. Start once?",
+        QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
+    if(!ready() || !output_enabled_->isChecked() || recorder_active_ || command_active_ || manual_mode_ || controller_->currentText()!="SWING-UP + LQR (STM32)")return;
+    const double kp=embedded_roll_kp_->value(),kd=embedded_roll_kd_->value(),duration=embedded_roll_duration_->value();
+    RecordingConfig config=recording_dialog_->configuration();
+    config.prefix="cefiro_swing_lqr_experiment";config.mode=0;config.start_delay_s=0.;config.save_interval_ms=0;
+    config.metadata=config.save_attitude=config.save_rates=config.save_accel=config.save_validity=config.save_strategy_source=true;
+    // The true reference is from FMU SWR telemetry, not the GUI reference pad.
+    config.save_reference=config.save_error=false;
+    config.notes+=QString(" | STM32 experimental Roll map rev3 (left M1/M4, right M2/M3; model provisional), Kp=%1 Kd=%2 T=%3 s, LQR=[1.22401374668,0.259015155719], predictor=280ms hypothesis, unvalidated").arg(kp).arg(kd).arg(duration);
+    startRecording(&config);if(!recorder_active_)return;
+    embedded_roll_log_.setFileName(recording_path_+".swing.csv");
+    if(!embedded_roll_log_.open(QIODevice::WriteOnly|QIODevice::Text|QIODevice::NewOnly)){
+        stopRecording();applied_value_->setText("Cannot open FMU phase log");return;
+    }
+    embedded_roll_stream_.setDevice(&embedded_roll_log_);embedded_roll_stream_.resetStatus();
+    embedded_roll_stream_<<"phase,roll_rad,reference_rad,rate_rad_s,requested_torque_nm,raw_torque_nm,elapsed_s,m1,m2,m3,m4,mcu_ms\n";embedded_roll_stream_.flush();
+    if(embedded_roll_stream_.status()!=QTextStream::Ok || !ready()){
+        embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();stopRecording();applied_value_->setText("Recording or precheck failed");return;
+    }
+    embedded_roll_token_=static_cast<unsigned>(QRandomGenerator::global()->bounded(1,65536));
+    if(!bridge_.publishSwingTuning(true,{kp,kd,duration,-1.,double(embedded_roll_token_),1.})){
+        embedded_roll_token_=0;embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();stopRecording();applied_value_->setText("No hardware command subscriber");return;
+    }
+    QSettings saved("CEFIRO","EmbeddedRoll");saved.setValue("kp",kp);saved.setValue("kd",kd);saved.setValue("duration",duration);
+    embedded_roll_active_=command_active_=true;e_stop_=false;wave_running_=false;
+    embedded_roll_last_tick_.clear();embedded_roll_clock_.start();embedded_roll_lease_.invalidate();embedded_roll_feedback_.invalidate();
+    resetEquilibriumReference();controller_->setEnabled(false);plant_selector_->setEnabled(false);
+    embedded_roll_panel_->setEnabled(false);activate_btn_->setText("STM32 START REQUESTED");
+    applied_value_->setText("Waiting for FMU ACK; no automatic retry");
+}
+void MainWindow::serviceEmbeddedRoll(){
+    if(!embedded_roll_active_)return;
+    const auto raw=QString::fromStdString(bridge_.swingTuningStatus(true));
+    const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+    if(state.value("firmware_fault_latched").toBool(false)){
+        const auto fmuReason=state.value("fmu_fault_reason").toString();
+        const auto hostReason=state.value("swing_last_result").toString();
+        if(!fmuReason.isEmpty()){finishEmbeddedRoll("FMU SAFETY: "+fmuReason);return;}
+        if(!hostReason.isEmpty()){finishEmbeddedRoll(hostReason);return;}
+    }
+    if(raw.startsWith("REJECTED:") || raw.startsWith("FAULT:") ||
+       (raw.startsWith("CMD_SWING_EXP:") && !raw.endsWith(": OK")) ||
+       (raw.startsWith("SHADOW,") && raw.split(',').size()==2) || raw.startsWith("CMD_SWING_STOP:")){
+        finishEmbeddedRoll(raw);return;
+    }
+    if(!recorder_active_ || !bridge_.isReal() || !output_enabled_->isChecked() || !bridge_.hardwareStatusFresh(1.0) ||
+       !state.value("transport_connected").toBool(false) || state.value("firmware_fault_latched").toBool(true) ||
+       !state.value("external_supply_policy_ready").toBool(false) || !bridge_.imuFreshFor(true,.25) ||
+       !state.value("orientation_available").toBool(false) || recording_stream_.status()!=QTextStream::Ok){
+        finishEmbeddedRoll("SAFE STOP: link / IMU / power supervision / recording",false);return;
+    }
+    const auto parts=raw.split(',');
+    if(parts.size()==13 && parts[0]=="SWING_REAL" && parts[12]!=embedded_roll_last_tick_){
+        embedded_roll_last_tick_=parts[12];embedded_roll_feedback_.start();
+        embedded_roll_stream_<<QStringList(parts.mid(1)).join(',')<<'\n';embedded_roll_stream_.flush();
+        if(embedded_roll_stream_.status()!=QTextStream::Ok){finishEmbeddedRoll("Phase log write failed");return;}
+        const QString phase=parts[1].toDouble()==0.?"SPINUP":parts[1].toDouble()==2.?"LQR REGULATION":"SWING-UP";
+        activate_btn_->setText("STM32 CONTROL ACTIVE");
+        applied_value_->setText(QString("%1 · Roll %2° / ref %3° · DShot %4 %5 %6 %7").arg(phase).arg(parts[2].toDouble()*57.295779513,0,'f',1).arg(parts[3].toDouble()*57.295779513,0,'f',1).arg(parts[8],parts[9],parts[10],parts[11]));
+    } else if(raw=="CMD_SWING_EXP: OK" && !embedded_roll_feedback_.isValid()){
+        applied_value_->setText("FMU accepted: waiting for phase telemetry");
+    }
+    if((!embedded_roll_feedback_.isValid() && embedded_roll_clock_.elapsed()>1000) ||
+       (embedded_roll_feedback_.isValid() && embedded_roll_feedback_.elapsed()>450)){
+        finishEmbeddedRoll("SAFE STOP: FMU phase telemetry timeout");return;
+    }
+    if(embedded_roll_clock_.elapsed()>22000){finishEmbeddedRoll("SAFE STOP: experiment duration ceiling");return;}
+    if(!embedded_roll_lease_.isValid() || embedded_roll_lease_.elapsed()>=80){
+        if(!bridge_.publishSwingTuning(true,{double(embedded_roll_token_)})){finishEmbeddedRoll("Safety lease unavailable");return;}
+        embedded_roll_lease_.start();
+    }
+}
+void MainWindow::finishEmbeddedRoll(const QString& reason,bool emergency){
+    if(!embedded_roll_active_)return;
+    embedded_roll_active_=false;command_active_=false;embedded_roll_token_=0;e_stop_=emergency;
+    (void)bridge_.publishSwingTuning(true,{});
+    if(emergency)bridge_.emergencyStop();
+    embedded_roll_stream_.flush();embedded_roll_stream_.setDevice(nullptr);embedded_roll_log_.close();
+    // Store end reason separately: the companion YAML is written at start.
+    QSaveFile summary(recording_path_+".swing_status.txt");
+    if(summary.open(QIODevice::WriteOnly|QIODevice::Text)){
+        const auto status=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+        const auto details=reason+"\nFMU fault: "+status.value("fmu_fault_reason").toString()+
+            "\nBridge result: "+status.value("swing_last_result").toString()+
+            "\nLast ACK: "+status.value("last_command_ack").toString()+"\n";
+        summary.write(details.toUtf8());summary.commit();
+    }
+    if(recorder_active_)stopRecording();
+    controller_->setEnabled(true);plant_selector_->setEnabled(true);embedded_roll_panel_->setEnabled(true);
+    {QSignalBlocker hold(output_enabled_);output_enabled_->setChecked(false);}
+    resetEquilibriumReference();updateEmbeddedRollUi();
+    applied_value_->setText(reason+" · output off requested; verify FMU state");
+}
 void MainWindow::startOutput(){
  if(command_active_) return; // ARM is an explicit edge, not an automatic retry.
+ if(!manual_mode_ && controller_->currentText()=="SWING-UP + LQR (STM32)"){
+   startEmbeddedRoll();return;
+ }
  if(bridge_.isReal() && manual_mode_) {
    const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
    if (bridge_.hardwareStatusFresh() && state.value("firmware_bench_zero_only").toBool(false)) {
@@ -1396,6 +1783,10 @@ void MainWindow::startOutput(){
  }
 }
 void MainWindow::stopOutput(bool emergency){
+    if(embedded_roll_active_){finishEmbeddedRoll(emergency?"Operator emergency stop":"Operator stop",emergency);return;}
+    const bool end_manual_trial = manual_trial_active_;
+    manual_trial_active_ = false;
+    if (manual_trial_btn_) manual_trial_btn_->setText("START RECORDED MANUAL TRIAL");
     if (waveform_timer_) {
         waveform_timer_->stop();
     }
@@ -1413,7 +1804,7 @@ void MainWindow::stopOutput(bool emergency){
     if(emergency)bridge_.emergencyStop();else bridge_.setEnabled(false);
     activate_btn_->setText("APPLY / ACTIVATE");
     applied_value_->setText(emergency?"EMERGENCY STOP requested · disabled":"Command output: DISABLED");
-    if(auto_record_->isChecked()&&recorder_active_)stopRecording();
+    if((end_manual_trial || auto_record_->isChecked()) && recorder_active_)stopRecording();
 }
 void MainWindow::tickWaveform(){
  if(!wave_running_||!command_active_)return;
@@ -1423,7 +1814,7 @@ void MainWindow::tickWaveform(){
  publishCommand();
 }
 void MainWindow::publishCommand(){
- if(!command_active_||e_stop_)return;
+ if(!command_active_||e_stop_||embedded_roll_active_)return;
  // Nonzero LQR references may only leave the GUI after confirmed CAPTURED.
  if(!manual_mode_ && controller_->currentText().contains("LQR")) {
     if (!reference_pad_unlocked_) command_deg_={0.0,0.0,0.0};
@@ -1446,7 +1837,7 @@ void MainWindow::publishCommand(){
  bridge_.publishReference(command_deg_,"ATTITUDE",controller_->currentText().toStdString());
  last_published_deg_ = command_deg_;
  manual_dirty_ = false;
- command_value_->setText(QString("Reference: R %1° · P %2° · Y %3°").arg(f(command_deg_[0]),f(command_deg_[1]),f(command_deg_[2])));
+ setReadoutText(command_value_,QString("Reference: R %1° · P %2°\nY %3°").arg(f(command_deg_[0]),f(command_deg_[1]),f(command_deg_[2])));
  // The UI must not report a controller transition based on a reference publish alone.
  if (bridge_.feedbackFresh()) {
    applied_value_->setText("Controller: " + QString::fromStdString(bridge_.controllerStatus()));
@@ -1462,8 +1853,39 @@ void MainWindow::publishMotorCommand(){
  for(int i=0;i<4;++i){
    summary << QString("M%1 %2 rpm (%3)").arg(i+1).arg(f(motor_command_rpm_[size_t(i)],0)).arg(motor_command_direction_[size_t(i)] >= 0 ? "+" : "-");
  }
- command_value_->setText("Motors: " + summary.join(" · "));
+ setReadoutText(command_value_,"Motors: "+summary[0]+" · "+summary[1]+"\n"+summary[2]+" · "+summary[3]);
  applied_value_->setText("Nominal motor commands published (open-loop DShot); hardware phases determine direction");
+}
+void MainWindow::refreshMotorReadouts(){
+    // Single writer for both user edits and periodic telemetry refresh.
+    // Never substitute slider values for the observed DShot command.
+    const bool real=bridge_.isReal();
+    const auto host=real?bridge_.latestHostDshot():std::nullopt;
+    const auto map=bridge_.nominalMotorMap();
+    const auto equivalent=host?map.inverse(host->codes):std::nullopt;
+    const QString requested=f(master_motor_speed_?master_motor_speed_->value():0.0,0);
+    QString master;
+    if(real){
+        const auto cap=map.valid()?QString("DShot cap %1").arg(map.max_code):QString("DShot map unavailable");
+        const auto source=host?QString::fromLatin1(originName(host->origin)):QString("No fresh host DShot");
+        QString reason;
+        if(bridge_.hardwareStatusFresh()){
+            const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+            reason=state.value("manual_power_inhibit_reason").toString();
+        }
+        master=QString("Req %1 RPM · %2\n%3\n%4").arg(requested,cap,source,
+                    reason.isEmpty()?QString():QString("INHIBITED — see status / tooltip"));
+        // The complete inhibition reason remains in the tooltip and existing status bar.
+        setReadoutText(master_motor_label_,master,reason);
+    }else{
+        setReadoutText(master_motor_label_,QString("Req %1 RPM\nSIMULATION · RPM reference\n").arg(requested));
+    }
+    for(std::size_t i=0;i<4;++i){
+        const QString code=host?QString::number(host->codes[i]):QString("--");
+        const QString rpm=equivalent?f((*equivalent)[i],0):QString("--");
+        setReadoutText(motor_labels_[i],QString("Req %1 RPM\nDShot %2\nEq %3 RPM")
+                     .arg(f(motor_command_rpm_[i],0),code,rpm));
+    }
 }
 void MainWindow::setMonitorAxis(int idx){
     if(idx<0||idx>2)return;
@@ -1474,6 +1896,14 @@ void MainWindow::setMonitorAxis(int idx){
     // Keep the operator's AUTO Y preference when changing monitor axes.
 }
 void MainWindow::tick(){
+ serviceEmbeddedRoll();
+ if (manual_trial_active_ && (!recorder_active_ || !bridge_.isReal() ||
+     !bridge_.imuFreshFor(true, .25) || !bridge_.fmuDshotFresh() ||
+     !QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object().value("orientation_available").toBool(false))) {
+     stopOutput(false);
+     applied_value_->setText("TRIAL STOP: identification telemetry lost");
+ }
+
  if(command_active_ && !manual_mode_ && !bridge_.isReal() && controller_->currentText().contains("LQR")){
    const auto status=QString::fromStdString(bridge_.controllerStatus());
    if(status.contains("FAULT_LATCHED") || !bridge_.feedbackFresh()){
@@ -1502,12 +1932,13 @@ void MainWindow::tick(){
  refreshReferenceLimits();
  updateReferenceGate();
  // A fresh reference is a GUI heartbeat for the simulation-only balance node.
- if(command_active_ && !manual_mode_ && controller_->currentText().contains("LQR") &&
+ if(command_active_ && !embedded_roll_active_ && !manual_mode_ && controller_->currentText().contains("LQR") &&
     publish_clock_.elapsed()>150) publishCommand();
  const auto items=bridge_.drain();const bool fresh=bridge_.imuFresh();
  status_ros_->setText(fresh?"ROS: IMU ONLINE":"ROS: IMU WAITING / STALE");
  status_control_->setText(command_active_?"OUTPUT REQUEST: ENABLED":"CONTROL: DISABLED");
- if(bridge_.feedbackFresh())status_control_->setText("CTRL: "+QString::fromStdString(bridge_.controllerStatus()));
+ if(embedded_roll_active_)status_control_->setText("STM32: "+QString::fromStdString(bridge_.swingTuningStatus(true)).section(',',0,1));
+ else if(bridge_.feedbackFresh())status_control_->setText("CTRL: "+QString::fromStdString(bridge_.controllerStatus()));
  if (bridge_.isReal() && manual_mode_ && bridge_.hardwareStatusFresh()) {
    const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
    const QString inhibit=state.value("manual_power_inhibit_reason").toString();
@@ -1517,43 +1948,14 @@ void MainWindow::tick(){
      if (!reason.isEmpty() && reason!="startup") status_control_->setText("STOP: "+reason);
    } else if (state.value("armed_acknowledged").toBool(false)) status_control_->setText("MANUAL: ARMED");
  }
- if (command_active_ && !manual_mode_) {
+ if (command_active_ && !embedded_roll_active_ && !manual_mode_) {
    if (bridge_.feedbackFresh()) {
      applied_value_->setText("Controller: " + QString::fromStdString(bridge_.controllerStatus()));
    } else {
      applied_value_->setText("NO CONTROLLER FEEDBACK - swing-up inactive");
    }
  }
- // Manual readouts follow received host commands, not slider guesses or
- // missing JSON fields. Keep nominal equivalent speed separate from feedback.
- if(manual_mode_ && bridge_.isReal()){
-     const auto host=bridge_.latestHostDshot();
-     const auto map=bridge_.nominalMotorMap();
-     const auto equivalent=host?map.inverse(host->codes):std::nullopt;
-     const auto doc=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus()));
-     const auto state=doc.object();
-     if(master_motor_label_){
-         QString text=QString("%1 RPM requested · %2 · %3")
-             .arg(f(master_motor_speed_?master_motor_speed_->value():0.0,0))
-             .arg(map.valid()?QString("DShot cap %1").arg(map.max_code):QString("DShot map unavailable"))
-             .arg(host?QString::fromLatin1(originName(host->origin)):QString("No fresh host DShot"));
-         if(bridge_.hardwareStatusFresh()){
-             const auto reason=state.value("manual_power_inhibit_reason").toString();
-             if(!reason.isEmpty())text+=" · "+reason;
-         }
-         master_motor_label_->setText(text);
-     }
-     for(std::size_t i=0;i<4;++i)if(motor_labels_[i]){
-         motor_labels_[i]->setText(QString("Req %1 RPM\nDShot %2 · Eq %3 RPM")
-             .arg(f(motor_command_rpm_[i],0))
-             .arg(host?QString::number(host->codes[i]):QString("--"))
-             .arg(equivalent?f((*equivalent)[i],0):QString("--")));
-     }
- }else if(manual_mode_){
-     if(master_motor_label_)master_motor_label_->setText("SIMULATION · RPM reference");
-     for(std::size_t i=0;i<4;++i)if(motor_labels_[i])
-         motor_labels_[i]->setText(QString("Req %1 RPM (SIM)").arg(f(motor_command_rpm_[i],0)));
- }
+ if(manual_mode_)refreshMotorReadouts();
  // One fresh render per sensor and plant per UI frame, regardless of which
  // ROS callback arrived last. Prevents REAL suppressing SIM or vice versa.
  std::array<std::array<std::size_t,3>,2> last_event{};
@@ -1627,9 +2029,15 @@ void MainWindow::tick(){
  expireMotorGroups(motor_time);
  status_samples_->setText(QString("SAMPLES: %1").arg(collected_));
  if(have_sample_){for(int i=0;i<3;++i){
-   rmse_values_[size_t(i)]->setText(QString("%1° / RMSE %2°").arg(f(last_sample_.attitude_deg[i],1)).arg(f(stats_.rmse(i),2)));}
-   metric_value_->setText(QString("RMSE %1°  |  MAE %2°  |  PEAK %3°")
-   .arg(f(stats_.rmse(monitor_axis_)),f(stats_.mae(monitor_axis_)),f(stats_.peak[monitor_axis_])));
+   const auto& d=last_sample_.display_attitude.q;
+   const auto angles=Quaternion{d[0],d[1],d[2],d[3]}.eulerDeg();
+   rmse_values_[size_t(i)]->setText(last_sample_.orientation_valid?
+       QString("%1° / RMSE %2°").arg(f(last_sample_.attitude_deg[i],1)).arg(f(stats_.rmse(i),2)):
+       last_sample_.display_attitude.valid?f(angles[i],1)+(i==2?"° / GUI REL":"° / GUI DIAG"):"-- / NO AHRS");}
+   metric_value_->setText(last_sample_.orientation_valid?
+       QString("RMSE %1°  |  MAE %2°  |  PEAK %3°")
+       .arg(f(stats_.rmse(monitor_axis_)),f(stats_.mae(monitor_axis_)),f(stats_.peak[monitor_axis_])):
+       QString("RMSE --  |  MAE --  |  PEAK -- / NO FMU AHRS"));
    updateSystem(last_sample_);
    if (ref_tabs_ && ref_tabs_->currentWidget() &&
        ref_tabs_->tabText(ref_tabs_->currentIndex()) == "Response") {
@@ -1755,20 +2163,32 @@ void MainWindow::onSample(const Telemetry& s,bool draw){
                 dash_[size_t(axis)]->append(src?3:1,t,s.attitude_deg[axis]);
             }
         }
+        const bool display_only=s.from_real && !s.orientation_valid && s.display_attitude.valid;
+        const auto& dq=s.display_attitude.q;
+        const Quaternion display_q{dq[0],dq[1],dq[2],dq[3]};
+        const auto display_angles=display_q.eulerDeg();
+        if(display_only){
+            for(int axis=0;axis<3;++axis)dash_[size_t(axis)]->append(4,t,display_angles[axis]);
+        }
         for(int axis=0;axis<3;++axis){
             dash_[3]->append(src*3+axis,t,s.angular_rate_deg_s[axis]);
             dash_[4]->append(src*3+axis,t,s.accel_m_s2[axis]);
         }
-        if(!selected)return;
-        for(int axis=0;axis<3;++axis){
-            attitude_values_[size_t(axis)]->setText(
-                s.orientation_valid ? f(s.attitude_deg[axis],2)+" deg":"NO ORIENTATION");
+        // Real dashboard readings must remain visible even if the control target is SIM
+        // and SIM has no recent IMU. Control feedback still follows selected only.
+        if(selected || (s.from_real && !bridge_.imuFreshFor(false))){
+            for(int axis=0;axis<3;++axis){
+                attitude_values_[size_t(axis)]->setText(s.orientation_valid ? f(s.attitude_deg[axis],2)+" deg":
+                    display_only ? f(display_angles[axis],2)+(axis==2?" deg / GUI REL":" deg / GUI DIAG"):
+                    "NO AHRS / WAITING");
+            }
         }
+        if(!selected)return;
         rate_values_[0]->setText(QString("p %1   q %2   r %3 deg/s")
             .arg(f(s.angular_rate_deg_s[0]),f(s.angular_rate_deg_s[1]),f(s.angular_rate_deg_s[2])));
         rate_values_[1]->setText(QString("ax %1   ay %2   az %3 m/s²")
             .arg(f(s.accel_m_s2[0]),f(s.accel_m_s2[1]),f(s.accel_m_s2[2])));
-        view_->setAttitude(s.orientation,s.orientation_valid);
+        view_->setAttitude(display_only?display_q:s.orientation,s.orientation_valid||display_only,display_only);
         if(s.orientation_valid){
             for(int axis=0;axis<3;++axis){
                 auto& ref=live_refs_[size_t(src)][size_t(axis)];
@@ -1820,6 +2240,7 @@ void MainWindow::clearSensorHistory(bool real,SampleKind sensor){
         for(int axis=0;axis<3;++axis){
             dash_[size_t(axis)]->clearSeries(source?2:0);
             dash_[size_t(axis)]->clearSeries(source?3:1);
+            if(real)dash_[size_t(axis)]->clearSeries(4);
         }
         for(int axis=0;axis<3;++axis){
             dash_[3]->clearSeries(source*3+axis);
@@ -1905,14 +2326,25 @@ void MainWindow::updateSourceConnections(){
 }
 
 void MainWindow::updateSystem(const Telemetry& s){
- system_imu_->setText(QString("IMU  %1").arg(bridge_.imuFresh()?"ONLINE":"STALE"));
+ // Distinguish raw sensor connectivity from the original FMU attitude.
+ // Never feed accelerometer-only tilt into the attitude or control paths.
+ const bool imu_online=bridge_.imuFresh();
+ system_imu_->setText(!imu_online?"IMU  STALE":
+    (s.orientation_valid?"IMU  ONLINE / AHRS VALID":
+    s.display_attitude.valid?"IMU ONLINE / GUI DIAGNOSTIC":"IMU ONLINE / NO AHRS"));
+ system_imu_->setToolTip(!imu_online?"No recent IMU samples.":
+    (s.orientation_valid?"Orientation quaternion received from the backend.":
+     "FMU orientation unavailable. GUI fusion is diagnostic only; yaw is relative and can drift."));
  system_mag_->setText(QString("MAG  %1").arg(bridge_.magFresh()?"ONLINE":"STALE"));
  system_baro_->setText(QString("BARO  %1").arg(bridge_.baroFresh()?"ONLINE":"STALE"));
  system_controller_->setText(bridge_.feedbackFresh()?"Controller: "+QString::fromStdString(bridge_.controllerStatus()):"Controller: NO CONFIRMED FEEDBACK");
  system_frame_->setText(QString("IMU frame: %1\nMAG frame: %2\nBARO frame: %3")
   .arg(QString::fromStdString(s.imu_frame),QString::fromStdString(s.mag_frame),QString::fromStdString(s.baro_frame)));
  system_angular_->setText(QString("Gyro: [%1, %2, %3] deg/s").arg(f(s.angular_rate_deg_s[0]),f(s.angular_rate_deg_s[1]),f(s.angular_rate_deg_s[2])));
- system_accel_->setText(QString("Accel: [%1, %2, %3] m/s²").arg(f(s.accel_m_s2[0]),f(s.accel_m_s2[1]),f(s.accel_m_s2[2])));
+ const double accel_norm=std::hypot(s.accel_m_s2[0],s.accel_m_s2[1],s.accel_m_s2[2]);
+ system_accel_->setText(imu_online?QString("Accel: [%1, %2, %3] m/s² | norm %4")
+   .arg(f(s.accel_m_s2[0]),f(s.accel_m_s2[1]),f(s.accel_m_s2[2]),f(accel_norm,3)):
+   QString("Accel: -- (STALE)"));
  system_mag_value_->setText(bridge_.magFresh()
   ? QString("Mag: [%1, %2, %3] µT").arg(f(s.mag_uT[0]),f(s.mag_uT[1]),f(s.mag_uT[2]))
   : "Mag: -- µT (STALE)");
@@ -2180,6 +2612,10 @@ void MainWindow::applyTypography(bool force){
         slider->setFixedHeight(scaledPixels(175,ui_scale_));
         slider->setFixedWidth(scaledPixels(34,ui_scale_));
     }
+    for(auto* readout:motor_labels_)
+        reserveReadout(readout,3,true,{"Req 88888 RPM","DShot 8888","Eq 88888 RPM"});
+    reserveReadout(master_motor_label_,3);
+    reserveReadout(command_value_,2);
     if(command_pad_){command_pad_->setMinimumHeight(scaledPixels(175,ui_scale_));command_pad_->update();}
     if(view_){view_->setMinimumSize(scaledPixels(260,ui_scale_),scaledPixels(200,ui_scale_));view_->update();}
     if(preview_)preview_->setMinimumHeight(scaledPixels(145,ui_scale_));
@@ -2270,9 +2706,58 @@ void MainWindow::showRecordingDialog() {
     recording_dialog_->activateWindow();
 }
 
-void MainWindow::startRecording() {
+void MainWindow::startManualTrial() {
+    if (shutting_down_ || manual_trial_active_ || command_active_ || recorder_active_ ||
+        !manual_mode_ || !bridge_.isReal() || !output_enabled_->isChecked()) {
+        QMessageBox::warning(this, "Manual trial", "Select REAL and MANUAL, enable output, and stop any existing output or recording first.");
+        return;
+    }
+    const auto ready = [this] {
+        const auto state = QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
+        return bridge_.hardwareStatusFresh() && bridge_.imuFreshFor(true, .25) &&
+            bridge_.fmuDshotFresh() && state.value("transport_connected").toBool(false) &&
+            state.value("orientation_available").toBool(false) &&
+            state.value("manual_power_ready").toBool(false) &&
+            state.value("manual_mode_acknowledged").toBool(false) &&
+            state.value("command_tx_enabled").toBool(false) &&
+            state.value("rpm_to_dshot_enabled").toBool(false) &&
+            !state.value("firmware_fault_latched").toBool(true) &&
+            !state.value("armed_acknowledged").toBool(true) &&
+            !state.value("armed_requested").toBool(true);
+    };
+    if (!ready()) {
+        QMessageBox::warning(this, "Manual trial", "Wait for fresh FMU DShot, valid orientation and a connected, disarmed, fault-free MANUAL session.");
+        return;
+    }
+    bool accepted = false;
+    const int seconds = QInputDialog::getInt(this, "Recorded manual trial", "Maximum trial duration [s]", 15, 5, 60, 1, &accepted);
+    if (!accepted) return;
+    if (QMessageBox::warning(this, "Powered bench trial",
+        "Secure the test fixture and travel limits; use independent physical motor-power cutoff and supervised ESC supply. Keep clear of propellers. "
+        "The trial arms at zero; after MANUAL: ARMED, change only the existing manual controls within previously verified limits. "
+        "No automatic ramp, swing-up or re-arm. Stop does not prevent a gravity-driven fall. Start recording and request ARM?",
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) return;
+    if (!ready() || command_active_ || recorder_active_ || !manual_mode_ || !bridge_.isReal() || !output_enabled_->isChecked()) return;
+    RecordingConfig config = recording_dialog_->configuration();
+    config.prefix = "cefiro_manual_trial";
+    config.notes += " | Timed manual motor identification; no automatic controller";
+    config.mode = 1;
+    config.duration_s = seconds;
+    config.start_delay_s = 0.;
+    config.save_interval_ms = 0;
+    config.metadata = config.save_attitude = config.save_rates = config.save_accel = true;
+    config.save_validity = config.save_strategy_source = true;
+    startRecording(&config);
+    if (!recorder_active_) return;
+    startOutput(); // Existing explicit zero-start and all manual arm interlocks.
+    if (!command_active_) { stopRecording(); return; }
+    manual_trial_active_ = true;
+    manual_trial_btn_->setText("STOP TRIAL / SAVE CSV");
+}
+
+void MainWindow::startRecording(const RecordingConfig* override_config) {
     if (recorder_active_ || !recording_dialog_) return;
-    const RecordingConfig config = recording_dialog_->configuration();
+    const RecordingConfig config = override_config ? *override_config : recording_dialog_->configuration();
     if (config.directory.isEmpty() || config.prefix.isEmpty()) {
         const QString message = "Specify an output directory and a file prefix.";
         recording_dialog_->showError(message);
@@ -2346,7 +2831,13 @@ void MainWindow::startRecording() {
             << "host_dshot_source" << "rpm_map_valid" << "rpm_map_min_dshot" << "rpm_map_max_dshot"
             << "rpm_map_full_scale" << "rpm_map_deadband"
             << "rpm_eq_host_m1" << "rpm_eq_host_m2" << "rpm_eq_host_m3" << "rpm_eq_host_m4"
-            << "rpm_eq_fmu_m1" << "rpm_eq_fmu_m2" << "rpm_eq_fmu_m3" << "rpm_eq_fmu_m4";
+            << "rpm_eq_fmu_m1" << "rpm_eq_fmu_m2" << "rpm_eq_fmu_m3" << "rpm_eq_fmu_m4"
+            << "roll_torque_estimate_valid" << "roll_torque_gravity_Nm" << "roll_torque_damping_Nm"
+            << "roll_torque_external_est_Nm" << "roll_torque_dp_rad_s2" << "roll_torque_orientation_source"
+            << "gui_fusion_valid" << "gui_roll_deg" << "gui_pitch_deg" << "gui_yaw_relative_deg"
+            << "esc_power_tick_valid" << "esc_power_sample_ms" << "esc_power_age_s"
+            << "esc_current_valid" << "esc_current_a" << "esc_power_w"
+            << "esc_sense_valid" << "esc_current_sense_v" << "esc_adc_v_raw" << "esc_adc_i_raw";
     recording_stream_ << columns.join(',') << "\n";
     recording_clock_.start();
     recorder_active_ = true;
@@ -2395,6 +2886,15 @@ void MainWindow::startRecording() {
             yaml << "  host_time: ROS receive timestamp; fmu_sample_ms is MCU uptime\n";
             yaml << "  host_dshot_age_semantics: reception_age_for_topic_or_reported_tx_age_plus_reception_for_status\n";
             yaml << "  rpm_equivalent: inverse_nominal_host_map_not_measured_speed\n";
+            yaml << "  roll_torque_observer: provisional_real_imu_inverse_dynamics_read_only_with_source\n";
+            yaml << "  roll_torque_parameters: {J_kg_m2: " << RollTorqueObserver::inertia
+                 << ", kg_Nm: " << RollTorqueObserver::gravity_coefficient
+                 << ", b_Nm_s_rad: " << RollTorqueObserver::damping
+                 << ", offset_deg: " << RollTorqueObserver::gravity_offset_deg
+                 << ", filter_tau_s: " << RollTorqueObserver::filter_tau_s
+                 << ", max_pitch_deg: " << RollTorqueObserver::max_pitch_deg
+                 << ", max_cross_rate_deg_s: " << RollTorqueObserver::max_cross_rate_deg_s << "}\n";
+            yaml << "  gui_fusion_columns: diagnostic_only_yaw_relative_not_fmu_orientation\n";
             yaml << "  saved_groups:\n";
             yaml << "    motor_input: true\n";
 
@@ -2414,6 +2914,12 @@ void MainWindow::startRecording() {
 }
 
 void MainWindow::stopRecording() {
+    if (embedded_roll_active_) {finishEmbeddedRoll("Recording stopped");return;}
+    if (manual_trial_active_) {
+        // stopOutput clears trial ownership before calling us again.
+        stopOutput(false);
+        return;
+    }
     if (!recorder_active_) return;
     if(bridge_.isReal()){
         for(const auto& sample:bridge_.drainRealRecording(true))saveRecord(sample);
@@ -2519,6 +3025,28 @@ void MainWindow::saveRecord(const Telemetry& sample) {
     const auto host_rpm=sample.host_dshot_valid?map.inverse(sample.host_dshot):std::nullopt;
     const auto fmu_rpm=sample.fmu_dshot_valid?map.inverse(sample.fmu_dshot):std::nullopt;
     for(const auto& rpm:{host_rpm,fmu_rpm})for(std::size_t i=0;i<4;++i){out<<',';if(rpm)out<<(*rpm)[i];}
+    const auto& torque=sample.roll_torque;
+    const bool torque_valid=sample.from_real && torque.valid();
+    out<<','<<int(torque_valid);
+    for(double v:{torque.gravity_nm,torque.damping_nm,torque.external_nm,torque.acceleration_rad_s2}){
+        out<<',';if(torque_valid)out<<v;
+    }
+    out<<',';if(torque_valid)out<<(torque.source==TorqueSource::GuiFusion?"GUI_FUSION_DIAG":"FMU_AHRS");
+    const bool gui_diag=sample.from_real&&!sample.orientation_valid&&sample.display_attitude.valid;
+    out<<','<<int(gui_diag);
+    const auto& dq=sample.display_attitude.q;
+    const auto da=Quaternion{dq[0],dq[1],dq[2],dq[3]}.eulerDeg();
+    for(double angle:da){out<<',';if(gui_diag)out<<angle;}
+    const bool power_tick=sample.from_real&&sample.power_tick_valid;
+    const bool current=power_tick&&sample.current_valid&&std::isfinite(sample.esc_current_a)&&sample.esc_current_a>=0.;
+    const bool sense=power_tick&&sample.esc_sense_valid;
+    out<<','<<int(power_tick)<<',';if(power_tick)out<<sample.power_sample_ms;
+    out<<',';if(power_tick)out<<sample.power_age_s;
+    out<<','<<int(current)<<',';if(current)out<<sample.esc_current_a;
+    out<<',';if(current&&sample.battery_valid)out<<sample.esc_current_a*sample.battery_voltage_v;
+    out<<','<<int(sense)<<',';if(sense)out<<sample.esc_current_sense_v;
+    out<<',';if(sense)out<<sample.adc_voltage_raw;
+    out<<',';if(sense)out<<sample.adc_current_raw;
     out << "\n";
     if(sample.host_dshot_valid)++recorded_host_rows_;
     if(sample.fmu_dshot_valid)++recorded_fmu_rows_;
@@ -2608,6 +3136,9 @@ void MainWindow::refreshStepMetrics() {
 }
 
 void MainWindow::sendGains(){
+ if(bridge_.isReal() && (embedded_roll_active_ || controller_->currentText()=="SWING-UP + LQR (STM32)")){
+   QMessageBox::information(this,"STM32 gains","Use the initial Swing-Up gains in CONTROL ARCHITECTURE. The experimental embedded LQR is fixed. No ROS gain matrix is sent to the real FMU.");return;
+ }
  std::vector<double> pid,lqr;pid.reserve(9);lqr.reserve(18);
  for(int r=0;r<3;++r)for(int c=0;c<3;++c){
     bool valid=false;auto* item=pid_gains_->item(r,c);

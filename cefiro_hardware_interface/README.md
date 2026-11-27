@@ -26,7 +26,7 @@ from the real plant under `/real`.
   firmware interlocks.
 * **`CMD_RPM` is explicitly `UNSUPPORTED`**. There is no measured motor RPM.
 * **`CMD_DIR` and `CMD_PID` are explicitly `UNSUPPORTED`**.
-* `CF_MANUAL_MAX_DSHOT=2047`; accepted throttle codes: `0` or `48..2047`. The host defaults to a cap of 300.
+* `CF_MANUAL_MAX_DSHOT=2047`; accepted throttle codes: `0` or `48..2047`. The host defaults to 2047; a lower startup cap can be chosen.
 * `CF_HOST_COMMAND_TTL_MS=300`: the STM32 autonomously stops manual output after
   loss of commands. The Raspberry Pi refreshes a recent GUI setpoint every **40 ms** and
   enforces a **600 ms maximum GUI silence** by default. This is a bounded lease,

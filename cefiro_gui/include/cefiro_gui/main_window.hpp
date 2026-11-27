@@ -67,7 +67,12 @@ private:
     void refreshReferenceLimits();
     void applyReferenceLimits(const Vec3& limits);
     void publishMotorCommand();
+    void refreshMotorReadouts();
     void startOutput();
+    void startEmbeddedRoll();
+    void serviceEmbeddedRoll();
+    void finishEmbeddedRoll(const QString& reason, bool emergency=false);
+    void updateEmbeddedRollUi();
     void stopOutput(bool emergency);
     void setManual(bool manual);
     void updateMode();
@@ -83,7 +88,8 @@ private:
     void setConnectionBadge(QLabel* badge,const QString& name,bool connected);
     void resetSelectedFeedback();
     void showRecordingDialog();
-    void startRecording();
+    void startRecording(const RecordingConfig* override_config = nullptr);
+    void startManualTrial();
     void stopRecording();
     void saveRecord(const Telemetry& sample);
     void exportSummary();
@@ -191,6 +197,7 @@ private:
     QPushButton* stop_btn_{nullptr};
     QPushButton* emergency_btn_{nullptr};
     QPushButton* record_btn_{nullptr};
+    QPushButton* manual_trial_btn_{nullptr};
     RecordingDialog* recording_dialog_{nullptr};
     RecordingConfig recording_config_{};
     QPushButton* clear_btn_{nullptr};
@@ -238,12 +245,26 @@ private:
     bool manual_mode_{false};
     bool manual_dirty_{false};
     bool command_active_{false};
+    // The GUI owns a lease and recording only. All torque/trajectory/LQR is in FMU.
+    bool embedded_roll_active_{false};
+    unsigned embedded_roll_token_{0};
+    QElapsedTimer embedded_roll_clock_{};
+    QElapsedTimer embedded_roll_lease_{};
+    QElapsedTimer embedded_roll_feedback_{};
+    QString embedded_roll_last_tick_;
+    QFile embedded_roll_log_;
+    QTextStream embedded_roll_stream_;
+    QWidget* embedded_roll_panel_{nullptr};
+    QDoubleSpinBox* embedded_roll_kp_{nullptr};
+    QDoubleSpinBox* embedded_roll_kd_{nullptr};
+    QDoubleSpinBox* embedded_roll_duration_{nullptr};
     QElapsedTimer real_manual_start_clock_{};
     bool real_manual_ack_seen_{false};
     bool reference_pad_unlocked_{false};
     bool wave_running_{false};
     bool e_stop_{false};
     bool recorder_active_{false};
+    bool manual_trial_active_{false};
     bool shutting_down_{false};
     bool control_tab_active_{false};
     int monitor_axis_{0};

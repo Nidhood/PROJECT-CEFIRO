@@ -21,6 +21,7 @@
 #include <cefiro_msgs/msg/motor_rpm.hpp>
 #include <cefiro_msgs/msg/motor_dshot.hpp>
 #include <cefiro_msgs/msg/motor_telemetry.hpp>
+#include <cefiro_msgs/msg/identification_sample.hpp>
 
 #include <algorithm>
 #include <array>
@@ -32,6 +33,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <locale>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -49,10 +51,11 @@ using Time = Clock::time_point;
 constexpr double kRadiansPerDegree = 0.017453292519943295;
 constexpr double kMagneticTeslaPerMicrotesla = 1.0e-6;
 constexpr std::size_t kCommandQueueMax = 24;
-constexpr const char* kHardwareVersion = "0.8.6";
+constexpr const char* kHardwareVersion = "0.8.15";
 
 std::string number(double value, int precision = 5) {
   std::ostringstream stream;
+  stream.imbue(std::locale::classic());
   stream << std::fixed << std::setprecision(precision) << value;
   return stream.str();
 }
@@ -120,17 +123,18 @@ public:
     baudrate_ = declare_parameter<int>("baudrate", 115200);
     protocol_mode_ = declare_parameter<std::string>("protocol_mode", "legacy_text");
     enable_command_tx_ = declare_parameter<bool>("enable_command_tx", false);
+    allow_experimental_roll_ = declare_parameter<bool>("allow_experimental_roll", false);
     // Explicit opt-in: this is NOT measured-RPM closed-loop control. The MCU
-    // supports manual DShot 0 / 48..2047; host defaults to 300. CMD_RPM/CMD_DIR unsupported.
+    // supports manual DShot 0 / 48..2047; host defaults to 2047. CMD_RPM/CMD_DIR unsupported.
     rpm_to_dshot_enabled_ = declare_parameter<bool>("rpm_to_dshot_enabled", false);
     allow_direct_dshot_ = declare_parameter<bool>("allow_direct_dshot", false);
     manual_map_.reference_max_rpm = declare_parameter<double>("rpm_full_scale", 12000.0);
     manual_map_.rpm_deadband = declare_parameter<double>("rpm_deadband", 25.0);
     const int dshot_min_param = declare_parameter<int>("dshot_min", 48);
-    const int dshot_max_param = declare_parameter<int>("dshot_max", 300);
+    const int dshot_max_param = declare_parameter<int>("dshot_max", 2047);
     if (dshot_min_param < 48 || dshot_max_param > 2047 ||
         dshot_max_param < dshot_min_param) {
-      throw std::invalid_argument("Firmware manual DShot allowed: zero or 48..2047; host cap is configurable");
+      throw std::invalid_argument("Manual DShot: zero or 48..2047");
     }
     manual_map_.dshot_min = static_cast<std::uint16_t>(dshot_min_param);
     manual_map_.dshot_max = static_cast<std::uint16_t>(dshot_max_param);
@@ -188,6 +192,7 @@ public:
     pub_battery_ = create_publisher<sensor_msgs::msg::BatteryState>("cefiro/sensors/battery", 10);
     pub_power_ = create_publisher<std_msgs::msg::String>("cefiro/hardware/power_status", 10);
     pub_imu_ = create_publisher<sensor_msgs::msg::Imu>("imu/data", sensor_qos);
+    pub_identification_ = create_publisher<cefiro_msgs::msg::IdentificationSample>("cefiro/hardware/identification_sample", sensor_qos);
     pub_mag_ = create_publisher<sensor_msgs::msg::MagneticField>("magnetometer/data", sensor_qos);
     pub_baro_ = create_publisher<sensor_msgs::msg::FluidPressure>("bmp581/air_pressure", sensor_qos);
     pub_imu_temp_ = create_publisher<sensor_msgs::msg::Temperature>("cefiro/sensors/imu_temperature", 10);
@@ -199,6 +204,79 @@ public:
     pub_status_ = create_publisher<std_msgs::msg::String>("cefiro/hardware/status", 10);
     pub_controller_ = create_publisher<std_msgs::msg::String>("cefiro/control/status", 10);
     pub_ack_ = create_publisher<std_msgs::msg::String>("cefiro/hardware/command_ack", 10);
+    pub_shadow_ = create_publisher<std_msgs::msg::String>("cefiro/control/swing_tuning_status", 10);
+    pub_fmu_dshot_ = create_publisher<cefiro_msgs::msg::MotorDshot>("cefiro/hardware/fmu_commanded_dshot",10);
+    sub_shadow_ = create_subscription<std_msgs::msg::Float64MultiArray>("cefiro/control/swing_tuning", 10,
+      [this](std_msgs::msg::Float64MultiArray::ConstSharedPtr m) {
+        const auto& v = m->data;
+        auto report = [this](const std::string& text) {
+          RCLCPP_WARN(get_logger(), "Swing trial: %s", text.c_str());
+          std_msgs::msg::String msg; msg.data=text; pub_shadow_->publish(msg);
+        };
+        if(v.size()!=1){
+          const char* kind=v.empty()?"STOP":v.size()==4?"SHADOW (no motors)":v.size()==5?"POWERED":v.size()==6?"EXPERIMENT":"INVALID";
+          RCLCPP_INFO(get_logger(), "GUI swing request: %s (%zu fields)",kind,v.size());
+        }
+        if (!can_tx_ || !sessionReady()) { report("REJECTED: CF1 connection unavailable"); return; }
+        if (v.empty()) {
+          // Remove all queued starts/leases before stop; no retry or auto-resume.
+          swing_token_=0; swing_start_sequence_.reset(); swing_confirmed_=false;
+          std::erase_if(tx_queue_,[](const std::string& x){return x.find("|CMD_SWING_")!=std::string::npos;});
+          if(pending_offset_==0 && pending_tx_.find("|CMD_SWING_")!=std::string::npos) pending_tx_.clear();
+          if(!queueCommand("CMD_SWING_STOP", {})) report("REJECTED: STOP not queued; MCU watchdog remains active");
+          return;
+        }
+        if (v.size()==1) {
+          if (!std::isfinite(v[0]) || v[0]!=double(swing_token_) || !swing_token_) return;
+          const auto now=Clock::now();
+          if (!last_valid_frame_ || now-*last_valid_frame_>250ms || fault_latched_) return;
+          swing_last_gui_=now;
+          std::erase_if(tx_queue_,[](const std::string& x){return x.find("|CMD_SWING_LEASE|")!=std::string::npos;});
+          if(swing_confirmed_)(void)queueCommand("CMD_SWING_LEASE",{std::to_string(swing_token_)});
+          return;
+        }
+        if (v.size()==5 || v.size()==6) {
+          const bool experimental=v.size()==6;
+          if(experimental && motor_map_revision_!=3U){report("REJECTED: STM32 motor map revision 3 required");return;}
+          if(experimental && (!allow_experimental_roll_ || v[5]!=1.0 || !power_gate_.external_manual)){report("REJECTED: external monitored bench experiment opt-in required");return;}
+          if(swing_token_){emergencyStop();report("FAULT: tuning during real trial");return;}
+          if (controller_enabled_ || arm_requested_ || arm_confirmed_ || fault_latched_ ||
+              !manual_mode_confirmed_ || !mcu_status_seen_ || mcu_fmu_state_>1 ||
+              !last_mcu_stat_ || Clock::now()-*last_mcu_stat_>750ms ||
+              !manualPowerReason(Clock::now()).empty() || (!experimental && power_gate_.external_manual)) {
+            report("REJECTED: inactive monitored-power session required");return;
+          }
+          if (!std::all_of(v.begin(),v.end(),[](double x){return std::isfinite(x);}) ||
+              v[0]<0.0 || v[0]>3.0 || v[1]<0.0 || v[1]>1.5 || v[2]<8.0 || v[2]>30.0 ||
+              (v[3]!=1.0 && v[3]!=-1.0) || v[4]<1.0 || v[4]>65535.0 || std::floor(v[4])!=v[4]) {
+            report("REJECTED: invalid real trial parameters");return;
+          }
+          if(experimental&&(v[0]<.6||v[0]>1.1||v[1]<.4||v[1]>.6||v[2]>12.||v[3]!=-1.)){report("REJECTED: experimental parameter envelope");return;}
+          auto fields=floatFields(std::vector<double>(v.begin(),v.begin()+4));
+          fields.push_back(std::to_string(static_cast<unsigned>(v[4])));
+          swing_start_sequence_=queueCommand(experimental?"CMD_SWING_EXP":"CMD_SWING_REAL",fields);
+          if(!swing_start_sequence_) {report("REJECTED: start not queued");return;}
+          swing_result_.clear(); fmu_fault_reason_.clear();
+          swing_token_=static_cast<unsigned>(v[4]);swing_confirmed_=false;swing_last_gui_=Clock::now();swing_last_feedback_=swing_last_gui_;
+          RCLCPP_INFO(get_logger(), "Queued %s seq=%u; awaiting STM32 ACK",experimental?"CMD_SWING_EXP":"CMD_SWING_REAL",static_cast<unsigned>(*swing_start_sequence_));
+          return;
+        }
+        if(swing_token_) { emergencyStop();report("FAULT: tuning during real trial");return; }
+        if (controller_enabled_ || arm_requested_ || arm_confirmed_ || fault_latched_ ||
+            !mcu_status_seen_ || mcu_fmu_state_>1) { report("REJECTED: disable output, disarm and clear any fault"); return; }
+        const auto current=Clock::now();
+        if (!last_imu_ || current-*last_imu_>250ms || !orientation_ ||
+            std::chrono::duration<double>(current-orientation_received_).count()>orientation_timeout_s_) {
+          report("REJECTED: IMU / AHRS not ready"); return;
+        }
+        if (v.size()!=4 || !std::all_of(v.begin(),v.end(),[](double x){return std::isfinite(x);}) ||
+            v[0]<0.0 || v[0]>3.0 || v[1]<0.0 || v[1]>1.5 || v[2]<5.0 || v[2]>30.0 || (v[3]!=1.0 && v[3]!=-1.0)) {
+          report("REJECTED: invalid shadow parameters"); return;
+        }
+        const auto seq=queueCommand("CMD_SWING_SHADOW",floatFields(v));
+        if(!seq) report("REJECTED: command not queued");
+        else RCLCPP_INFO(get_logger(), "Queued CMD_SWING_SHADOW seq=%u; awaiting STM32 ACK",static_cast<unsigned>(*seq));
+      });
     pub_commanded_dshot_ = create_publisher<cefiro_msgs::msg::MotorDshot>("cefiro/hardware/commanded_dshot", 10);
 
     sub_rpm_ = create_subscription<cefiro_msgs::msg::MotorRpm>("cefiro_actuators/target_rpm", 10,
@@ -214,6 +292,7 @@ public:
         // In this GUI 'enable' is the output gate for BOTH manual and automatic.
         // Firmware CF_ENABLE_AUTOMATIC_OUTPUT=0: never forward CMD_ENABLE=1.
         // Only the additional GUI armed=true intent can authorize manual DShot.
+        if(swing_token_ && m->data){emergencyStop();return;}
         if (!m->data) disarm("GUI output disabled");
         else { controller_enabled_ = true; maybeArm(); }
       });
@@ -268,6 +347,7 @@ public:
     status_timer_ = create_wall_timer(500ms, [this] { publishStatus(); });
     RCLCPP_INFO(get_logger(), "CEFIRO hardware interface v%s (manual keepalive + 0.60 s GUI lease)",
       kHardwareVersion);
+    RCLCPP_INFO(get_logger(), "Experimental Roll opt-in: %s", allow_experimental_roll_ ? "ENABLED" : "DISABLED");
     RCLCPP_INFO(get_logger(),
       "CEFIRO %s %s, namespace=%s, protocol=%s, command TX=%s",
       transport_mode_.c_str(), endpoint_.c_str(), get_namespace(), protocol_mode_.c_str(), can_tx_ ? "ENABLED" : "DISABLED");
@@ -308,6 +388,9 @@ private:
     RCLCPP_INFO(get_logger(), "CF1 end-to-end session established: %s", endpoint_.c_str());
   }
   void resetConnection(std::string_view reason) {
+    if(swing_token_ && swing_result_.empty()) swing_result_="LINK LOST: "+std::string(reason);
+    motor_map_revision_=0;
+    swing_token_=0;swing_confirmed_=false;swing_start_sequence_.reset();
     last_stop_reason_ = std::string(reason);
     if (link_.connected()) RCLCPP_WARN(get_logger(),
       "Transport link lost: %.*s; a NEW GUI enable/arm action will be required",
@@ -335,6 +418,8 @@ private:
     last_mcu_stat_.reset();
     last_imu_.reset(); last_mag_.reset(); last_baro_.reset(); last_motor_.reset();
     orientation_.reset();
+    orientation_tick_.reset();
+    pending_imu_metadata_.reset();
     requested_rpm_.fill(0.0);
     last_dshot_.fill(0);
     reconnect_at_ = Clock::now() + std::chrono::duration_cast<Clock::duration>(
@@ -460,6 +545,23 @@ private:
         disarm("MCU status heartbeat lost");
       }
     }
+    if(swing_token_) {
+      const auto now=Clock::now();
+      const auto power_reason=manualPowerReason(now);
+      std::string reason;
+      if(!sessionReady()) reason="CF1 session lost";
+      else if(!power_reason.empty()) reason="Power supervision: "+std::string(power_reason);
+      else if(now-swing_last_gui_>220ms) reason="GUI authorization timeout";
+      else if(now-swing_last_feedback_>450ms) reason="FMU phase telemetry timeout";
+      if(!reason.empty()) {
+        swing_result_="HOST SAFETY: "+reason;
+        RCLCPP_ERROR(get_logger(),"Swing stop: %s (GUI age %.0f ms, phase age %.0f ms)",reason.c_str(),
+          std::chrono::duration<double,std::milli>(now-swing_last_gui_).count(),
+          std::chrono::duration<double,std::milli>(now-swing_last_feedback_).count());
+        std_msgs::msg::String msg; msg.data="FAULT: "+swing_result_; pub_shadow_->publish(msg);
+        emergencyStop();last_stop_reason_=swing_result_;
+      }
+    }
     if (protocol_mode_ == "cf1") flushTx();
   }
   std::optional<std::uint16_t> queueCommand(std::string_view kind,
@@ -482,6 +584,7 @@ private:
       arm_confirmed_ = false;
       controller_enabled_ = false;
       manual_stream_.reset();
+      swing_token_=0; swing_confirmed_=false; swing_start_sequence_.reset();
       last_stop_reason_ = "UART TX queue overflow";
       fault_latched_ = true;
       arm_ack_sequence_.reset();
@@ -511,7 +614,10 @@ private:
     }
   }
   void disarm(std::string_view reason) {
-    const bool was_active = arm_requested_ || arm_confirmed_ || controller_enabled_;
+    const bool was_swing=swing_token_!=0;
+    swing_token_=0;swing_confirmed_=false;swing_start_sequence_.reset();
+    const bool was_active = arm_requested_ || arm_confirmed_ || controller_enabled_ || was_swing;
+    if(was_swing && swing_result_.empty()) swing_result_=std::string(reason);
     if (was_active) last_stop_reason_ = std::string(reason);
     arm_requested_ = false;
     arm_confirmed_ = false;
@@ -562,6 +668,7 @@ private:
     return power_gate_.reason(fresh(last_battery_), fresh(last_power_));
   }
   void maybeArm() {
+    if(swing_token_)return;
     if (!can_tx_ || !sessionReady() || !controller_enabled_ ||
         !arm_requested_ || arm_confirmed_ || arm_ack_sequence_ ||
         !(rpm_to_dshot_enabled_ || allow_direct_dshot_) ||
@@ -577,6 +684,7 @@ private:
     }
   }
   void onArmed(bool armed) {
+    if(swing_token_ && armed){emergencyStop();return;}
     if (!armed) { disarm("GUI requested disarm"); return; }
     if (!can_tx_ || !sessionReady()) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 3000,
@@ -607,6 +715,7 @@ private:
     maybeArm();
   }
   void sendMotorDshot(const std::array<std::uint16_t, 4>& codes) {
+    if(swing_token_)return;
     if (!can_tx_ || !sessionReady() || !controller_enabled_ ||
         !arm_requested_ || !arm_confirmed_ || reverse_requested_ || fault_latched_ ||
         !manualPowerReason(Clock::now()).empty()) return;
@@ -693,6 +802,7 @@ private:
   }
   void onGains(std::string_view kind, const std::vector<double>& values,
                std::size_t expected) {
+    if(swing_token_){emergencyStop();return;}
     if (!can_tx_ || arm_requested_ || arm_confirmed_ ||
         controller_enabled_ || values.size() != expected) return;
     if (!std::all_of(values.begin(), values.end(),
@@ -728,16 +838,66 @@ private:
     if (handleFrame(*frame)) ++rx_frames_;
     else ++bad_frames_;
   }
+  // Decode exactly 4 throttle codes, armed, state and tick.
+  // Decimal integral fields from old firmware and compact integers both work.
+  cefiro_msgs::msg::IdentificationSample parseImuMetadata(
+      const std::vector<std::string>& fields, std::size_t offset) {
+    cefiro_msgs::msg::IdentificationSample id;
+    if(fields.size()!=offset+7)return id;
+    const auto tick=parseInteger(fields[offset+6],0,4294967295LL);
+    const auto armed=parseFinite(fields[offset+4]);
+    const auto state=parseFinite(fields[offset+5]);
+    if(!tick || !armed || (*armed!=0. && *armed!=1.) || !state ||
+       *state<0. || *state>4. || std::floor(*state)!=*state)return id;
+    for(std::size_t i=0;i<4;++i){
+      const auto code=parseFinite(fields[offset+i]);
+      if(!code || std::floor(*code)!=*code || *code<0. || *code>2047. ||
+         (*code>0. && *code<48.))return cefiro_msgs::msg::IdentificationSample{};
+      id.fmu_dshot[i]=static_cast<std::uint16_t>(*code);
+    }
+    id.fmu_armed=*armed!=0.;
+    if(!id.fmu_armed && std::any_of(id.fmu_dshot.begin(),id.fmu_dshot.end(),[](auto x){return x!=0;}))
+      return cefiro_msgs::msg::IdentificationSample{};
+    id.fmu_state=static_cast<std::uint8_t>(*state);
+    id.fmu_sample_ms=static_cast<std::uint32_t>(*tick);
+    id.fmu_dshot_valid=true;
+    return id;
+  }
   bool handleFrame(const Frame& frame) {
     const auto& fields = frame.fields;
-    if (frame.kind == "IMU" && (fields.size() == 7 || fields.size() == 8)) {
+    if (frame.kind == "IMX") {
+      pending_imu_metadata_.reset();
+      if(fields.size()!=7)return false;
+      auto id=parseImuMetadata(fields,0);
+      if(!id.fmu_dshot_valid)return false;
+      pending_imu_metadata_=id;pending_imu_metadata_at_=Clock::now();
+      return true;
+    }
+    if (frame.kind == "IMU" && (fields.size() == 7 || fields.size() == 8 || fields.size() == 14)) {
       const auto v = numbers(fields, 0, 7);
       if (!v) return false;
       ImuReading s;
       std::copy_n(v->begin(), 3, s.acceleration_ms2.begin());
       std::copy_n(v->begin()+3, 3, s.gyro_dps.begin());
       s.temperature_c = (*v)[6];
-      publishImu(s);
+      // Optional metadata never vetoes finite raw IMU.
+      cefiro_msgs::msg::IdentificationSample id;
+      std::optional<std::uint32_t> sample_tick;
+      if(fields.size()==14 || fields.size()==8){
+        const auto tick=parseInteger(fields.back(),0,4294967295LL);
+        if(tick)sample_tick=static_cast<std::uint32_t>(*tick);
+      }
+      bool extended=fields.size()==14;
+      if(extended){
+        id=parseImuMetadata(fields,7);
+      }else if(fields.size()==8 && sample_tick && pending_imu_metadata_ &&
+               pending_imu_metadata_->fmu_sample_ms==*sample_tick &&
+               std::chrono::duration<double>(Clock::now()-pending_imu_metadata_at_).count()<=0.2){
+        id=*pending_imu_metadata_;extended=true;
+      }
+      // One-shot: a missing/mismatched extension never attaches to a later sample.
+      pending_imu_metadata_.reset();
+      publishImu(s,id,sample_tick,extended);
       return true;
     }
     if (frame.kind == "MAG" && (fields.size() == 3 || fields.size() == 4)) {
@@ -777,6 +937,11 @@ private:
       msg.power_supply_technology = msg.POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
       pub_battery_->publish(msg);
       last_battery_ = Clock::now(); battery_voltage_valid_ = (flags & 1U) != 0;
+      id_battery_voltage_=(*v)[0];
+      id_battery_tick_=static_cast<std::uint32_t>(*tick);
+      id_battery_current_=(*v)[1];
+      id_current_valid_=(flags&2U) && (flags&8U) && (*v)[1]>=0.;
+      id_bat_adc_fresh_=(flags&8U)!=0;
       power_gate_.battery_valid = battery_voltage_valid_ && (*v)[0] > 0.0;
       power_gate_.battery_adc_fresh = (flags & 8U) != 0;
       power_gate_.battery_bench = (flags & 16U) != 0;
@@ -792,6 +957,11 @@ private:
       const auto bench = parseInteger(fields[9], 0, 1);
       const auto armed = parseInteger(fields[10], 0, 1);
       if (!adc_fresh || !bench || !armed) return false;
+      const auto vraw=parseInteger(fields[0],0,65535), iraw=parseInteger(fields[1],0,65535);
+      const auto ptick=parseInteger(fields[11],0,4294967295LL);
+      const auto sense=parseFinite(fields[4]);
+      id_pwr_valid_=vraw && iraw && ptick && sense && *sense>=0. && *sense<=6.6e3 && *adc_fresh;
+      if(id_pwr_valid_){id_pwr_tick_=static_cast<std::uint32_t>(*ptick);id_adc_v_=static_cast<std::uint16_t>(*vraw);id_adc_i_=static_cast<std::uint16_t>(*iraw);id_sense_v_=*sense/1000.;}
       power_gate_.power_adc_fresh = *adc_fresh != 0;
       power_gate_.power_bench = *bench != 0;
       std_msgs::msg::String msg;
@@ -810,6 +980,8 @@ private:
       for (std::size_t i=0; i<4; ++i) q[i] = (*v)[i] / norm;
       orientation_ = q;
       orientation_received_ = Clock::now();
+      orientation_tick_.reset();
+      if(fields.size()==5){const auto tick=parseInteger(fields[4],0,4294967295LL);if(tick)orientation_tick_=static_cast<std::uint32_t>(*tick);}
       return true;
     }
     if (frame.kind == "MOTOR" && fields.size() == 11) {
@@ -829,6 +1001,48 @@ private:
                          ", watchdog=" + std::to_string(*watchdog);
       // Do not fake unmeasured thrust/current/torque fields of MotorTelemetry.
       return true;
+    }
+    if (frame.kind == "SWG") {
+      if(fields.size()==1 && fields[0]=="STOPPED") {
+        if(swing_result_.empty()) swing_result_="STOPPED";
+        swing_token_=0;swing_confirmed_=false;swing_start_sequence_.reset();
+      }
+      if (fields.size()!=8 && fields.size()!=1) return false;
+      if(fields.size()==1 && fields[0]!="STOPPED" && fields[0]!="NONE") {
+        const bool first=!fault_latched_;
+        if(fmu_fault_reason_!=fields[0]) {
+          fmu_fault_reason_=fields[0];
+          RCLCPP_ERROR(get_logger(),"STM32 ORIGINAL SAFETY FAULT: %s",fmu_fault_reason_.c_str());
+        }
+        if(swing_result_.empty() || swing_result_=="STM32 FMU reports FAULT" || swing_result_=="STOPPED")
+          swing_result_="FMU SAFETY: "+fields[0];
+        fault_latched_=true;
+        if(first || arm_requested_ || arm_confirmed_ || controller_enabled_) disarm("FMU SAFETY: "+fields[0]);
+        last_stop_reason_="FMU SAFETY: "+fields[0];
+      }
+      std_msgs::msg::String msg; msg.data="SHADOW";
+      for(const auto& field:fields) msg.data += ","+field;
+      pub_shadow_->publish(msg); return true;
+    }
+    if (frame.kind == "SWP") {
+      if(fields.size()!=4 || !numbers(fields,0,4))return false;
+      std_msgs::msg::String msg;msg.data="PROFILE";
+      for(const auto& field:fields)msg.data+=","+field;
+      pub_shadow_->publish(msg);return true;
+    }
+    if (frame.kind == "SWR") {
+      if(fields.size()!=12)return false;
+      const auto vals=numbers(fields,0,12);if(!vals)return false;
+      cefiro_msgs::msg::MotorDshot m;
+      for(std::size_t i=0;i<4;++i){
+        const double n=(*vals)[7+i];
+        if(n<0. || n>2047. || (n>0. && n<48.) || std::floor(n)!=n)return false;
+        m.data[i]=static_cast<std::uint16_t>(n);
+      }
+      swing_last_feedback_=Clock::now();pub_fmu_dshot_->publish(m);
+      std_msgs::msg::String msg;msg.data="SWING_REAL";
+      for(const auto& field:fields)msg.data+=","+field;
+      pub_shadow_->publish(msg);return true;
     }
     if (frame.kind == "MOTOR_FULL") return onMotorFull(fields);
     if (frame.kind == "ACK" && fields.size() == 3) {
@@ -851,6 +1065,30 @@ private:
       std_msgs::msg::String ack_msg;
       ack_msg.data = last_ack_;
       pub_ack_->publish(ack_msg);
+      if(fields[1]=="CMD_SWING_LEASE" && swing_token_ && fields[2]!="OK") {
+        if(swing_result_.empty()) swing_result_="MCU rejected swing lease: "+fields[2];
+        RCLCPP_ERROR(get_logger(),"%s",swing_result_.c_str());
+        emergencyStop();
+        std_msgs::msg::String msg;msg.data="FAULT: MCU rejected swing lease";pub_shadow_->publish(msg);
+      }
+      if(fields[1]=="CMD_SWING_REAL" || fields[1]=="CMD_SWING_EXP" || fields[1]=="CMD_SWING_SHADOW" || fields[1]=="CMD_SWING_STOP") {
+        if(fields[2]=="OK") RCLCPP_INFO(get_logger(), "STM32 %s: %s (seq=%u)",fields[1].c_str(),fields[2].c_str(),static_cast<unsigned>(*ack));
+        else RCLCPP_WARN(get_logger(), "STM32 %s: %s (seq=%u)",fields[1].c_str(),fields[2].c_str(),static_cast<unsigned>(*ack));
+      }
+      if(fields[1]=="CMD_SWING_REAL" || fields[1]=="CMD_SWING_EXP") {
+        if(swing_start_sequence_ && *ack==*swing_start_sequence_) {
+          swing_start_sequence_.reset();swing_confirmed_=fields[2]=="OK";
+          if(!swing_confirmed_)swing_token_=0;
+          swing_last_feedback_=Clock::now();
+        }
+        std_msgs::msg::String msg;msg.data=fields[1]+": "+fields[2];pub_shadow_->publish(msg);
+      }
+      if (fields[1]=="CMD_SWING_SHADOW" || fields[1]=="CMD_SWING_STOP") {
+        std_msgs::msg::String msg;
+        msg.data=(fields[1]=="CMD_SWING_STOP" && fields[2]=="FAULT_LATCHED" && !fmu_fault_reason_.empty())
+          ? "FAULT: FMU SAFETY: "+fmu_fault_reason_ : fields[1]+": "+fields[2];
+        pub_shadow_->publish(msg);
+      }
       if (mode_ack_sequence_ && *ack == *mode_ack_sequence_ &&
           fields[1] == "CMD_MODE") {
         manual_mode_confirmed_ = fields[2] == "OK";
@@ -883,6 +1121,7 @@ private:
           fields[1] == "CMD_RESET_FAULT") {
         if (fields[2] == "OK") {
           fault_latched_ = false;
+          fmu_fault_reason_.clear();
           manual_mode_confirmed_ = false;
           mode_ack_sequence_ = queueCommand("CMD_MODE", {"MANUAL"});
         }
@@ -915,6 +1154,8 @@ private:
       const auto auto_enabled = parseInteger(fields[4], 0, 1);
       if (!state || !auto_enabled) return false;
       const bool entering_fault = *state == 4 && !fault_latched_;
+      const auto map_rev=fields.size()>25?parseInteger(fields[25],0,65535):std::nullopt;
+      motor_map_revision_=map_rev?static_cast<unsigned>(*map_rev):0U;
       mcu_fmu_state_ = static_cast<int>(*state);
       mcu_auto_enabled_ = (*auto_enabled != 0);
       mcu_status_seen_ = true;
@@ -987,7 +1228,10 @@ private:
     if (!msg.armed && arm_confirmed_) disarm("MCU reports disarmed");
     return true;
   }
-  void publishImu(const ImuReading& reading) {
+  void publishImu(const ImuReading& reading,
+                  cefiro_msgs::msg::IdentificationSample id = cefiro_msgs::msg::IdentificationSample{},
+                  std::optional<std::uint32_t> sample_tick = std::nullopt,
+                  bool extended = false) {
     sensor_msgs::msg::Imu msg;
     msg.header.stamp = now();
     msg.header.frame_id = imu_frame_;
@@ -997,6 +1241,7 @@ private:
     msg.angular_velocity.x = reading.gyro_dps[0] * kRadiansPerDegree;
     msg.angular_velocity.y = reading.gyro_dps[1] * kRadiansPerDegree;
     msg.angular_velocity.z = reading.gyro_dps[2] * kRadiansPerDegree;
+    // CEFIRO_IMU_RX_V248: restore original live AHRS freshness policy.
     if (orientation_ &&
         std::chrono::duration<double>(Clock::now() - orientation_received_).count() <= orientation_timeout_s_) {
       msg.orientation.w = (*orientation_)[0];
@@ -1008,6 +1253,33 @@ private:
       msg.orientation_covariance[0] = -1.0;
     }
     pub_imu_->publish(msg);
+    id.imu=msg;
+    // Do not claim co-sampled attitude when ticks differ. Keep primary unchanged.
+    if (extended && !(sample_tick && orientation_tick_ && *orientation_tick_==*sample_tick)) {
+      id.imu.orientation.w=1.0;
+      id.imu.orientation.x=id.imu.orientation.y=id.imu.orientation.z=0.0;
+      id.imu.orientation_covariance[0]=-1.0;
+    }
+    const double tx_age=manual_stream_.txAgeSeconds(Clock::now());
+    id.host_dshot_valid=arm_confirmed_ && std::isfinite(tx_age) && tx_age>=0. && tx_age<=0.15;
+    if(id.host_dshot_valid){id.host_dshot=last_dshot_;id.host_dshot_age_s=tx_age;}
+    id.battery_valid=last_battery_ && battery_voltage_valid_ && std::chrono::duration<double>(Clock::now()-*last_battery_).count()<=0.5 && std::isfinite(id_battery_voltage_) && id_battery_voltage_>0.;
+    if(id.battery_valid)id.battery_voltage_v=id_battery_voltage_;
+    // BAT/PWR run at 5 Hz, so attach explicit MCU age only on a causal sample.
+    // No new power data may change primary IMU, manual gate or control.
+    if(sample_tick && last_battery_ && id_bat_adc_fresh_ &&
+        std::chrono::duration<double>(Clock::now()-*last_battery_).count()<=0.35){
+      const std::uint32_t age_ms=*sample_tick-id_battery_tick_;
+      if(age_ms<=350U){
+        id.power_tick_valid=true;id.power_sample_ms=id_battery_tick_;id.power_age_s=age_ms/1000.;
+        id.current_valid=id_current_valid_;if(id.current_valid)id.esc_current_a=id_battery_current_;
+        if(last_power_ && id_pwr_valid_ && id_pwr_tick_==id_battery_tick_ &&
+           std::chrono::duration<double>(Clock::now()-*last_power_).count()<=0.35){
+          id.esc_sense_valid=true;id.esc_current_sense_v=id_sense_v_;id.adc_voltage_raw=id_adc_v_;id.adc_current_raw=id_adc_i_;
+        }
+      }
+    }
+    pub_identification_->publish(id);
     sensor_msgs::msg::Temperature temperature;
     temperature.header = msg.header;
     temperature.temperature = reading.temperature_c;
@@ -1069,6 +1341,11 @@ private:
       << "\"device\":" << jsonQuote(endpoint_) << ','
       << "\"protocol\":" << jsonQuote(protocol_mode_) << ','
       << "\"command_tx_enabled\":" << can_tx_ << ','
+      << "\"experimental_roll_allowed\":" << allow_experimental_roll_ << ','
+      << "\"swing_session_active\":" << (swing_token_!=0) << ','
+      << "\"motor_map_revision\":" << motor_map_revision_ << ','
+      << "\"swing_last_result\":" << jsonQuote(swing_result_) << ','
+      << "\"fmu_fault_reason\":" << jsonQuote(fmu_fault_reason_) << ','
       << "\"armed_requested\":" << arm_requested_ << ','
       << "\"armed_acknowledged\":" << arm_confirmed_ << ','
       << "\"gui_output_enabled\":" << controller_enabled_ << ','
@@ -1083,6 +1360,7 @@ private:
       << "\"configured_dshot_min\":" << manual_map_.dshot_min << ','
       << "\"configured_dshot_max\":" << manual_map_.dshot_max << ','
       << "\"nominal_rpm_full_scale\":" << manual_map_.reference_max_rpm << ','
+      << "\"rpm_deadband\":" << manual_map_.rpm_deadband << ','
       << "\"manual_mode_acknowledged\":" << manual_mode_confirmed_ << ','
       << "\"firmware_fault_latched\":" << fault_latched_ << ','
       << "\"mcu_fmu_state\":" << mcu_fmu_state_ << ','
@@ -1138,6 +1416,7 @@ private:
   int baudrate_{115200};
   std::string protocol_mode_;
   bool enable_command_tx_{false};
+  bool allow_experimental_roll_{false};
   bool allow_direction_commands_{false};  // kept for existing YAML, firmware ignores reversal
   bool rpm_to_dshot_enabled_{false};
   bool allow_direct_dshot_{false};
@@ -1180,6 +1459,13 @@ private:
   std::optional<Time> last_imu_, last_mag_, last_baro_, last_motor_;
   std::optional<std::array<double,4>> orientation_;
   Time orientation_received_{};
+  std::optional<std::uint32_t> orientation_tick_;
+  std::optional<cefiro_msgs::msg::IdentificationSample> pending_imu_metadata_;
+  Time pending_imu_metadata_at_{};
+  double id_battery_voltage_{0.},id_battery_current_{0.},id_sense_v_{0.};
+  std::uint32_t id_battery_tick_{0},id_pwr_tick_{0};
+  std::uint16_t id_adc_v_{0},id_adc_i_{0};
+  bool id_current_valid_{false},id_bat_adc_fresh_{false},id_pwr_valid_{false};
   std::array<double,4> requested_rpm_{};
   std::uint64_t rx_frames_{0}, bad_frames_{0}, serial_errors_{0};
   std::uint64_t gui_setpoints_received_{0}, manual_refresh_sent_{0};
@@ -1190,6 +1476,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr pub_battery_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_power_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_imu_;
+  rclcpp::Publisher<cefiro_msgs::msg::IdentificationSample>::SharedPtr pub_identification_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr pub_mag_;
   rclcpp::Publisher<sensor_msgs::msg::FluidPressure>::SharedPtr pub_baro_;
   rclcpp::Publisher<sensor_msgs::msg::Temperature>::SharedPtr pub_imu_temp_, pub_baro_temp_;
@@ -1198,6 +1485,14 @@ private:
   rclcpp::Publisher<cefiro_msgs::msg::MotorDshot>::SharedPtr pub_commanded_dshot_;
   rclcpp::Publisher<cefiro_msgs::msg::MotorTelemetry>::SharedPtr pub_motor_telemetry_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_status_, pub_controller_, pub_ack_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_shadow_;
+  rclcpp::Publisher<cefiro_msgs::msg::MotorDshot>::SharedPtr pub_fmu_dshot_;
+  unsigned motor_map_revision_{0};
+  std::string swing_result_, fmu_fault_reason_;
+  unsigned swing_token_{0};bool swing_confirmed_{false};
+  std::optional<std::uint16_t> swing_start_sequence_;
+  Time swing_last_gui_{},swing_last_feedback_{};
+  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_shadow_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_fault_service_;
   rclcpp::Subscription<cefiro_msgs::msg::MotorRpm>::SharedPtr sub_rpm_;
   rclcpp::Subscription<cefiro_msgs::msg::MotorDshot>::SharedPtr sub_dshot_;

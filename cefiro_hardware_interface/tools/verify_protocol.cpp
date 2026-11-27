@@ -8,6 +8,9 @@
 using namespace cefiro::hardware;
 int main() {
   ManualMotorMap map{};
+  assert(map.dshot_max == 2047);
+  assert(mapGuiRpmToDshot(12000, map).value() == 2047);
+  map.dshot_max = 300; // Lower commissioning caps remain supported.
   assert(validManualMotorMap(map));
   assert(mapGuiRpmToDshot(0, map).value() == 0);
   assert(mapGuiRpmToDshot(25, map).value() == 0);

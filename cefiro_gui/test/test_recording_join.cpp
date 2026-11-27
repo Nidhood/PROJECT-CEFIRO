@@ -18,5 +18,9 @@ int main(){
     join.pushImu(6,s,t+360ms);join.clear();assert(join.drain(t+500ms).empty());
     join.pushImu(7,s,t+510ms);f.orientation_valid=false;join.pushId(7,f,t+511ms);rows=join.drain(t+512ms);assert(rows.size()==1&&!rows[0].orientation_valid&&rows[0].fmu_dshot_valid);
     assert(join.drain(t+530ms).empty());
+    Telemetry power;power.battery_valid=true;power.battery_voltage_v=12.6;
+    f.power_tick_valid=true;f.power_sample_ms=100;f.power_age_s=.1;f.battery_valid=false;f.current_valid=false;f.esc_sense_valid=true;f.esc_current_sense_v=.35;
+    f.apply(power);assert(power.power_tick_valid&&!power.battery_valid&&!power.current_valid&&power.esc_sense_valid);
+    f.battery_valid=true;f.battery_voltage_v=12.;f.current_valid=true;f.esc_current_a=2.;f.apply(power);assert(power.current_valid&&power.battery_voltage_v==12.&&power.esc_current_a==2.);
     std::cout<<"PASS: IMU-only, both arrival orders, no unmatched/late/zero stamp pairing, reset, strict orientation, no duplicate rows\n";
 }

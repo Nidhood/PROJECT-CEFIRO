@@ -196,7 +196,7 @@ RecordingDialog::RecordingDialog(QWidget* parent) : QDialog(parent) {
                             save_mag_, save_baro_, save_validity_, save_strategy_source_};
     for (int i = 0; i < boxes.size(); ++i) col_grid->addWidget(boxes[i], i / 2, i % 2);
     colv->addLayout(col_grid);
-    auto* motorNote = new QLabel("Always recorded: FMU DShot M1-M4, host DShot M1-M4, validity, MCU timestamp, armed/state, battery and quaternion. Missing values are blank; host/FMU equivalent RPM is calculated from the command map, not measured speed.", columns);
+    auto* motorNote = new QLabel("Always recorded: FMU DShot M1-M4, host DShot M1-M4, validity, MCU timestamp, armed/state, battery and quaternion. Missing values are blank; host/FMU equivalent RPM is calculated from the command map, not measured speed. Real IMU roll torque estimates are also saved (read-only; invalid values blank).", columns);
     motorNote->setWordWrap(true);
     motorNote->setObjectName("hint");
     colv->addWidget(motorNote);

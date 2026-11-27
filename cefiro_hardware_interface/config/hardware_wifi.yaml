@@ -30,7 +30,7 @@
     rpm_full_scale: 12000.0
     rpm_deadband: 25.0
     dshot_min: 48
-    dshot_max: 300 # Conservative commissioning default; explicitly choose 2047 only after bench validation
+    dshot_max: 2047 # Manual protocol ceiling; not a validated physical power limit
     imu_frame_id: cefiro_fmu_imu
     mag_frame_id: cefiro_fmu_mag
     baro_frame_id: cefiro_fmu_baro

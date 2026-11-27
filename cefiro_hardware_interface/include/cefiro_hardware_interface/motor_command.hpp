@@ -12,7 +12,7 @@ struct ManualMotorMap {
   double reference_max_rpm{12000.0};
   double rpm_deadband{25.0};
   std::uint16_t dshot_min{48};
-  std::uint16_t dshot_max{300}; // Conservative host default, not DShot protocol maximum (2047).
+  std::uint16_t dshot_max{2047}; // Protocol maximum; select a lower commissioned cap when needed.
 };
 
 bool validManualMotorMap(const ManualMotorMap& map) noexcept;

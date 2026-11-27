@@ -15,7 +15,7 @@ namespace cefiro::gui {
 class AttitudeView final : public QWidget {
 public:
     explicit AttitudeView(QWidget* parent = nullptr);
-    void setAttitude(const Quaternion& quaternion, bool valid);
+    void setAttitude(const Quaternion& quaternion, bool valid, bool diagnostic=false);
     void setTheme(const QColor& bg, const QColor& fg,
                   const QColor& accent, const QColor& secondary);
 protected:
@@ -28,6 +28,7 @@ protected:
 private:
     Quaternion q_{};
     bool valid_{false};
+    bool diagnostic_{false};
     bool dragging_{false};
     QPoint drag_origin_{};
     double azimuth_{-0.80};

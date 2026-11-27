@@ -61,6 +61,7 @@ public:
     std::optional<HostDshotSample> latestHostDshot() const;
     NominalMotorMap nominalMotorMap() const;
     std::string recordingInputsStatus() const;
+    RollTorqueEstimate latestRollTorque() const;
     bool imuFresh(double timeout_s=1.5) const;
     bool magFresh(double timeout_s=2.5) const;
     bool baroFresh(double timeout_s=2.5) const;
@@ -142,6 +143,9 @@ private:
     double nominal_deadband_{25.0};
     std::array<std::chrono::steady_clock::time_point,2> motor_rx_{};
     Telemetry latest_{},latest_real_{};
+    RollTorqueObserver roll_torque_observer_;
+    DisplayAttitudeFilter display_attitude_filter_;
+    MotorClock::time_point roll_torque_rx_{};
  bool real_selected_{false};
  double real_initial_pressure_{0};
  std::chrono::steady_clock::time_point real_imu_rx_{},real_mag_rx_{},real_baro_rx_{};
