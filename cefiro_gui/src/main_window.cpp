@@ -1560,20 +1560,39 @@ void MainWindow::startEmbeddedRoll(){
     if(!bridge_.isReal() || manual_mode_ || command_active_ || recorder_active_ || !output_enabled_->isChecked()){
         QMessageBox::warning(this,"STM32 control","Select REAL / AUTOMATIC, enable Output, and stop other commands and recordings first.");return;
     }
-    const auto ready=[this]{
+    const auto precheck=[this]{
+        QStringList failed;
         const auto state=QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object();
         const auto stat=state.value("mcu_status").toString().split(',');
-        return bridge_.hardwareStatusFresh(1.0) && bridge_.imuFreshFor(true,.25) && bridge_.fmuDshotFresh() &&
-            have_sample_ && last_sample_.from_real && last_sample_.orientation_valid &&
-            state.value("transport_connected").toBool(false) && state.value("command_tx_enabled").toBool(false) &&
-            state.value("motor_map_revision").toInt(0)==3 && state.value("experimental_roll_allowed").toBool(false) && state.value("external_supply_policy_ready").toBool(false) &&
-            state.value("manual_mode_acknowledged").toBool(false) && state.value("orientation_available").toBool(false) &&
-            !state.value("firmware_fault_latched").toBool(true) && !state.value("armed_requested").toBool(true) &&
-            !state.value("armed_acknowledged").toBool(true) && !state.value("gui_output_enabled").toBool(true) &&
-            !state.value("mcu_auto_enabled").toBool(true) && !state.value("swing_session_active").toBool(true) &&
-            state.value("mcu_fmu_state").toInt(99)<=1 && stat.size()>20 && stat[0]=="FMU_V3" && stat[2]=="1" && stat[20]=="1";
+        const auto require=[&failed](bool ok,const QString& label){if(!ok)failed.append(label);};
+        require(bridge_.hardwareStatusFresh(1.0), "ROS hardware/status missing or stale (>1 s)");
+        require(bridge_.imuFreshFor(true,.25), "REAL IMU missing or stale (>250 ms)");
+        require(bridge_.fmuDshotFresh(), "FMU identification/DShot+AHRS snapshot missing or stale (>300 ms)");
+        require(have_sample_ && last_sample_.from_real && last_sample_.orientation_valid, "No valid REAL orientation in GUI");
+        require(state.value("transport_connected").toBool(false), "CF1 transport not connected");
+        require(state.value("command_tx_enabled").toBool(false), "Command TX disabled");
+        require(state.value("motor_map_revision").toInt(0)==3, "STM32 motor map revision is not 3");
+        require(state.value("experimental_roll_allowed").toBool(false), "Experimental Roll opt-in missing");
+        require(state.value("external_supply_policy_ready").toBool(false), "External power not ready: "+state.value("manual_power_inhibit_reason").toString());
+        require(state.value("manual_mode_acknowledged").toBool(false), "STM32 MANUAL mode ACK missing");
+        require(state.value("orientation_available").toBool(false), "FMU AHRS unavailable");
+        require(!state.value("firmware_fault_latched").toBool(true), "FMU FAULT latched or status unknown: "+state.value("fmu_fault_reason").toString());
+        require(!state.value("armed_requested").toBool(true), "ARM request active or unknown");
+        require(!state.value("armed_acknowledged").toBool(true), "FMU already armed or state unknown");
+        require(!state.value("gui_output_enabled").toBool(true), "Host output active or unknown");
+        require(!state.value("mcu_auto_enabled").toBool(true), "FMU AUTO active or unknown");
+        require(!state.value("swing_session_active").toBool(true), "Swing session active or unknown");
+        require(state.value("mcu_fmu_state").toInt(99)<=1, "FMU is not idle (state > 1 or unknown)");
+        require(stat.size()>20 && stat[0]=="FMU_V3" && stat[2]=="1" && stat[20]=="1", "FMU STAT missing, calibration incomplete or AHRS not ready");
+        return failed;
     };
-    if(!ready()){QMessageBox::warning(this,"STM32 precheck","Require STM32 motor map revision 3, live calibrated FMU AHRS, DShot snapshot, cleared faults, idle CF1 session and external monitored bench opt-in. Check hardware status.");return;}
+    const auto ready=[&precheck]{return precheck().isEmpty();};
+    const auto failures=precheck();
+    if(!failures.isEmpty()){
+        QMessageBox::warning(this,"STM32 precheck",failures.join("\n")+"\nLast ACK: "+
+            QJsonDocument::fromJson(QByteArray::fromStdString(bridge_.hardwareStatus())).object().value("last_command_ack").toString());
+        return;
+    }
     if(QMessageBox::warning(this,"EXPERIMENTAL STM32 CONTROL",
         "Unvalidated Roll-only profile. Confirm motor numbering and left/right pairs M1+M4 / M2+M3 individually with propellers removed before a powered run. The torque model is provisional after the pair change. Confirm a guarded one-axis fixture (Pitch/Yaw restrained), mechanical fall restraint, independent physical motor power cut and externally monitored/current-limited ESC supply. No free flight. The controller may abort; a motor stop does not prevent gravity-driven motion. Start inverted and stationary. Start once?",
         QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
